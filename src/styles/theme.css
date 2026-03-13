@@ -1,0 +1,122 @@
+/* 白天模式 - 现代简约风格 */
+.theme-light {
+  /* 背景色 */
+  --bg-primary: #faf8f5;
+  --bg-secondary: #f5f0eb;
+  --bg-tertiary: #f0ebe5;
+  --bg-card: #ffffff;
+  --bg-hover: #f5f0eb;
+  
+  /* 文字色 */
+  --text-primary: #2d2a26;
+  --text-secondary: #5c5854;
+  --text-tertiary: #8a8680;
+  --text-muted: #b0aba5;
+  
+  /* 边框色 */
+  --border-light: #e8e3de;
+  --border-medium: #d8d3ce;
+  --border-dark: #c8c3be;
+  
+  /* 强调色 - 柔和金色 */
+  --accent-primary: #c9a86c;
+  --accent-secondary: #d4b87d;
+  --accent-hover: #b89a5a;
+  
+  /* 功能色 */
+  --success: #6b9b7a;
+  --warning: #c9a86c;
+  --danger: #c97b7b;
+  --info: #7b9dc9;
+  
+  /* 阴影 */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.05);
+  --shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.08);
+}
+
+/* 白天模式背景 */
+.light-bg {
+  background: linear-gradient(180deg, #faf8f5 0%, #f5f0eb 100%);
+}
+
+/* 卡片样式 */
+.light-card {
+  background: #ffffff;
+  border: 1px solid #e8e3de;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+  border-radius: 12px;
+}
+
+.light-card:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+  transform: translateY(-1px);
+}
+
+/* 按钮样式 */
+.light-btn-primary {
+  background: linear-gradient(135deg, #c9a86c 0%, #d4b87d 100%);
+  color: #ffffff;
+  border: none;
+  box-shadow: 0 2px 8px rgba(201, 168, 108, 0.3);
+}
+
+.light-btn-primary:hover {
+  background: linear-gradient(135deg, #b89a5a 0%, #c9a86c 100%);
+  box-shadow: 0 4px 12px rgba(201, 168, 108, 0.4);
+}
+
+.light-btn-secondary {
+  background: #ffffff;
+  color: #5c5854;
+  border: 1px solid #e8e3de;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+.light-btn-secondary:hover {
+  background: #f5f0eb;
+  border-color: #d8d3ce;
+}
+
+/* 输入框样式 */
+.light-input {
+  background: #ffffff;
+  border: 1px solid #e8e3de;
+  color: #2d2a26;
+}
+
+.light-input:focus {
+  border-color: #c9a86c;
+  box-shadow: 0 0 0 3px rgba(201, 168, 108, 0.1);
+}
+
+/* 标签样式 */
+.light-tag {
+  background: #f5f0eb;
+  color: #5c5854;
+  border: 1px solid #e8e3de;
+}
+
+/* 分隔线 */
+.light-divider {
+  background: #e8e3de;
+}
+
+/* 滚动条 */
+.theme-light ::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.theme-light ::-webkit-scrollbar-track {
+  background: #f5f0eb;
+}
+
+.theme-light ::-webkit-scrollbar-thumb {
+  background: #d8d3ce;
+  border-radius: 3px;
+}
+
+.theme-light ::-webkit-scrollbar-thumb:hover {
+  background: #c8c3be;
+}

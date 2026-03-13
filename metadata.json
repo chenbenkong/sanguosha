@@ -1,0 +1,5 @@
+{
+  "name": "三国杀：五人军争 (Sanguosha 5-Player)",
+  "description": "5人身份局模式。包含主公、忠臣、反贼、内奸身份。玩家扮演随机身份，与4名AI进行策略对战。支持Gemini军师辅助。",
+  "requestFramePermissions": []
+}
