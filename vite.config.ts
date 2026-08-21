@@ -45,7 +45,7 @@ export default defineConfig(({ mode }) => {
           },
         },
         // 压缩选项
-        minify: 'terser',
+        minify: 'esbuild',
         terserOptions: {
           compress: {
             drop_console: true, // 移除 console.log
