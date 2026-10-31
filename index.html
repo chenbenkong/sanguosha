@@ -15,20 +15,38 @@
     <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
     <link rel="apple-touch-icon" href="./favicon.svg" />
 
-    <!-- 预连接优化 -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-
-    <!-- 字体显示优化 -->
-    <link href="https://fonts.googleapis.com/css2?family=Ma+Shan+Zheng&family=Noto+Serif+SC:wght@400;700&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
-    <noscript><link href="https://fonts.googleapis.com/css2?family=Ma+Shan+Zheng&family=Noto+Serif+SC:wght@400;700&display=swap" rel="stylesheet"></noscript>
+    <!-- 字体本地自托管：预加载两个关键字体（子集化 woff2，共约 714KB，无 Google Fonts 依赖） -->
+    <link rel="preload" href="./fonts/MaShanZheng-sub.woff2" as="font" type="font/woff2" crossorigin>
+    <link rel="preload" href="./fonts/NotoSerifSC-400-sub.woff2" as="font" type="font/woff2" crossorigin>
 
     <!-- 样式（构建期 Tailwind + 主题，替代原 CDN 运行时编译） -->
     <link rel="stylesheet" href="./src/styles/theme.css">
 
     <style>
+      /* 本地字体：Ma Shan Zheng 毛笔标题字 + Noto Serif SC 正文宋 */
+      @font-face {
+        font-family: 'Ma Shan Zheng';
+        font-style: normal;
+        font-weight: 400;
+        font-display: swap;
+        src: url('./fonts/MaShanZheng-sub.woff2') format('woff2');
+      }
+      @font-face {
+        font-family: 'Noto Serif SC';
+        font-style: normal;
+        font-weight: 400;
+        font-display: swap;
+        src: url('./fonts/NotoSerifSC-400-sub.woff2') format('woff2');
+      }
+      @font-face {
+        font-family: 'Noto Serif SC';
+        font-style: normal;
+        font-weight: 700;
+        font-display: swap;
+        src: url('./fonts/NotoSerifSC-700-sub.woff2') format('woff2');
+      }
       body {
-        font-family: 'Noto Serif SC', serif;
+        font-family: 'Noto Serif SC', 'Source Han Serif SC', 'SimSun', serif;
         background-color: #1a1512;
         color: #e5e5e5;
         overscroll-behavior: none;
@@ -38,7 +56,7 @@
         background-size: 20px 20px;
       }
       .font-ancient {
-        font-family: 'Ma Shan Zheng', cursive;
+        font-family: 'Ma Shan Zheng', 'Kaiti SC', 'STKaiti', 'KaiTi', cursive;
       }
       /* Custom Scrollbar */
       ::-webkit-scrollbar {

@@ -3,7 +3,8 @@ import { Card, Suit, CardType } from '../types';
 
 interface CardProps {
   card: Card;
-  onClick?: (e?: React.MouseEvent) => void;
+  /** 回调携带 card 本体，便于父级用稳定引用（配合 memo 跳过无效重渲染） */
+  onClick?: (card: Card, e?: React.MouseEvent) => void;
   disabled?: boolean;
   selected?: boolean;
   isHidden?: boolean;
@@ -85,7 +86,7 @@ const CardComponent: React.FC<CardProps> = ({ card, onClick, disabled, selected,
       onClick={(e) => {
         if (!disabled && onClick) {
           e.stopPropagation();
-          onClick(e);
+          onClick(card, e);
         }
       }}
       disabled={disabled}

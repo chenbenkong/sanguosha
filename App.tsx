@@ -175,14 +175,17 @@ const App: React.FC = () => {
 
   // 优化：限制日志数量，避免内存泄漏和性能问题
   const addLog = useCallback((text: string, type: LogEntry['type'] = 'info') => {
-    setLogs(prev => {
-      const newLog = { id: Date.now().toString() + Math.random(), text, type };
-      // 只保留最近 100 条日志
-      const newLogs = [...prev, newLog];
-      if (newLogs.length > 100) {
-        return newLogs.slice(-100);
-      }
-      return newLogs;
+    // 日志属非紧急 UI：标记为 transition，AI 连续出牌刷日志时不再阻塞卡牌/动画的高优先级渲染
+    React.startTransition(() => {
+      setLogs(prev => {
+        const newLog = { id: Date.now().toString() + Math.random(), text, type };
+        // 只保留最近 100 条日志
+        const newLogs = [...prev, newLog];
+        if (newLogs.length > 100) {
+          return newLogs.slice(-100);
+        }
+        return newLogs;
+      });
     });
   }, []);
 
@@ -919,6 +922,14 @@ const App: React.FC = () => {
       clickGuard.current = false;
     }, 200);
   };
+
+  // 稳定的卡牌点击分发器：ref 始终指向最新的 handleCardClick，
+  // 而 dispatchCardClick 引用恒定 —— 手牌 CardComponent 配合 memo 可跳过无关重渲染
+  const handleCardClickRef = useRef(handleCardClick);
+  handleCardClickRef.current = handleCardClick;
+  const dispatchCardClick = useCallback((card: Card, e?: React.MouseEvent) => {
+    handleCardClickRef.current(card, e);
+  }, []);
 
   // 简化的状态同步逻辑，仅保留一个useEffect来确保状态一致性
   useEffect(() => {
@@ -1842,7 +1853,8 @@ const App: React.FC = () => {
             // 检查是否死亡
             if (newHp <= 0) {
               addLog(`${source.hero.name} 被【闪电】击中身亡！`, 'danger');
-              handlePlayerDeath(source.id);
+              // 修复：原代码调用了不存在的 handlePlayerDeath（会导致运行时崩溃），改走统一死亡结算
+              handleDeath(source.id);
             }
           } else {
             // 闪电未命中，移动到下一个角色（简化处理：直接弃置）
@@ -4816,7 +4828,7 @@ const App: React.FC = () => {
                       card={card}
                       selected={isSelected}
                       disabled={!isPlayable || (lockOthers && !isSelected)}
-                      onClick={(e) => handleCardClick(card, e)}
+                      onClick={dispatchCardClick}
                       canUseSkill={canUseLongdan}
                       skillName="龙胆"
                     />
