@@ -20,6 +20,18 @@
   z-index: 20;
 }
 
+/* ===== 背景图叠化（替代原 3s 水波动画，降低合成开销） ===== */
+@keyframes bg-crossfade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.animate-bg-crossfade {
+  animation: bg-crossfade 1.1s ease-out forwards;
+}
+@media (prefers-reduced-motion: reduce) {
+  .animate-bg-crossfade { animation: none; }
+}
+
 /* ===== 自定义工具类（修复此前 CDN 版缺失的定义） ===== */
 
 /* 白天模式羊皮纸底纹 */

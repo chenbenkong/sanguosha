@@ -25,8 +25,8 @@ export const BACKGROUND_IMAGES = [
 ];
 
 export const CAROUSEL_CONFIG = {
-  interval: 5000,
-  animationDuration: 2000,
+  interval: 12000,
+  animationDuration: 1100,
   showIndicators: false,
   showProgressBar: false,
 };

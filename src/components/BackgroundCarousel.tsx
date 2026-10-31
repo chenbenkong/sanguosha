@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useRef, memo } from 'react';
 import { useTheme } from '../contexts/ThemeContext';
 
 interface BackgroundCarouselProps {
@@ -7,196 +7,123 @@ interface BackgroundCarouselProps {
   className?: string;
 }
 
-// 生成水波纹
-const generateRipples = (count: number) => {
-  return Array.from({ length: count }, (_, i) => ({
-    id: i,
-    x: Math.random() * 100,
-    y: Math.random() * 100,
-    size: Math.random() * 60 + 40,
-    delay: Math.random() * 3,
-    duration: Math.random() * 2 + 3,
-  }));
-};
-
-export const BackgroundCarousel: React.FC<BackgroundCarouselProps> = ({
+/**
+ * 背景层（性能优化版）
+ * - 已移除三层全屏 feTurbulence 噪点滤镜与大面积 blur 光斑：它们是移动端掉帧的主因
+ * - 只保留纯 CSS 渐变 + 单层静态云纹，合成开销接近零
+ * - 图片切换改为 1.1s 叠化，不再使用 3s 水波 keyframe + 闪烁光点
+ * - 组件整体 memo 化，App 高频重渲染时不再重建
+ */
+const BackgroundCarouselBase: React.FC<BackgroundCarouselProps> = ({
   images,
-  interval = 6000,
+  interval = 12000,
   className = ''
 }) => {
   const { theme } = useTheme();
-  const [currentIndex, setCurrentIndex] = useState(0);
-  const [prevIndex, setPrevIndex] = useState<number | null>(null);
-  const [isTransitioning, setIsTransitioning] = useState(false);
+  const [current, setCurrent] = useState(0);
+  const [prev, setPrev] = useState<number | null>(null);
+  const lastRef = useRef(0);
 
-  const ripples = useMemo(() => generateRipples(8), [currentIndex]);
-
-  const transitionToNext = useCallback(() => {
-    if (isTransitioning || images.length <= 1) return;
-    
-    setIsTransitioning(true);
-    setPrevIndex(currentIndex);
-    const nextIndex = (currentIndex + 1) % images.length;
-    setCurrentIndex(nextIndex);
-    
-    setTimeout(() => {
-      setPrevIndex(null);
-      setIsTransitioning(false);
-    }, 3000);
-  }, [currentIndex, images.length, isTransitioning]);
+  const advance = useCallback(() => {
+    setCurrent(c => (c + 1) % Math.max(images.length, 1));
+  }, [images.length]);
 
   useEffect(() => {
     if (images.length <= 1) return;
-    
-    const timer = setInterval(() => {
-      transitionToNext();
-    }, interval);
-    
+    const timer = setInterval(advance, interval);
     return () => clearInterval(timer);
-  }, [interval, images.length, transitionToNext]);
+  }, [advance, images.length, interval]);
 
-  // 黑夜模式
+  // 记录上一张，1.1s 后移除叠化层
+  useEffect(() => {
+    if (lastRef.current === current) return;
+    const old = lastRef.current;
+    lastRef.current = current;
+    setPrev(old);
+    const t = setTimeout(() => setPrev(null), 1100);
+    return () => clearTimeout(t);
+  }, [current]);
+
   if (theme === 'dark') {
     return (
       <div className={`absolute inset-0 overflow-hidden ${className}`}>
-        <div className="absolute inset-0 bg-gradient-to-br from-[#0a0a0a] via-[#1a1510] to-[#0d0d0d]" />
-        <div className="absolute inset-0 opacity-30" style={{
-          backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23d4af37' fill-opacity='0.05'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`
-        }}></div>
-        <div className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[400px] bg-gradient-radial from-amber-900/30 via-transparent to-transparent blur-3xl animate-pulse"></div>
-        <div className="absolute bottom-1/4 left-1/4 w-80 h-80 bg-red-900/20 rounded-full blur-[100px] animate-pulse"></div>
-        <div className="absolute top-1/4 right-1/4 w-80 h-80 bg-yellow-900/20 rounded-full blur-[100px] animate-pulse" style={{ animationDelay: '1s' }}></div>
+        {/* 底层渐变：墨黑 → 暖褐 → 墨黑 */}
+        <div className="absolute inset-0 bg-gradient-to-b from-[#14100d] via-[#241b14] to-[#0e0b09]" />
+        {/* 静态云纹（无滤镜，单层） */}
+        <div
+          className="absolute inset-0 opacity-25"
+          style={{
+            backgroundImage: `url("data:image/svg+xml,%3Csvg width='120' height='120' viewBox='0 0 120 120' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M10 40 Q30 22 50 40 T90 40 M10 80 Q30 62 50 80 T90 80' stroke='%23c8a45c' stroke-width='0.6' fill='none' opacity='0.5'/%3E%3C/svg%3E")`,
+            backgroundSize: '120px 120px'
+          }}
+        />
+        {/* 中央柔光（静态，不参与动画） */}
+        <div
+          className="absolute inset-0"
+          style={{
+            background: 'radial-gradient(ellipse 70% 55% at 50% 42%, rgba(200,164,92,0.10) 0%, transparent 70%)'
+          }}
+        />
+        {/* 暗角：突出中心牌桌 */}
+        <div
+          className="absolute inset-0"
+          style={{
+            background: 'radial-gradient(ellipse 85% 75% at 50% 50%, transparent 45%, rgba(0,0,0,0.55) 100%)'
+          }}
+        />
       </div>
     );
   }
 
-  // 白天模式 - 无图片时显示纯色背景
+  // 白天模式：无图片时使用宣纸底色
   if (images.length === 0) {
     return (
       <div className={`absolute inset-0 overflow-hidden ${className}`}>
-        <div className="absolute inset-0 bg-gradient-to-br from-[#faf8f5] via-[#f5f0eb] to-[#f0ebe5]" />
+        <div className="absolute inset-0 bg-gradient-to-b from-[#faf8f5] via-[#f4efe7] to-[#efe8dd]" />
+        <div
+          className="absolute inset-0 opacity-20"
+          style={{
+            backgroundImage: `url("data:image/svg+xml,%3Csvg width='120' height='120' viewBox='0 0 120 120' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M10 40 Q30 22 50 40 T90 40 M10 80 Q30 62 50 80 T90 80' stroke='%23a8842c' stroke-width='0.6' fill='none' opacity='0.5'/%3E%3C/svg%3E")`,
+            backgroundSize: '120px 120px'
+          }}
+        />
       </div>
     );
   }
 
   return (
     <div className={`absolute inset-0 overflow-hidden ${className}`}>
-      {/* 上一张图片 - 水波淡出 */}
-      {prevIndex !== null && (
-        <div 
-          className="absolute inset-0 animate-water-fade-out"
-          style={{
-            backgroundImage: `url(${images[prevIndex]})`,
-            backgroundSize: 'cover',
-            backgroundPosition: 'center',
-          }}
+      {/* 上一张（保持在下层，由新图层覆盖完成叠化） */}
+      {prev !== null && (
+        <img
+          src={images[prev]}
+          alt=""
+          aria-hidden="true"
+          className="absolute inset-0 w-full h-full object-cover"
+          decoding="async"
         />
       )}
-      
-      {/* 当前图片 - 水波淡入 */}
-      <div 
-        className={`absolute inset-0 ${isTransitioning ? 'animate-water-fade-in' : ''}`}
-        style={{
-          backgroundImage: `url(${images[currentIndex]})`,
-          backgroundSize: 'cover',
-          backgroundPosition: 'center',
-        }}
+      {/* 当前一张 */}
+      <img
+        key={current}
+        src={images[current]}
+        alt=""
+        aria-hidden="true"
+        className="absolute inset-0 w-full h-full object-cover animate-bg-crossfade"
+        decoding="async"
+        loading={current === 0 ? 'eager' : 'lazy'}
       />
-      
-      {/* 水波光效层 */}
-      <div 
-        className="absolute inset-0 pointer-events-none"
+      {/* 压暗遮罩：统一对比度，避免背景抢戏（暗色更重） */}
+      <div className="absolute inset-0 bg-black/55" />
+      <div
+        className="absolute inset-0"
         style={{
-          background: `
-            radial-gradient(ellipse at 30% 20%, rgba(255,255,255,0.1) 0%, transparent 40%),
-            radial-gradient(ellipse at 70% 80%, rgba(255,255,255,0.08) 0%, transparent 35%),
-            radial-gradient(ellipse at 50% 50%, rgba(200,180,160,0.05) 0%, transparent 50%)
-          `,
-          mixBlendMode: 'soft-light',
-        }}
-      />
-      
-      {/* 水波纹动画 - 过渡时 */}
-      {isTransitioning && (
-        <div className="absolute inset-0 pointer-events-none overflow-hidden">
-          {ripples.map((ripple) => (
-            <div
-              key={`ripple-${ripple.id}`}
-              className="absolute rounded-full animate-water-ripple"
-              style={{
-                left: `${ripple.x}%`,
-                top: `${ripple.y}%`,
-                width: `${ripple.size}px`,
-                height: `${ripple.size}px`,
-                border: '1px solid rgba(180,160,140,0.1)',
-                animationDelay: `${ripple.delay}s`,
-                animationDuration: `${ripple.duration}s`,
-                transform: 'translate(-50%, -50%)',
-              }}
-            />
-          ))}
-        </div>
-      )}
-      
-      {/* 闪烁光点 */}
-      <div className="absolute inset-0 pointer-events-none">
-        {[...Array(12)].map((_, i) => (
-          <div
-            key={`sparkle-${i}`}
-            className="absolute w-1 h-1 rounded-full animate-sparkle"
-            style={{
-              left: `${20 + Math.random() * 60}%`,
-              top: `${20 + Math.random() * 60}%`,
-              background: 'radial-gradient(circle, rgba(255,255,255,0.6) 0%, rgba(200,180,160,0.3) 50%, transparent 100%)',
-              boxShadow: '0 0 3px rgba(255,255,255,0.4)',
-              animationDelay: `${Math.random() * 4}s`,
-              animationDuration: `${2 + Math.random() * 2}s`,
-            }}
-          />
-        ))}
-      </div>
-      
-      {/* 强颗粒效果 - 多层叠加 */}
-      <div 
-        className="absolute inset-0 pointer-events-none"
-        style={{
-          backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E")`,
-          mixBlendMode: 'overlay',
-          opacity: 0.35,
-        }}
-      />
-      
-      {/* 额外颗粒层 - 更细腻 */}
-      <div 
-        className="absolute inset-0 pointer-events-none"
-        style={{
-          backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='grainFilter'%3E%3CfeTurbulence type='turbulence' baseFrequency='0.7' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23grainFilter)'/%3E%3C/svg%3E")`,
-          mixBlendMode: 'soft-light',
-          opacity: 0.25,
-        }}
-      />
-      
-      {/* 胶片颗粒效果 */}
-      <div 
-        className="absolute inset-0 pointer-events-none"
-        style={{
-          backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 300 300' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='filmGrain'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='1.2' numOctaves='5' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23filmGrain)'/%3E%3C/svg%3E")`,
-          mixBlendMode: 'multiply',
-          opacity: 0.15,
-        }}
-      />
-      
-      {/* 轻微遮罩 - 只在边缘 */}
-      <div 
-        className="absolute inset-0 pointer-events-none"
-        style={{
-          background: `
-            linear-gradient(180deg, rgba(250,248,245,0.2) 0%, transparent 10%, transparent 90%, rgba(250,248,245,0.2) 100%)
-          `,
+          background: 'radial-gradient(ellipse 80% 70% at 50% 45%, transparent 40%, rgba(0,0,0,0.6) 100%)'
         }}
       />
     </div>
   );
 };
 
+export const BackgroundCarousel = memo(BackgroundCarouselBase);
 export default BackgroundCarousel;

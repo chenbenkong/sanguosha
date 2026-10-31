@@ -2931,18 +2931,18 @@ const App: React.FC = () => {
               <div className={`h-48 md:h-64 overflow-hidden relative ${theme === 'dark' ? 'bg-[#1a1510]' : 'bg-[#d4c4a8]'}`}>
                  <img src={hero.avatarUrl} alt={hero.name} loading="lazy" decoding="async" className="w-full h-full object-cover opacity-90 group-hover:opacity-100 transition-all duration-300 group-hover:scale-110" />
                  
-                 {/* Kingdom Badge */}
-                 <div className={`absolute top-2 right-2 px-2 py-1 rounded font-bold text-sm border ${
-                   hero.kingdom === '魏' ? theme === 'dark' ? 'bg-blue-900/80 text-blue-200 border-blue-700' : 'bg-blue-100 text-blue-900 border-blue-300' :
-                   hero.kingdom === '蜀' ? theme === 'dark' ? 'bg-red-900/80 text-red-200 border-red-700' : 'bg-red-100 text-red-900 border-red-300' :
-                   hero.kingdom === '吴' ? theme === 'dark' ? 'bg-green-900/80 text-green-200 border-green-700' : 'bg-green-100 text-green-900 border-green-300' :
-                   theme === 'dark' ? 'bg-stone-700 text-stone-200 border-stone-500' : 'bg-amber-100 text-amber-900 border-amber-300'
+                 {/* Kingdom Badge - 深墨章 + 势力色字，与对局界面统一 */}
+                 <div className={`absolute top-2 right-2 px-2 py-0.5 rounded-[4px] rotate-3 font-bold text-xs border shadow-md bg-[#161210]/95 border-[#c8a45c]/50 ${
+                   hero.kingdom === '魏' ? 'text-[#8fb4d9]' :
+                   hero.kingdom === '蜀' ? 'text-[#d98a8a]' :
+                   hero.kingdom === '吴' ? 'text-[#8fc39a]' :
+                   'text-[#bfae94]'
                  }`}>
                    {hero.kingdom}
                  </div>
                  
                  {/* HP Badge */}
-                 <div className={`absolute bottom-2 left-2 px-2 py-1 rounded font-bold border ${theme === 'dark' ? 'bg-black/60 text-red-400 border-red-900/50' : 'bg-[#f5ebe0] text-red-700 border-red-300/50 shadow-sm'}`}>
+                 <div className={`absolute bottom-2 left-2 px-2 py-0.5 rounded-[4px] font-bold text-xs border ${theme === 'dark' ? 'bg-black/60 text-[#e8a99f] border-[#9e2b25]/60' : 'bg-[#f5ebe0] text-[#9e2b25] border-[#c86b62]/50 shadow-sm'}`}>
                    ♥ {hero.maxHp}
                  </div>
                  
@@ -3158,63 +3158,46 @@ const App: React.FC = () => {
         </div>
       )}
       
-      {/* Game Background Effects - 根据主题切换 */}
-      {theme === 'dark' ? (
-        <>
-          {/* 底层：古风深色背景 */}
-          <div className="absolute inset-0 bg-gradient-to-b from-[#1a1410] via-[#2d2418] to-[#1a1410]" style={{ zIndex: -5 }}></div>
-          
-          {/* 羊皮纸纹理层 */}
-          <div 
-            className="absolute inset-0 opacity-30"
-            style={{
-              zIndex: -5,
-              backgroundImage: `url("data:image/svg+xml,%3Csvg width='400' height='400' viewBox='0 0 400 400' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E")`,
-              mixBlendMode: 'overlay'
-            }}
-          ></div>
-          
-          {/* 古风纹理图案 */}
-          <div 
-            className="absolute inset-0 opacity-15"
-            style={{
-              zIndex: -5,
-              backgroundImage: `url("data:image/svg+xml,%3Csvg width='100' height='100' viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M20,20 Q40,5 60,20 T100,20 M20,50 Q40,35 60,50 T100,50 M20,80 Q40,65 60,80 T100,80' stroke='%23d4af37' stroke-width='0.5' fill='none' opacity='0.3'/%3E%3C/svg%3E")`
-            }}
-          ></div>
-          
-          {/* 原版三国杀风格边框装饰 */}
-          <div className="absolute inset-2 border-2 border-[#8b7355]/40 rounded-lg pointer-events-none" style={{ zIndex: 5 }}></div>
-          <div className="absolute inset-4 border border-[#8b7355]/25 rounded-lg pointer-events-none" style={{ zIndex: 5 }}></div>
-          
-          {/* 四角装饰 - 金色边角 */}
-          <div className="absolute top-2 left-2 w-20 h-20 border-l-4 border-t-4 border-[#d4af37]/60 rounded-tl-lg pointer-events-none" style={{ zIndex: 5 }}></div>
-          <div className="absolute top-2 right-2 w-20 h-20 border-r-4 border-t-4 border-[#d4af37]/60 rounded-tr-lg pointer-events-none" style={{ zIndex: 5 }}></div>
-        </>
-      ) : (
-        <>
-          {/* 白天模式装饰边框 - 简约风格 */}
-          <div className="absolute inset-2 border-2 border-[#c4a77d]/30 rounded-lg pointer-events-none" style={{ zIndex: 5 }}></div>
-          <div className="absolute inset-4 border border-[#c4a77d]/20 rounded-lg pointer-events-none" style={{ zIndex: 5 }}></div>
-          
-          {/* 四角装饰 - 柔和金色调 */}
-          <div className="absolute top-2 left-2 w-20 h-20 border-l-4 border-t-4 border-[#c4a77d]/35 rounded-tl-lg pointer-events-none" style={{ zIndex: 5 }}></div>
-          <div className="absolute top-2 right-2 w-20 h-20 border-r-4 border-t-4 border-[#c4a77d]/35 rounded-tr-lg pointer-events-none" style={{ zIndex: 5 }}></div>
-        </>
-      )}
-      <div className={`absolute bottom-2 left-2 w-20 h-20 border-l-4 border-b-4 rounded-bl-lg pointer-events-none ${theme === 'dark' ? 'border-[#d4af37]/60' : 'border-[#c4a77d]/35'}`} style={{ zIndex: 5 }}></div>
-      <div className={`absolute bottom-2 right-2 w-20 h-20 border-r-4 border-b-4 rounded-br-lg pointer-events-none ${theme === 'dark' ? 'border-[#d4af37]/60' : 'border-[#c4a77d]/35'}`} style={{ zIndex: 5 }}></div>
-      
-      {/* 中心光晕效果 */}
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[1000px] h-[700px] bg-gradient-radial from-[#d4af37]/8 via-transparent to-transparent blur-3xl pointer-events-none" style={{ zIndex: -5 }}></div>
-      
-      {/* 暗角效果 - 白天模式移除，黑夜模式保留 */}
+      {/* Game Background Effects - 纯渐变实现，移除全屏噪点滤镜与 blur 光晕以保证帧率 */}
+      <div
+        className="absolute inset-0 pointer-events-none"
+        style={{
+          zIndex: -5,
+          background: theme === 'dark'
+            ? 'linear-gradient(180deg, #14100d 0%, #241b14 48%, #0c0906 100%)'
+            : 'linear-gradient(180deg, #faf8f5 0%, #f2ece2 48%, #ece5d9 100%)'
+        }}
+      />
+      {/* 中央牌桌柔光（静态 radial-gradient，零滤镜开销） */}
+      <div
+        className="absolute inset-0 pointer-events-none"
+        style={{
+          zIndex: -5,
+          background: theme === 'dark'
+            ? 'radial-gradient(ellipse 62% 48% at 50% 46%, rgba(200,164,92,0.14) 0%, transparent 70%)'
+            : 'radial-gradient(ellipse 62% 48% at 50% 46%, rgba(196,167,125,0.20) 0%, transparent 70%)'
+        }}
+      />
+      {/* 暗角（仅黑夜模式） */}
       {theme === 'dark' && (
-        <>
-          <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-transparent to-black/40 pointer-events-none" style={{ zIndex: -5 }}></div>
-          <div className="absolute inset-0 bg-gradient-to-r from-black/25 via-transparent to-black/25 pointer-events-none" style={{ zIndex: -5 }}></div>
-        </>
+        <div
+          className="absolute inset-0 pointer-events-none"
+          style={{
+            zIndex: -5,
+            background: 'radial-gradient(ellipse 92% 82% at 50% 50%, transparent 42%, rgba(0,0,0,0.55) 100%)'
+          }}
+        />
       )}
+
+      {/* 牌桌描金边框：单层细线 + 四角加亮，替代原双层粗框 */}
+      <div
+        className={`absolute inset-2 rounded-lg border pointer-events-none ${theme === 'dark' ? 'border-[#8b7355]/30' : 'border-[#c4a77d]/25'}`}
+        style={{ zIndex: 5 }}
+      />
+      <div className={`absolute top-2 left-2 w-16 h-16 border-l-2 border-t-2 rounded-tl-lg pointer-events-none ${theme === 'dark' ? 'border-[#c8a45c]/45' : 'border-[#c4a77d]/35'}`} style={{ zIndex: 5 }}></div>
+      <div className={`absolute top-2 right-2 w-16 h-16 border-r-2 border-t-2 rounded-tr-lg pointer-events-none ${theme === 'dark' ? 'border-[#c8a45c]/45' : 'border-[#c4a77d]/35'}`} style={{ zIndex: 5 }}></div>
+      <div className={`absolute bottom-2 left-2 w-16 h-16 border-l-2 border-b-2 rounded-bl-lg pointer-events-none ${theme === 'dark' ? 'border-[#c8a45c]/45' : 'border-[#c4a77d]/35'}`} style={{ zIndex: 5 }}></div>
+      <div className={`absolute bottom-2 right-2 w-16 h-16 border-r-2 border-b-2 rounded-br-lg pointer-events-none ${theme === 'dark' ? 'border-[#c8a45c]/45' : 'border-[#c4a77d]/35'}`} style={{ zIndex: 5 }}></div>
       
       {/* 原版三国杀风格装饰线 */}
       <div className="absolute top-16 left-1/2 -translate-x-1/2 w-1/3 h-px bg-gradient-to-r from-transparent via-[#d4af37]/50 to-transparent pointer-events-none z-10"></div>
@@ -3815,34 +3798,34 @@ const App: React.FC = () => {
                 top: `${top}%`,
               }}
             >
-              {/* 回合指示器 - 原版风格 */}
+              {/* 回合指示器 - 朱红小匾 */}
               {turnIndex === p.id && (
                 <div className="absolute -top-3 left-1/2 -translate-x-1/2 z-30">
-                  <div className="bg-gradient-to-b from-yellow-500 to-yellow-700 text-white text-xs px-3 py-1 rounded-full font-bold shadow-lg border border-yellow-400 animate-pulse whitespace-nowrap">
+                  <div className="bg-[#9e2b25] text-[#f7e7cf] text-[11px] px-3 py-0.5 rounded-full font-bold shadow-[0_2px_10px_rgba(158,43,37,0.5)] border border-[#c86b62]/70 whitespace-nowrap tracking-widest">
                     回合中
                   </div>
                 </div>
               )}
               
-              {/* 玩家卡牌容器 - 原版三国杀风格 */}
+              {/* 玩家卡牌容器 - 统一深墨描金 */}
               <div
                 onClick={(isSelectingTarget || isLijianMode || (isRendeMode && rendeSelectedCardIds.length > 0) || (isJiedaoMode && !p.isDead)) ? () => handleTargetClick(p.id) : undefined}
                 className={`
                 relative p-2 rounded-lg border-2
                 ${damageAnimTarget === p.id || healAnimTarget === p.id
                   ? '' // 动画期间禁用过渡效果
-                  : 'transition-all duration-300'
+                  : 'transition-[transform,box-shadow,border-color] duration-300'
                 }
                 ${p.isDead
-                  ? 'bg-stone-900/90 border-stone-700 opacity-60'
-                  : 'bg-gradient-to-b from-stone-800/90 to-stone-900/90 border-stone-600/80'
+                  ? 'bg-[#15110e]/95 border-[#4a3f33] opacity-55'
+                  : 'bg-[#1c1611]/95 border-[#8b7355]/45'
                 }
                 ${turnIndex === p.id
-                  ? 'border-yellow-500 shadow-[0_0_20px_rgba(234,179,8,0.4)] scale-105'
+                  ? 'border-[#c8a45c] shadow-[0_0_22px_rgba(200,164,92,0.30)] scale-105'
                   : ''
                 }
                 ${(isSelectingTarget || isLijianMode || (isRendeMode && rendeSelectedCardIds.length > 0) || isJiedaoMode) && !p.isDead
-                  ? 'cursor-pointer hover:border-red-500 hover:shadow-[0_0_20px_rgba(239,68,68,0.5)]'
+                  ? 'cursor-pointer hover:border-[#c86b62] hover:shadow-[0_0_18px_rgba(158,43,37,0.4)]'
                   : ''
                 }
                 ${isLijianMode && lijianSelectedTargets.includes(p.id)
@@ -3892,58 +3875,52 @@ const App: React.FC = () => {
                   healAnimTarget === p.id ? 'animate-heal-glow' :
                   damageAnimTarget === p.id ? 'animate-damage-glow' : ''
                 }`}>
-                  {/* 势力边框 */}
-                  <div className={`
-                    absolute -inset-1 rounded-lg 
-                    ${p.hero.kingdom === '魏' ? 'bg-gradient-to-br from-blue-600/50 to-blue-800/50' :
-                      p.hero.kingdom === '蜀' ? 'bg-gradient-to-br from-red-600/50 to-red-800/50' :
-                      p.hero.kingdom === '吴' ? 'bg-gradient-to-br from-green-600/50 to-green-800/50' :
-                      'bg-gradient-to-br from-stone-500/50 to-stone-700/50'
-                    }
-                  `}></div>
+                  {/* 描金外框：统一色调，势力色只保留在小印章上，降低整屏配色噪音 */}
+                  <div className="absolute -inset-1 rounded-lg bg-gradient-to-br from-[#c8a45c]/45 via-[#8b7355]/25 to-[#5a4a38]/15"></div>
                   
                   {/* 头像 */}
-                  <div className="relative w-full h-full rounded-lg overflow-hidden border-2 border-stone-500">
+                  <div className="relative w-full h-full rounded-lg overflow-hidden border border-[#c8a45c]/55">
                     <img 
                       src={p.hero.avatarUrl} 
                       alt={p.hero.name} 
                       className="w-full h-full object-cover"
                       onError={(e) => {
                         const target = e.target as HTMLImageElement;
-                        target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(p.hero.name)}&background=random&color=fff&size=256`;
+                        target.src = `data:image/svg+xml;utf8,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256"><rect width="256" height="256" fill="#241b14"/><text x="128" y="158" font-size="96" fill="#c8a45c" text-anchor="middle" font-family="serif">${p.hero.name}</text></svg>`)}`;
                       }}
                     />
                     
                     {/* 阵亡遮罩 */}
                     {p.isDead && (
-                      <div className="absolute inset-0 bg-black/70 flex items-center justify-center">
-                        <span className="text-red-500 font-ancient text-2xl font-bold transform -rotate-12 border-2 border-red-500 px-2 py-1">
+                      <div className="absolute inset-0 bg-black/75 flex items-center justify-center">
+                        <span className="font-ancient text-[#c86b62] text-xl font-bold transform -rotate-12 border border-[#9e2b25] px-2 py-1">
                           阵亡
                         </span>
                       </div>
                     )}
                   </div>
                   
-                  {/* 势力标识 */}
+                  {/* 势力标识：深墨圆环 + 势力色字，不用大面积彩色底 */}
                   <div className={`
-                    absolute -top-2 -left-2 w-7 h-7 flex items-center justify-center rounded-full text-white text-sm font-bold border-2 shadow-lg
-                    ${p.hero.kingdom === '魏' ? 'bg-blue-700 border-blue-500' :
-                      p.hero.kingdom === '蜀' ? 'bg-red-700 border-red-500' :
-                      p.hero.kingdom === '吴' ? 'bg-green-700 border-green-500' :
-                      'bg-stone-600 border-stone-400'
+                    absolute -top-2 -left-2 w-6 h-6 flex items-center justify-center rounded-full text-[11px] font-bold border shadow-md
+                    bg-[#1a1512] border-[#c8a45c]/50
+                    ${p.hero.kingdom === '魏' ? 'text-[#8fb4d9]' :
+                      p.hero.kingdom === '蜀' ? 'text-[#d98a8a]' :
+                      p.hero.kingdom === '吴' ? 'text-[#8fc39a]' :
+                      'text-[#bfae94]'
                     }
                   `}>
                     {p.hero.kingdom}
                   </div>
                   
-                  {/* 身份标识 */}
+                  {/* 身份标识：朱印方章 */}
                   {(p.isRevealed || p.isHuman || p.identity === Identity.ZHUGONG) && (
                     <div className={`
-                      absolute -bottom-2 -right-2 w-8 h-8 flex items-center justify-center rounded-full text-white font-bold text-sm border-2 shadow-lg
-                      ${p.identity === Identity.ZHUGONG ? 'bg-yellow-600 border-yellow-400' :
-                        p.identity === Identity.ZHONGCHEN ? 'bg-orange-600 border-orange-400' :
-                        p.identity === Identity.FANZEI ? 'bg-green-700 border-green-500' :
-                        'bg-indigo-700 border-indigo-500'
+                      absolute -bottom-2 -right-2 w-7 h-7 flex items-center justify-center rounded-[4px] rotate-3 font-bold text-[11px] border shadow-md
+                      ${p.identity === Identity.ZHUGONG ? 'bg-[#c8a45c] border-[#e8cf94] text-[#2a1f14]' :
+                        p.identity === Identity.ZHONGCHEN ? 'bg-[#8a5a20] border-[#c8a45c]/70 text-[#f7e7cf]' :
+                        p.identity === Identity.FANZEI ? 'bg-[#9e2b25] border-[#c86b62] text-[#f7e7cf]' :
+                        'bg-[#3a3a4a] border-[#7a7a96] text-[#e8e8f0]'
                       }
                     `}>
                       {p.identity === Identity.ZHUGONG ? '主' :
@@ -3956,9 +3933,9 @@ const App: React.FC = () => {
                 
                 {/* 武将信息 */}
                 <div className="text-center">
-                  <div className="font-ancient text-stone-200 text-base mb-1 truncate">{p.hero.name}</div>
+                  <div className={`font-ancient text-base mb-1 truncate ${theme === 'dark' ? 'text-[#e8dcc8]' : 'text-[#3a332a]'}`}>{p.hero.name}</div>
                   
-                  {/* 体力值 - 原版风格 */}
+                  {/* 体力值 - 朱红勾玉 */}
                   <div className="flex justify-center gap-0.5 mb-1.5">
                     {Array.from({ length: p.maxHp }).map((_, i) => (
                       <div 
@@ -3967,11 +3944,9 @@ const App: React.FC = () => {
                           w-3 h-3 md:w-3.5 md:h-3.5 rounded-full border
                           ${i < p.hp 
                             ? p.hp === 1 
-                              ? 'bg-red-600 border-red-400 animate-pulse' 
-                              : p.hp <= 2 
-                                ? 'bg-orange-500 border-orange-300' 
-                                : 'bg-red-700 border-red-500'
-                            : 'bg-stone-800 border-stone-600'
+                              ? 'bg-[#a8261f] border-[#e0705f] animate-pulse shadow-[0_0_6px_rgba(200,60,45,0.7)]' 
+                              : 'bg-[#9e2b25] border-[#c86b62]'
+                            : 'bg-[#241b16] border-[#5a4a38]'
                           }
                         `}
                       />
@@ -4017,7 +3992,7 @@ const App: React.FC = () => {
         
         {/* Logs - 左侧日志区域 - 可滚动 - 优化位置和大小 */}
         <div className="absolute left-2 top-0 bottom-4 w-80 hidden md:block z-10">
-           <div className="h-full flex flex-col bg-stone-900/80 backdrop-blur-sm rounded-b-lg border-x border-b border-stone-600/50 shadow-lg overflow-hidden">
+           <div className="h-full flex flex-col bg-[#12100d]/92 rounded-b-lg border-x border-b border-[#8b7355]/35 shadow-lg overflow-hidden">
              {/* 标题栏 */}
              <div className="flex-none px-3 py-1.5 border-b border-stone-700 bg-stone-800/50">
                <div className="text-stone-400 text-xs font-bold">📜 战况记录 <span className="text-stone-600 font-normal">({logs.length})</span></div>
@@ -4071,15 +4046,16 @@ const App: React.FC = () => {
                  }, 500);
                }}
              >
-               {logs.map(log => (
+               {/* 只渲染最近 40 条：AI 高频写日志时避免整块重绘拖慢帧率 */}
+               {logs.slice(-40).map(log => (
                   <div key={log.id} className={`
-                    px-3 py-2 rounded text-sm leading-relaxed font-serif shadow-sm cursor-default hover:opacity-90 transition-opacity
-                    ${log.type === 'danger' ? 'bg-red-900/50 text-red-100 border-l-3 border-red-500' : 
-                      log.type === 'success' ? 'bg-green-900/50 text-green-100 border-l-3 border-green-500' : 
-                      log.type === 'skill' ? 'bg-blue-900/50 text-blue-100 border-l-3 border-blue-500' :
-                      log.type === 'chat' ? 'bg-yellow-900/50 text-yellow-100 border-l-3 border-yellow-500' : 
-                      log.type === 'warning' ? 'bg-orange-900/50 text-orange-100 border-l-3 border-orange-500' : 
-                      'bg-stone-800/50 text-stone-200 border-l-3 border-stone-500'}
+                    px-3 py-1.5 rounded-sm text-[13px] leading-relaxed font-serif
+                    ${log.type === 'danger' ? 'bg-[#3a1512]/60 text-[#f0c8c2] border-l-2 border-[#c86b62]' : 
+                      log.type === 'success' ? 'bg-[#2a2114]/60 text-[#f0e0b8] border-l-2 border-[#c8a45c]' : 
+                      log.type === 'skill' ? 'bg-[#1c2a33]/60 text-[#cfe0ee] border-l-2 border-[#8fb4d9]' :
+                      log.type === 'chat' ? 'bg-[#2a2414]/60 text-[#f0e8c8] border-l-2 border-[#c8a45c]' : 
+                      log.type === 'warning' ? 'bg-[#33240f]/60 text-[#f0dcb8] border-l-2 border-[#c8963c]' : 
+                      'bg-[#1f1914]/60 text-[#cdc2b0] border-l-2 border-[#6a5642]'}
                   `}>
                     {log.text}
                   </div>
@@ -4148,50 +4124,56 @@ const App: React.FC = () => {
                    </div>
                  </div>
                ) : (
-                 <div className="w-24 h-36 border-2 border-dashed border-stone-600 rounded-lg flex flex-col items-center justify-center text-stone-500 bg-stone-900/50 backdrop-blur-sm">
-                   <span className="font-ancient text-lg text-stone-600">弃牌堆</span>
-                   <span className="text-xs mt-1 text-stone-700">0</span>
+                 <div className={`w-24 h-36 rounded-lg flex flex-col items-center justify-center border border-dashed ${theme === 'dark' ? 'border-[#6a5642]/60 text-stone-500 bg-black/30' : 'border-[#c4a77d]/60 text-[#8a8680] bg-[#f5f0eb]/40'}`}>
+                   <span className="font-ancient text-base opacity-70">弃牌堆</span>
+                   <span className="text-xs mt-1 opacity-50">0</span>
                  </div>
                )}
            </div>
            
-           {/* 牌堆 - 原版三国杀风格 */}
+           {/* 牌堆 - 与卡牌牌背统一的黑漆描金风格 */}
            <div className="relative">
-              <div className="text-stone-400 text-sm text-center mb-2 font-ancient tracking-wider">牌堆</div>
+              <div className={`text-sm text-center mb-2 font-ancient tracking-wider ${theme === 'dark' ? 'text-stone-400' : 'text-[#5c5854]'}`}>牌堆</div>
               <div className="relative">
-                {/* 牌堆堆叠效果 */}
-                <div className="absolute top-2 left-2 w-24 h-36 bg-stone-800 rounded-lg border border-stone-700 transform rotate-1"></div>
-                <div className="absolute top-1 left-1 w-24 h-36 bg-stone-700 rounded-lg border border-stone-600 transform -rotate-1"></div>
-                
+                {/* 堆叠厚度（纯色，无纹理请求） */}
+                <div className="absolute top-2 left-2 w-24 h-36 rounded-lg bg-[#191410] border border-[#5a4a38]/40 rotate-2"></div>
+                <div className="absolute top-1 left-1 w-24 h-36 rounded-lg bg-[#221b16] border border-[#6a5642]/50 -rotate-1"></div>
+
                 {/* 主牌堆 */}
-                <div className="w-24 h-36 bg-gradient-to-br from-amber-800 via-stone-800 to-stone-900 border-2 border-amber-700/50 rounded-lg flex items-center justify-center shadow-2xl relative overflow-hidden">
-                   {/* 纹理背景 */}
-                   <div className="absolute inset-0 opacity-30 bg-[url('https://www.transparenttextures.com/patterns/wood-pattern.png')]"></div>
-                   
-                   {/* 装饰图案 */}
-                   <div className="absolute inset-2 border border-amber-600/30 rounded-lg"></div>
-                   <div className="absolute inset-4 border border-amber-500/20 rounded-lg"></div>
-                   
-                   {/* 中心图案 */}
-                   <div className="relative z-10 flex flex-col items-center">
-                     <div className="w-16 h-16 rounded-full bg-gradient-to-br from-amber-700/80 to-stone-800/80 border-2 border-amber-600/50 flex items-center justify-center mb-2">
-                       <span className="font-ancient text-2xl text-amber-400">杀</span>
+                <div
+                  className="w-24 h-36 rounded-lg relative overflow-hidden shadow-[0_8px_24px_rgba(0,0,0,0.55)] border-2 border-[#8b7355]/70"
+                  style={{ background: 'linear-gradient(155deg, #2b2320 0%, #221b18 55%, #151110 100%)' }}
+                >
+                   {/* 云纹（内联 SVG，无外部请求） */}
+                   <div className="absolute inset-0 opacity-25" style={{
+                     backgroundImage: `url("data:image/svg+xml,%3Csvg width='40' height='40' viewBox='0 0 40 40' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M8 20 Q14 12 20 20 T32 20' stroke='%23c8a45c' stroke-width='0.8' fill='none'/%3E%3C/svg%3E")`,
+                     backgroundSize: '40px 40px'
+                   }}></div>
+
+                   {/* 双层描金内框 */}
+                   <div className="absolute inset-1.5 border border-[#c8a45c]/45 rounded"></div>
+                   <div className="absolute inset-3 border border-[#c8a45c]/20 rounded-sm"></div>
+
+                   {/* 中心朱印 */}
+                   <div className="absolute inset-0 flex items-center justify-center">
+                     <div
+                       className="w-12 h-12 rounded-md flex items-center justify-center -rotate-3 border border-[#c8a45c]/60 shadow-lg"
+                       style={{ background: 'linear-gradient(145deg, #9e2b25, #7a1f1a)' }}
+                     >
+                       <span className="font-ancient text-[#f3d9a4] text-2xl leading-none">殺</span>
                      </div>
-                     <span className="font-ancient text-lg text-amber-500/80 tracking-widest">三国杀</span>
                    </div>
-                   
-                   {/* 角落装饰 */}
-                   <div className="absolute top-2 left-2 w-3 h-3 border-t-2 border-l-2 border-amber-600/40"></div>
-                   <div className="absolute top-2 right-2 w-3 h-3 border-t-2 border-r-2 border-amber-600/40"></div>
-                   <div className="absolute bottom-2 left-2 w-3 h-3 border-b-2 border-l-2 border-amber-600/40"></div>
-                   <div className="absolute bottom-2 right-2 w-3 h-3 border-b-2 border-r-2 border-amber-600/40"></div>
+
+                   <div className="absolute bottom-2 inset-x-0 text-center text-[8px] tracking-[0.28em] text-[#c8a45c]/45">
+                     三国杀
+                   </div>
                 </div>
-                
-                {/* 牌堆数量（低于10张时红色告警） */}
-                <div className={`absolute -bottom-3 -right-3 text-white text-sm font-bold w-10 h-10 rounded-full flex items-center justify-center border-2 shadow-lg transition-colors ${
+
+                {/* 牌堆数量（低于10张时朱红告警） */}
+                <div className={`absolute -bottom-3 -right-3 w-10 h-10 rounded-full flex items-center justify-center border-2 shadow-lg transition-colors font-bold text-sm ${
                   deck.length < 10
-                    ? 'bg-gradient-to-br from-red-600 to-red-800 border-red-400 animate-pulse'
-                    : 'bg-gradient-to-br from-yellow-600 to-yellow-800 border-yellow-400'
+                    ? 'bg-[#9e2b25] border-red-400/70 text-[#f7e7cf] ring-2 ring-red-500/30 animate-pulse'
+                    : 'bg-[#c8a45c] border-[#e0c07a]/80 text-[#2a1f14]'
                 }`}>
                   {deck.length}
                 </div>
@@ -4227,18 +4209,18 @@ const App: React.FC = () => {
                 relative p-2 rounded-xl border-2
                 ${damageAnimTarget === 0 || healAnimTarget === 0
                   ? '' // 动画期间禁用过渡效果
-                  : 'transition-all duration-300'
+                  : 'transition-[transform,box-shadow,border-color] duration-300'
                 }
                 ${me.isDead 
-                  ? theme === 'dark' ? 'bg-stone-900/90 border-stone-700 opacity-60' : 'bg-[#e8e0d5]/90 border-[#c4b8a8] opacity-60'
+                  ? theme === 'dark' ? 'bg-[#15110e]/95 border-[#4a3f33] opacity-55' : 'bg-[#e8e0d5]/90 border-[#c4b8a8] opacity-55'
                   : theme === 'dark' 
-                    ? 'bg-gradient-to-b from-stone-800/90 to-stone-900/90 border-stone-600/80'
-                    : 'bg-gradient-to-b from-[#faf8f5]/95 to-[#f5f0eb]/95 border-[#d4c4a8]/80 shadow-lg'
+                    ? 'bg-[#1c1611]/95 border-[#8b7355]/45'
+                    : 'bg-[#fbf8f2]/95 border-[#c4a77d]/60 shadow-lg'
                 }
                 ${isMyTurn 
                   ? theme === 'dark'
-                    ? 'border-yellow-500 shadow-[0_0_25px_rgba(234,179,8,0.5)] scale-105'
-                    : 'border-[#c4a77d] shadow-[0_0_20px_rgba(196,167,125,0.4)] scale-105'
+                    ? 'border-[#c8a45c] shadow-[0_0_22px_rgba(200,164,92,0.35)] scale-105'
+                    : 'border-[#b8955c] shadow-[0_0_18px_rgba(184,149,92,0.30)] scale-105'
                   : ''
                 }
                 ${damageAnimTarget === 0 ? 'animate-damage-shake' : ''}
@@ -4267,57 +4249,51 @@ const App: React.FC = () => {
                   healAnimTarget === 0 ? 'animate-heal-glow' :
                   damageAnimTarget === 0 ? 'animate-damage-glow' : ''
                 }`}>
-                  {/* 势力边框 */}
-                  <div className={`
-                    absolute -inset-1 rounded-lg 
-                    ${me.hero.kingdom === '魏' ? 'bg-gradient-to-br from-blue-600/50 to-blue-800/50' :
-                      me.hero.kingdom === '蜀' ? 'bg-gradient-to-br from-red-600/50 to-red-800/50' :
-                      me.hero.kingdom === '吴' ? 'bg-gradient-to-br from-green-600/50 to-green-800/50' :
-                      'bg-gradient-to-br from-stone-500/50 to-stone-700/50'
-                    }
-                  `}></div>
+                  {/* 描金外框（统一色调） */}
+                  <div className="absolute -inset-1 rounded-lg bg-gradient-to-br from-[#c8a45c]/45 via-[#8b7355]/25 to-[#5a4a38]/15"></div>
                   
                   {/* 头像 */}
-                  <div className="relative w-full h-full rounded-lg overflow-hidden border-2 border-stone-500">
+                  <div className="relative w-full h-full rounded-lg overflow-hidden border border-[#c8a45c]/55">
                     <img 
                       src={me.hero.avatarUrl} 
                       alt={me.hero.name} 
                       className="w-full h-full object-cover"
                       onError={(e) => {
                         const target = e.target as HTMLImageElement;
-                        target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(me.hero.name)}&background=random&color=fff&size=256`;
+                        target.src = `data:image/svg+xml;utf8,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256"><rect width="256" height="256" fill="#241b14"/><text x="128" y="158" font-size="96" fill="#c8a45c" text-anchor="middle" font-family="serif">${me.hero.name}</text></svg>`)}`;
                       }}
                     />
                     
                     {/* 阵亡遮罩 */}
                     {me.isDead && (
-                      <div className="absolute inset-0 bg-black/70 flex items-center justify-center">
-                        <span className="text-red-500 font-ancient text-2xl font-bold transform -rotate-12 border-2 border-red-500 px-2 py-1">
+                      <div className="absolute inset-0 bg-black/75 flex items-center justify-center">
+                        <span className="font-ancient text-[#c86b62] text-xl font-bold transform -rotate-12 border border-[#9e2b25] px-2 py-1">
                           阵亡
                         </span>
                       </div>
                     )}
                   </div>
                   
-                  {/* 势力标识 */}
+                  {/* 势力标识：深墨圆环 + 势力色字 */}
                   <div className={`
-                    absolute -top-2 -left-2 w-7 h-7 flex items-center justify-center rounded-full text-white text-sm font-bold border-2 shadow-lg
-                    ${me.hero.kingdom === '魏' ? 'bg-blue-700 border-blue-500' :
-                      me.hero.kingdom === '蜀' ? 'bg-red-700 border-red-500' :
-                      me.hero.kingdom === '吴' ? 'bg-green-700 border-green-500' :
-                      'bg-stone-600 border-stone-400'
+                    absolute -top-2 -left-2 w-6 h-6 flex items-center justify-center rounded-full text-[11px] font-bold border shadow-md
+                    bg-[#1a1512] border-[#c8a45c]/50
+                    ${me.hero.kingdom === '魏' ? 'text-[#8fb4d9]' :
+                      me.hero.kingdom === '蜀' ? 'text-[#d98a8a]' :
+                      me.hero.kingdom === '吴' ? 'text-[#8fc39a]' :
+                      'text-[#bfae94]'
                     }
                   `}>
                     {me.hero.kingdom}
                   </div>
                   
-                  {/* 身份标识 */}
+                  {/* 身份标识：朱印方章 */}
                   <div className={`
-                    absolute -bottom-2 -right-2 w-8 h-8 flex items-center justify-center rounded-full text-white font-bold text-sm border-2 shadow-lg
-                    ${me.identity === Identity.ZHUGONG ? 'bg-yellow-600 border-yellow-400' :
-                      me.identity === Identity.ZHONGCHEN ? 'bg-orange-600 border-orange-400' :
-                      me.identity === Identity.FANZEI ? 'bg-green-700 border-green-500' :
-                      'bg-indigo-700 border-indigo-500'
+                    absolute -bottom-2 -right-2 w-7 h-7 flex items-center justify-center rounded-[4px] rotate-3 font-bold text-[11px] border shadow-md
+                    ${me.identity === Identity.ZHUGONG ? 'bg-[#c8a45c] border-[#e8cf94] text-[#2a1f14]' :
+                      me.identity === Identity.ZHONGCHEN ? 'bg-[#8a5a20] border-[#c8a45c]/70 text-[#f7e7cf]' :
+                      me.identity === Identity.FANZEI ? 'bg-[#9e2b25] border-[#c86b62] text-[#f7e7cf]' :
+                      'bg-[#3a3a4a] border-[#7a7a96] text-[#e8e8f0]'
                     }
                   `}>
                     {me.identity === Identity.ZHUGONG ? '主' :
@@ -4330,7 +4306,7 @@ const App: React.FC = () => {
                 {/* 回合指示器 */}
                 {isMyTurn && (
                   <div className="absolute -top-4 left-1/2 -translate-x-1/2 z-30">
-                    <div className="bg-gradient-to-b from-yellow-500 to-yellow-700 text-white text-xs px-4 py-1 rounded-full font-bold shadow-lg border border-yellow-400 animate-pulse whitespace-nowrap">
+                    <div className="bg-[#9e2b25] text-[#f7e7cf] text-[11px] px-4 py-0.5 rounded-full font-bold shadow-[0_2px_12px_rgba(158,43,37,0.55)] border border-[#c86b62]/70 whitespace-nowrap tracking-widest">
                       我的回合
                     </div>
                   </div>
@@ -4339,25 +4315,23 @@ const App: React.FC = () => {
             </div>
             
             {/* 玩家详细信息面板 */}
-            <div className="bg-stone-900/90 border border-stone-700 rounded-xl px-4 py-3 shadow-lg">
-              <div className="font-ancient text-stone-200 text-lg mb-2">{me.hero.name}</div>
+            <div className={`rounded-xl px-4 py-3 border shadow-lg ${theme === 'dark' ? 'bg-[#1c1611]/90 border-[#8b7355]/45' : 'bg-[#fbf8f2]/92 border-[#c4a77d]/60'}`}>
+              <div className={`font-ancient text-lg mb-2 ${theme === 'dark' ? 'text-[#e8dcc8]' : 'text-[#3a332a]'}`}>{me.hero.name}</div>
               
-              {/* 体力值 */}
+              {/* 体力值 - 朱红勾玉 */}
               <div className="flex items-center gap-2 mb-2">
-                <span className="text-stone-500 text-xs">体力</span>
+                <span className={`text-xs ${theme === 'dark' ? 'text-stone-500' : 'text-[#8a8680]'}`}>体力</span>
                 <div className="flex gap-1">
                   {Array.from({ length: me.maxHp }).map((_, i) => (
                     <div 
                       key={i}
                       className={`
-                        w-4 h-4 rounded-full border-2
+                        w-4 h-4 rounded-full border
                         ${i < me.hp 
                           ? me.hp === 1 
-                            ? 'bg-red-600 border-red-400 animate-pulse shadow-[0_0_8px_rgba(220,38,38,0.8)]' 
-                            : me.hp <= 2 
-                              ? 'bg-orange-500 border-orange-300' 
-                              : 'bg-red-700 border-red-500'
-                          : 'bg-stone-800 border-stone-600'
+                            ? 'bg-[#a8261f] border-[#e0705f] animate-pulse shadow-[0_0_8px_rgba(200,60,45,0.75)]' 
+                            : 'bg-[#9e2b25] border-[#c86b62]'
+                          : 'bg-[#241b16] border-[#5a4a38]'
                         }
                       `}
                     />
@@ -4368,20 +4342,20 @@ const App: React.FC = () => {
               {/* 状态标志 */}
               {(me.isChained || me.isLeBuSiShu || me.isBingLiangCunDuan) && (
                 <div className="flex items-center gap-2 mb-2">
-                  <span className="text-stone-500 text-xs">状态</span>
+                  <span className={`text-xs ${theme === 'dark' ? 'text-stone-500' : 'text-[#8a8680]'}`}>状态</span>
                   <div className="flex gap-1.5">
                     {me.isChained && (
-                      <div className="px-2 py-0.5 rounded-full bg-amber-700/80 border border-amber-500 text-amber-200 text-xs font-bold" title="铁索连环">
+                      <div className="px-2 py-0.5 rounded-[4px] bg-[#6a4f22] border border-[#c8a45c]/60 text-[#f0d9a8] text-[11px] font-bold" title="铁索连环">
                         链
                       </div>
                     )}
                     {me.isLeBuSiShu && (
-                      <div className="px-2 py-0.5 rounded-full bg-purple-700/80 border border-purple-500 text-purple-200 text-xs font-bold" title="乐不思蜀">
+                      <div className="px-2 py-0.5 rounded-[4px] bg-[#5a3350] border border-[#b07aa0]/50 text-[#f0d0e8] text-[11px] font-bold" title="乐不思蜀">
                         乐
                       </div>
                     )}
                     {me.isBingLiangCunDuan && (
-                      <div className="px-2 py-0.5 rounded-full bg-blue-700/80 border border-blue-500 text-blue-200 text-xs font-bold" title="兵粮寸断">
+                      <div className="px-2 py-0.5 rounded-[4px] bg-[#2b4353] border border-[#6a9ab0]/50 text-[#cfe8f0] text-[11px] font-bold" title="兵粮寸断">
                         兵
                       </div>
                     )}
@@ -4392,12 +4366,12 @@ const App: React.FC = () => {
               {/* 手牌和技能信息 */}
               <div className="flex items-center gap-4 text-sm">
                 <div className="flex items-center gap-1">
-                  <span className="text-stone-500">手牌</span>
-                  <span className="text-yellow-500 font-bold text-lg">{me.hand.length}</span>
+                  <span className={theme === 'dark' ? 'text-stone-500' : 'text-[#8a8680]'}>手牌</span>
+                  <span className="text-[#e8cf94] font-bold text-lg">{me.hand.length}</span>
                 </div>
                 <div className="flex items-center gap-1">
-                  <span className="text-stone-500">技能</span>
-                  <span className="text-blue-400 font-bold">{me.hero.skillName}</span>
+                  <span className={theme === 'dark' ? 'text-stone-500' : 'text-[#8a8680]'}>技能</span>
+                  <span className={`font-bold ${theme === 'dark' ? 'text-[#8fb4d9]' : 'text-[#3a6a8f]'}`}>{me.hero.skillName}</span>
                 </div>
               </div>
             </div>
@@ -4406,15 +4380,17 @@ const App: React.FC = () => {
             {/* Control Buttons - 操作按钮 - 原版三国杀风格 */}
             <div className="flex gap-3 items-center relative z-40">
               {/* 操作按钮组 */}
-              <div className="flex items-center gap-2 bg-stone-900/80 border border-stone-700 rounded-xl p-2">
+              <div className={`flex items-center gap-2 rounded-xl p-2 border ${theme === 'dark' ? 'bg-[#14100d]/85 border-[#8b7355]/40' : 'bg-[#fbf8f2]/90 border-[#c4a77d]/50'}`}>
                 {/* AI Takeover Toggle */}
                 <button 
                   onClick={() => setIsAiTakeover(!isAiTakeover)}
                   className={`
-                    px-4 py-2 rounded-lg border-2 text-sm font-bold transition-all
+                    px-4 py-2 rounded-lg border text-sm font-bold transition-colors
                     ${isAiTakeover 
-                      ? 'bg-gradient-to-b from-indigo-600 to-indigo-800 border-indigo-400 text-white shadow-[0_0_15px_rgba(99,102,241,0.5)]' 
-                      : 'bg-stone-800 border-stone-600 text-stone-400 hover:border-stone-500 hover:text-stone-300'}
+                      ? 'bg-[#9e2b25] border-[#c86b62] text-[#f7e7cf] shadow-[0_0_14px_rgba(158,43,37,0.4)]' 
+                      : theme === 'dark'
+                        ? 'bg-[#241b16] border-[#8b7355]/50 text-[#c8bda8] hover:border-[#c8a45c] hover:text-[#e8cf94]'
+                        : 'bg-[#efe8dc] border-[#c4a77d]/60 text-[#6a6055] hover:border-[#b8955c] hover:text-[#3a332a]'}
                   `}
                 >
                   {isAiTakeover ? '🤖 AI托管中' : '🎮 托管'}
@@ -4508,7 +4484,7 @@ const App: React.FC = () => {
                           setIsSelectingTarget(false);
                           addLog(`请选择要给出的牌（刘备「仁德」技能）...`, 'info');
                         }}
-                        className="bg-gradient-to-b from-green-700 to-green-900 text-green-100 px-5 py-2 rounded-lg border border-green-500 hover:from-green-600 hover:to-green-800 hover:text-white transition-all font-ancient text-base shadow-lg"
+                        className="bg-[#9e2b25] hover:bg-[#b0322b] text-[#f7e7cf] px-5 py-2 rounded-lg border border-[#c86b62] hover:border-[#e8a99f] transition-colors font-ancient text-base shadow-[0_4px_14px_rgba(158,43,37,0.35)]"
                       >
                         仁德
                       </button>
@@ -4559,7 +4535,7 @@ const App: React.FC = () => {
                           setRendeSelectedTarget(null);
                           setSelectedCardIds([]);
                         }}
-                        className="bg-gradient-to-b from-green-700 to-green-900 text-green-100 px-5 py-2 rounded-lg border border-green-500 hover:from-green-600 hover:to-green-800 hover:text-white transition-all font-ancient text-base shadow-lg"
+                        className="bg-[#9e2b25] hover:bg-[#b0322b] text-[#f7e7cf] px-5 py-2 rounded-lg border border-[#c86b62] hover:border-[#e8a99f] transition-colors font-ancient text-base shadow-[0_4px_14px_rgba(158,43,37,0.35)]"
                       >
                         确认给出
                       </button>
@@ -4575,7 +4551,7 @@ const App: React.FC = () => {
                           setSelectedCardIds([]);
                           addLog(`取消了「仁德」技能`, 'info');
                         }}
-                        className="bg-gradient-to-b from-stone-700 to-stone-900 text-stone-300 px-4 py-2 rounded-lg border border-stone-500 hover:from-stone-600 hover:to-stone-800 hover:text-white transition-all font-ancient text-base shadow-lg"
+                        className="bg-[#221b16] hover:bg-[#2e2520] text-[#c8bda8] px-4 py-2 rounded-lg border border-[#6a5642] hover:border-[#c8a45c] hover:text-[#e8cf94] transition-colors font-ancient text-base shadow-lg"
                       >
                         取消仁德
                       </button>
@@ -4590,7 +4566,7 @@ const App: React.FC = () => {
                           setIsSelectingTarget(false);
                           addLog(`请选择要弃置的牌（孙权「制衡」技能）...`, 'info');
                         }}
-                        className="bg-gradient-to-b from-blue-700 to-blue-900 text-blue-100 px-5 py-2 rounded-lg border border-blue-500 hover:from-blue-600 hover:to-blue-800 hover:text-white transition-all font-ancient text-base shadow-lg"
+                        className="bg-[#242a33] hover:bg-[#2f3844] text-[#cfe0ee] px-5 py-2 rounded-lg border border-[#6a8296]/70 hover:border-[#8fb4d9] hover:text-white transition-colors font-ancient text-base shadow-lg"
                       >
                         制衡
                       </button>
@@ -4617,7 +4593,7 @@ const App: React.FC = () => {
                              setActiveSelectedId(null);
                              setIsSelectingTarget(false);
                            }}
-                           className="bg-gradient-to-b from-green-700 to-green-900 text-green-100 px-5 py-2 rounded-lg border border-green-500 hover:from-green-600 hover:to-green-800 hover:text-white transition-all font-ancient text-base shadow-lg"
+                           className="bg-[#9e2b25] hover:bg-[#b0322b] text-[#f7e7cf] px-5 py-2 rounded-lg border border-[#c86b62] hover:border-[#e8a99f] transition-colors font-ancient text-base shadow-[0_4px_14px_rgba(158,43,37,0.35)]"
                          >
                            确认制衡
                          </button>
@@ -4633,7 +4609,7 @@ const App: React.FC = () => {
                              setIsSelectingTarget(false);
                              addLog(`取消了「制衡」技能`, 'info');
                            }}
-                           className="bg-gradient-to-b from-stone-700 to-stone-900 text-stone-300 px-4 py-2 rounded-lg border border-stone-500 hover:from-stone-600 hover:to-stone-800 hover:text-white transition-all font-ancient text-base shadow-lg"
+                           className="bg-[#221b16] hover:bg-[#2e2520] text-[#c8bda8] px-4 py-2 rounded-lg border border-[#6a5642] hover:border-[#c8a45c] hover:text-[#e8cf94] transition-colors font-ancient text-base shadow-lg"
                          >
                            取消制衡
                          </button>
@@ -4648,7 +4624,7 @@ const App: React.FC = () => {
                              setLijianSelectedTargets([]);
                              addLog(`请选择要弃置的牌（貂蝉「离间」技能）...`, 'info');
                            }}
-                           className="bg-gradient-to-b from-rose-700 to-rose-900 text-rose-100 px-5 py-2 rounded-lg border border-rose-500 hover:from-rose-600 hover:to-rose-800 hover:text-white transition-all font-ancient text-base shadow-lg"
+                           className="bg-[#33212a] hover:bg-[#402a34] text-[#f0d0e0] px-5 py-2 rounded-lg border border-[#a9737f]/70 hover:border-[#d98a8a] hover:text-white transition-colors font-ancient text-base shadow-lg"
                          >
                            离间
                          </button>
@@ -4697,7 +4673,7 @@ const App: React.FC = () => {
                              setLijianSelectedTargets([]);
                            }}
                            disabled={lijianSelectedTargets.length !== 2 || !!dyingState || !!isProcessing}
-                           className={`bg-gradient-to-b from-rose-700 to-rose-900 text-rose-100 px-5 py-2 rounded-lg border border-rose-500 hover:from-rose-600 hover:to-rose-800 hover:text-white transition-all font-ancient text-base shadow-lg
+                           className={`bg-[#33212a] hover:bg-[#402a34] text-[#f0d0e0] px-5 py-2 rounded-lg border border-[#a9737f]/70 hover:border-[#d98a8a] hover:text-white transition-colors font-ancient text-base shadow-lg
                              ${lijianSelectedTargets.length !== 2 || dyingState || isProcessing ? 'opacity-50 cursor-not-allowed' : ''}`}
                          >
                            确认离间
@@ -4713,7 +4689,7 @@ const App: React.FC = () => {
                              setLijianSelectedTargets([]);
                              addLog(`取消了「离间」技能`, 'info');
                            }}
-                           className="bg-gradient-to-b from-stone-700 to-stone-900 text-stone-300 px-4 py-2 rounded-lg border border-stone-500 hover:from-stone-600 hover:to-stone-800 hover:text-white transition-all font-ancient text-base shadow-lg"
+                           className="bg-[#221b16] hover:bg-[#2e2520] text-[#c8bda8] px-4 py-2 rounded-lg border border-[#6a5642] hover:border-[#c8a45c] hover:text-[#e8cf94] transition-colors font-ancient text-base shadow-lg"
                          >
                            取消离间
                          </button>
@@ -4723,10 +4699,10 @@ const App: React.FC = () => {
                       <button 
                         onClick={endTurn}
                         disabled={!!dyingState || isProcessing}
-                        className={`px-6 py-2 rounded-lg text-lg font-bold font-ancient shadow-lg transition-all border-2
+                        className={`px-6 py-2 rounded-lg text-lg font-bold font-ancient shadow-lg transition-[transform,background-color,border-color] border-2
                           ${(dyingState || isProcessing) 
-                            ? 'bg-stone-800 text-stone-600 border-stone-700 cursor-not-allowed opacity-50' 
-                            : 'bg-gradient-to-b from-stone-700 to-stone-900 text-stone-200 border-stone-500 hover:from-stone-600 hover:to-stone-800 hover:text-white hover:scale-105'}
+                            ? 'bg-[#1a1512] text-[#5a5248] border-[#3a3229] cursor-not-allowed opacity-50' 
+                            : 'bg-[#2b2318] text-[#e8cf94] border-[#c8a45c]/60 hover:bg-[#3a2f22] hover:border-[#c8a45c] hover:scale-105'}
                         `}
                       >
                         结束回合
@@ -4741,10 +4717,10 @@ const App: React.FC = () => {
                     onClick={handleDiscardConfirm}
                     disabled={!!dyingState || isProcessing || !((me.hand.length - me.hp) === selectedCardIds.length && (me.hand.length - me.hp) > 0)}
                     className={`
-                      px-8 py-3 rounded-lg text-xl font-bold font-ancient shadow-lg transition-all border-2
+                      px-8 py-3 rounded-lg text-xl font-bold font-ancient shadow-lg transition-[transform,background-color] border-2
                       ${(me.hand.length - me.hp) === selectedCardIds.length && (me.hand.length - me.hp) > 0 && !dyingState && !isProcessing
-                        ? 'bg-gradient-to-b from-red-700 to-red-900 text-white border-red-500 hover:from-red-600 hover:to-red-800 hover:scale-105 cursor-pointer' 
-                        : 'bg-stone-800 text-stone-600 border-stone-700 cursor-not-allowed'}
+                        ? 'bg-[#9e2b25] text-[#f7e7cf] border-[#c86b62] hover:bg-[#b0322b] hover:scale-105 cursor-pointer shadow-[0_4px_18px_rgba(158,43,37,0.4)]' 
+                        : 'bg-[#1a1512] text-[#5a5248] border-[#3a3229] cursor-not-allowed'}
                     `}
                   >
                     弃 牌
@@ -4756,10 +4732,10 @@ const App: React.FC = () => {
                   <button 
                     onClick={() => { if (!dyingState && !isProcessing) { setSelectedCardIds([]); setActiveSelectedId(null); setIsSelectingTarget(false); } }}
                     disabled={!!dyingState || isProcessing}
-                    className={`px-4 py-2 rounded-lg text-sm font-bold transition-all border-2
+                    className={`px-4 py-2 rounded-lg text-sm font-bold transition-colors border
                       ${(dyingState || isProcessing) 
-                        ? 'bg-stone-800 text-stone-600 border-stone-700 cursor-not-allowed opacity-50' 
-                        : 'bg-gradient-to-b from-stone-700 to-stone-900 text-stone-300 border-stone-500 hover:from-stone-600 hover:to-stone-800 hover:text-white'}
+                        ? 'bg-[#1a1512] text-[#5a5248] border-[#3a3229] cursor-not-allowed opacity-50' 
+                        : 'bg-[#221b16] text-[#c8bda8] border-[#6a5642] hover:border-[#c8a45c] hover:text-[#e8cf94]'}
                     `}
                   >
                     取消选择
@@ -4769,10 +4745,10 @@ const App: React.FC = () => {
                 <button
                   onClick={handleAskStrategy}
                   disabled={me.isDead || !!dyingState || isProcessing}
-                  className={`px-4 py-2 rounded-lg border-2 text-sm font-bold transition-all flex items-center gap-2
+                  className={`px-4 py-2 rounded-lg border text-sm font-bold transition-colors flex items-center gap-2
                     ${(dyingState || isProcessing)
-                      ? 'opacity-50 cursor-not-allowed bg-stone-800 border-stone-700 text-stone-500'
-                      : 'bg-indigo-900/80 border-indigo-600 text-indigo-200 hover:bg-indigo-800 hover:border-indigo-500 hover:text-white shadow-[0_0_15px_rgba(99,102,241,0.3)]'}
+                      ? 'opacity-50 cursor-not-allowed bg-[#1a1512] border-[#3a3229] text-[#5a5248]'
+                      : 'bg-[#2b2318] border-[#c8a45c]/60 text-[#e8cf94] hover:bg-[#3a2f22] hover:border-[#c8a45c] hover:text-[#f7e7cf]'}
                   `}
                 >
                   <span>🎋</span>
@@ -4782,13 +4758,13 @@ const App: React.FC = () => {
          </div>
 
          {/* Hand Cards Area - 手牌区域 */}
-         <div className="w-full overflow-x-auto overflow-y-visible px-4 py-3 min-h-[180px] scrollbar-hide flex justify-center relative" style={{ zIndex: 10 }}>
+         <div className="w-full overflow-x-auto overflow-y-visible px-2 sm:px-4 py-2 sm:py-3 min-h-[150px] sm:min-h-[180px] scrollbar-hide flex justify-center relative" style={{ zIndex: 10 }}>
            {/* 手牌背景 - 白天模式移除遮罩 */}
            {theme === 'dark' && (
-             <div className="absolute inset-x-4 bottom-0 h-32 rounded-t-2xl pointer-events-none bg-gradient-to-t from-stone-900/80 to-transparent"></div>
+             <div className="absolute inset-x-4 bottom-0 h-32 rounded-t-2xl pointer-events-none bg-gradient-to-t from-[#0c0906]/85 to-transparent"></div>
            )}
            
-           <div className="flex space-x-1 md:space-x-2 items-end pl-4 pr-4 pb-2 relative">
+           <div className="flex -space-x-2 sm:space-x-1 md:space-x-2 items-end px-4 pb-2 relative">
              {me.hand.map((card, index) => {
                // Selection Logic
                const isSelected = (phase === GamePhase.DISCARD || isZhihengMode || (isLijianMode && lijianSelectedCardId === card.id) || isRendeMode)
