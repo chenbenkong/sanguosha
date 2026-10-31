@@ -9,6 +9,13 @@ import { useTheme } from './src/contexts/ThemeContext';
 import { BackgroundCarousel } from './src/components/BackgroundCarousel';
 import { BACKGROUND_IMAGES, CAROUSEL_CONFIG } from './src/config/backgrounds';
 
+// 分段背景音乐：首页 / 对局 / 决战
+const BGM_TRACKS = {
+  start: BGM_URL,
+  battle: 'audio/bgm/battle.mp3',
+  climax: 'audio/bgm/climax.mp3',
+} as const;
+
 // 全局类型声明
 declare global {
   interface Window {
@@ -186,6 +193,9 @@ const App: React.FC = () => {
   // 技能发动横幅（全屏金色大字，短暂展示）
   const [skillBanner, setSkillBanner] = useState<{ hero: string, skill: string, id: string } | null>(null);
   const skillBannerTimerRef = useRef<NodeJS.Timeout | null>(null);
+  // 技能发动时对应武将头像高亮
+  const [skillGlowId, setSkillGlowId] = useState<number | null>(null);
+  const skillGlowTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   // 弃牌堆查看器
   const [showDiscardViewer, setShowDiscardViewer] = useState<boolean>(false);
@@ -195,6 +205,8 @@ const App: React.FC = () => {
   const isMutedRef = useRef<boolean>(false);
   useEffect(() => { isMutedRef.current = isMuted; }, [isMuted]);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const bgmModeRef = useRef<'start' | 'battle' | 'climax'>('start');
+  const audioReadyRef = useRef<boolean>(false);
   const logsEndRef = useRef<HTMLDivElement>(null);
   const logsContainerRef = useRef<HTMLDivElement>(null);
   const isUserScrollingRef = useRef<boolean>(false);
@@ -238,6 +250,30 @@ const App: React.FC = () => {
     const kind = SFX_FOR_NAME[key];
     if (kind) playSfx(kind);
   };
+
+  // --- 分段背景音乐：首页 / 对局 / 决战 ---
+  const playBgm = useCallback((mode: 'start' | 'battle' | 'climax') => {
+    if (bgmModeRef.current === mode && audioRef.current) return;
+    bgmModeRef.current = mode;
+    const prev = audioRef.current;
+    const next = new Audio(BGM_TRACKS[mode]);
+    next.loop = true;
+    next.volume = isMutedRef.current ? 0 : 0.3;
+    next.play().catch(() => { /* 等待用户交互 */ });
+    audioRef.current = next;
+    if (prev) {
+      let v = prev.volume;
+      const timer = setInterval(() => {
+        v -= 0.05;
+        if (v <= 0) {
+          clearInterval(timer);
+          prev.pause();
+        } else {
+          prev.volume = v;
+        }
+      }, 60);
+    }
+  }, []);
 
   // 从ref中获取最新的玩家信息
   const getPlayer = (id: number) => playersRef.current.find(p => p.id === id);
@@ -411,13 +447,26 @@ const App: React.FC = () => {
 
   const initAudio = () => {
     if (!audioRef.current) {
-      audioRef.current = new Audio(BGM_URL);
+      audioRef.current = new Audio(BGM_TRACKS[bgmModeRef.current]);
       audioRef.current.loop = true;
       audioRef.current.volume = isMuted ? 0 : 0.3;
     }
     // 浏览器自动播放策略会拦截无交互的播放请求（控制台出现 ERR_ABORTED），静默忽略即可
+    audioReadyRef.current = true;
     audioRef.current.play().catch(() => {});
   };
+
+  // 随界面 / 存活人数切换 BGM（需在首次用户交互后才能切换，避免自动播放被拦截）
+  useEffect(() => {
+    if (!audioReadyRef.current) return;
+    if (screen === 'start' || screen === 'select') {
+      playBgm('start');
+    } else if (screen === 'game') {
+      const alive = players.filter(p => !p.isDead).length;
+      playBgm(alive <= 2 ? 'climax' : 'battle');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [screen, players]);
 
   // 切换静音状态
   const toggleMute = () => {
@@ -1739,6 +1788,13 @@ const App: React.FC = () => {
   // 技能发动横幅：武将名 + 技能名 金色大字短暂展示
   const showSkillBanner = useCallback((hero: string, skill: string) => {
     if (!isMutedRef.current) playSkillVoice(skill);
+    // 找到发动者并高亮头像
+    const caster = playersRef.current.find(p => p.hero.name === hero);
+    if (caster) {
+      if (skillGlowTimerRef.current) clearTimeout(skillGlowTimerRef.current);
+      setSkillGlowId(caster.id);
+      skillGlowTimerRef.current = setTimeout(() => setSkillGlowId(null), 1800);
+    }
     if (skillBannerTimerRef.current) clearTimeout(skillBannerTimerRef.current);
     setSkillBanner({ hero, skill, id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6) });
     skillBannerTimerRef.current = setTimeout(() => setSkillBanner(null), 1500);
@@ -3498,7 +3554,7 @@ const App: React.FC = () => {
             )}
           </div>
           <div>
-            <span className={theme === 'dark' ? 'text-amber-700/50' : 'text-[#8b6f4a]/60'}>◆</span> 三国杀 · {playerCount}人军争篇 v3.5 <span className={theme === 'dark' ? 'text-amber-700/50' : 'text-[#8b6f4a]/60'}>◆</span>
+            <span className={theme === 'dark' ? 'text-amber-700/50' : 'text-[#8b6f4a]/60'}>◆</span> 三国杀 · {playerCount}人军争篇 v3.7 <span className={theme === 'dark' ? 'text-amber-700/50' : 'text-[#8b6f4a]/60'}>◆</span>
           </div>
         </div>
       </div>
@@ -4728,7 +4784,7 @@ const App: React.FC = () => {
                 <div className={`relative w-20 h-24 md:w-24 md:h-28 mb-2 ${
                   healAnimTarget === p.id ? 'animate-heal-glow' :
                   damageAnimTarget === p.id ? 'animate-damage-glow' : ''
-                }`}>
+                } ${skillGlowId === p.id ? 'skill-glow' : ''}`}>
                   {/* 描金外框：统一色调，势力色只保留在小印章上，降低整屏配色噪音 */}
                   <div className="absolute -inset-1 rounded-lg bg-gradient-to-br from-[#c8a45c]/45 via-[#8b7355]/25 to-[#5a4a38]/15"></div>
                   
@@ -5137,7 +5193,7 @@ const App: React.FC = () => {
                 <div className={`relative w-20 h-24 md:w-24 md:h-28 ${
                   healAnimTarget === 0 ? 'animate-heal-glow' :
                   damageAnimTarget === 0 ? 'animate-damage-glow' : ''
-                }`}>
+                } ${skillGlowId === 0 ? 'skill-glow' : ''}`}>
                   {/* 描金外框（统一色调） */}
                   <div className="absolute -inset-1 rounded-lg bg-gradient-to-br from-[#c8a45c]/45 via-[#8b7355]/25 to-[#5a4a38]/15"></div>
                   

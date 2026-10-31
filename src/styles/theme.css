@@ -21,6 +21,19 @@
 }
 
 /* ===== 技能发动横幅 ===== */
+@keyframes skillGlowPulse {
+  0% { box-shadow: 0 0 0 0 rgba(212, 175, 55, 0.9), 0 0 18px 6px rgba(212, 175, 55, 0.55); }
+  60% { box-shadow: 0 0 0 6px rgba(212, 175, 55, 0.25), 0 0 34px 14px rgba(212, 175, 55, 0.35); }
+  100% { box-shadow: 0 0 0 0 rgba(212, 175, 55, 0), 0 0 0 0 rgba(212, 175, 55, 0); }
+}
+.skill-glow {
+  animation: skillGlowPulse 1.4s ease-out;
+  border-color: #e8cf94 !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  .skill-glow { animation: none; box-shadow: 0 0 20px 6px rgba(212, 175, 55, 0.45); }
+}
+
 @keyframes skillBannerIn {
   0% { opacity: 0; transform: scale(0.7) translateY(22px); }
   16% { opacity: 1; transform: scale(1.08) translateY(0); }
