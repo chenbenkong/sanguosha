@@ -61,6 +61,17 @@ const App: React.FC = () => {
   // Feature State
   const [isAiTakeover, setIsAiTakeover] = useState<boolean>(false);
 
+  // 游戏速度控制（1x/2x/3x，持久化到 localStorage）
+  const [speedLevel, setSpeedLevel] = useState<1 | 2 | 3>(() => {
+    const saved = Number(localStorage.getItem('sgs-speed'));
+    return saved === 2 || saved === 3 ? (saved as 2 | 3) : 1;
+  });
+  const speedRef = useRef<number>(speedLevel);
+  useEffect(() => {
+    speedRef.current = speedLevel;
+    localStorage.setItem('sgs-speed', String(speedLevel));
+  }, [speedLevel]);
+
   // --- UI/Interaction State ---
   const [logs, setLogs] = useState<LogEntry[]>([]);
   
@@ -132,6 +143,9 @@ const App: React.FC = () => {
   // Skill Info Modal State
   const [showSkillModal, setShowSkillModal] = useState<boolean>(false);
 
+  // 玩法说明弹窗（首页）
+  const [showRules, setShowRules] = useState<boolean>(false);
+
   // 五谷丰登选择状态
   const [wuguSelection, setWuguSelection] = useState<{
     cards: Card[];
@@ -146,6 +160,10 @@ const App: React.FC = () => {
   const [healAnimTarget, setHealAnimTarget] = useState<number | null>(null);
   const [healNumber, setHealNumber] = useState<{ targetId: number, amount: number, id: string } | null>(null);
   const [visualCard, setVisualCard] = useState<{ card: Card, playerName: string } | null>(null);
+
+  // 技能发动横幅（全屏金色大字，短暂展示）
+  const [skillBanner, setSkillBanner] = useState<{ hero: string, skill: string, id: string } | null>(null);
+  const skillBannerTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   // 弃牌堆查看器
   const [showDiscardViewer, setShowDiscardViewer] = useState<boolean>(false);
@@ -171,7 +189,8 @@ const App: React.FC = () => {
   }, []);
 
   // --- Helpers ---
-  const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+  // delay 受全局速度倍率控制：2x/3x 下 AI 结算节奏等比加快
+  const delay = useCallback((ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms / speedRef.current)), []);
 
   // 优化：限制日志数量，避免内存泄漏和性能问题
   const addLog = useCallback((text: string, type: LogEntry['type'] = 'info') => {
@@ -259,6 +278,9 @@ const App: React.FC = () => {
 
   const startGame = (hero: Hero) => {
     initAudio();
+    isGameOverRef.current = false; // 重置结束标志，支持"再来一局"
+    setAdvice(null);
+    setSkillBanner(null);
     const shuffledDeck = [...INITIAL_DECK]; 
     
     // 根据人数分配身份
@@ -531,6 +553,37 @@ const App: React.FC = () => {
         setRendeSelectedCardIds([]);
         setRendeSelectedTarget(null);
         addLog(`>>> ${currentPlayer.hero.name} (${currentPlayer.isHuman ? '你' : 'AI'}) 回合开始 <<<`, 'info');
+
+        // 闪电判定：判定牌为黑桃2-9时受到3点雷电伤害，否则传递给下一名角色
+        if (currentPlayer.isShandian) {
+          updatePlayer(currentPlayer.id, { isShandian: false });
+          const jc = await performJudgment(currentPlayer.id, '闪电');
+          const rankNum = jc ? (parseInt(jc.rank.replace(/\D/g, ''), 10) || 0) : 0;
+          if (jc && jc.suit === Suit.SPADE && rankNum >= 2 && rankNum <= 9) {
+            addLog(`⚡【闪电】命中！${currentPlayer.hero.name} 受到3点雷电伤害！`, 'danger');
+            await takeDamage(currentPlayer.id, currentPlayer.id, 3, {
+              ...jc, name: CardName.SHANDIAN,
+            } as Card);
+          } else {
+            // 传递给下一名存活角色
+            let nextIdx = (currentPlayer.id + 1) % players.length;
+            let safety = 0;
+            while (safety < players.length) {
+              const np = getPlayer(nextIdx);
+              if (np && !np.isDead) break;
+              nextIdx = (nextIdx + 1) % players.length;
+              safety++;
+            }
+            if (safety < players.length && nextIdx !== currentPlayer.id) {
+              updatePlayer(nextIdx, { isShandian: true });
+              addLog(`【闪电】未命中，传递给 ${getPlayer(nextIdx)?.hero.name}`, 'info');
+            } else {
+              addLog(`【闪电】未命中，无人可传递，进入弃牌堆`, 'info');
+            }
+          }
+          await delay(600);
+        }
+
         // 安全防线：体力<=0的角色需要先进行濒死求桃
         const latestCurrent = getPlayer(turnIndex);
         if (latestCurrent && latestCurrent.hp <= 0 && !latestCurrent.isDead) {
@@ -550,18 +603,16 @@ const App: React.FC = () => {
       
       // DRAW PHASE
       else if (currentPhase === GamePhase.DRAW) {
-        // 检查是否有"兵粮寸断"效果
+        // 检查是否有"兵粮寸断"效果：判定为梅花则解除，否则跳过摸牌阶段
         if (currentPlayer.isBingLiangCunDuan) {
-          // 简化判定：50%概率跳过摸牌阶段
-          const isSkipped = Math.random() < 0.5;
-          if (isSkipped) {
-            addLog(`${currentPlayer.hero.name} 受【兵粮寸断】影响，跳过摸牌阶段！`, 'warning');
-          } else {
-            addLog(`${currentPlayer.hero.name} 【兵粮寸断】判定成功，正常摸牌`, 'success');
-            drawCards(currentPlayer.id, 2);
-          }
-          // 清除兵粮寸断状态
           updatePlayer(currentPlayer.id, { isBingLiangCunDuan: false });
+          const jc = await performJudgment(currentPlayer.id, '兵粮寸断');
+          if (jc && jc.suit === Suit.CLUB) {
+            addLog(`判定为梅花，【兵粮寸断】解除，${currentPlayer.hero.name} 正常摸牌`, 'success');
+            drawCards(currentPlayer.id, 2);
+          } else {
+            addLog(`${currentPlayer.hero.name} 受【兵粮寸断】影响，跳过摸牌阶段！`, 'warning');
+          }
         } else {
           drawCards(currentPlayer.id, 2);
         }
@@ -571,21 +622,18 @@ const App: React.FC = () => {
 
       // ACTION PHASE
       else if (currentPhase === GamePhase.ACTION) {
-        // 检查是否有"乐不思蜀"效果
+        // 检查是否有"乐不思蜀"效果：判定为红桃则解除，否则跳过出牌阶段
         if (currentPlayer.isLeBuSiShu) {
-          // 简化判定：50%概率跳过出牌阶段
-          const isSkipped = Math.random() < 0.5;
-          if (isSkipped) {
-            addLog(`${currentPlayer.hero.name} 受【乐不思蜀】影响，跳过出牌阶段！`, 'warning');
-          } else {
-            addLog(`${currentPlayer.hero.name} 【乐不思蜀】判定成功，正常出牌`, 'success');
-            // AI or Human Auto-Takeover
+          updatePlayer(currentPlayer.id, { isLeBuSiShu: false });
+          const jc = await performJudgment(currentPlayer.id, '乐不思蜀');
+          if (jc && jc.suit === Suit.HEART) {
+            addLog(`判定为红桃，【乐不思蜀】解除，${currentPlayer.hero.name} 正常出牌`, 'success');
             if (!currentPlayer.isHuman || isAiTakeover) {
               await cpuAI(currentPlayer);
             }
+          } else {
+            addLog(`${currentPlayer.hero.name} 受【乐不思蜀】影响，跳过出牌阶段！`, 'warning');
           }
-          // 清除乐不思蜀状态
-          updatePlayer(currentPlayer.id, { isLeBuSiShu: false });
           await delay(800);
           setPhase(GamePhase.DISCARD);
         } else {
@@ -626,7 +674,21 @@ const App: React.FC = () => {
             if (finalPlayer) {
               const finalExcess = finalPlayer.hand.length - finalPlayer.hp;
               if (finalExcess > 0) {
-                const discarded = finalPlayer.hand.slice(0, finalExcess); // Simple AI: discard first N cards
+                // AI 智能弃牌：优先弃置低价值牌，保留桃/闪/杀等关键牌
+                const keepValue = (c: Card) => {
+                  switch (c.name) {
+                    case CardName.TAO: return 0;   // 桃必留
+                    case CardName.SHAN: return 1;  // 闪
+                    case CardName.SHA: return 2;   // 杀
+                    case CardName.WUZHONG: return 3;
+                    case CardName.WUXIE: return 3;
+                    case CardName.JIU: return 4;
+                    default: return 6;             // 其余锦囊优先弃置
+                  }
+                };
+                const discarded = [...finalPlayer.hand]
+                  .sort((a, b) => keepValue(b) - keepValue(a))
+                  .slice(0, finalExcess);
                 discardCards(finalPlayer.id, discarded);
                 addLog(`${finalPlayer.hero.name} 弃置了 ${finalExcess} 张牌。`, 'info');
               }
@@ -706,6 +768,49 @@ const App: React.FC = () => {
     }
   }, [pendingReaction]);
 
+  // 桌面端键盘快捷键：1-9 选手牌，Enter 确认出牌，E 结束回合
+  useEffect(() => {
+    const onHotkey = (e: KeyboardEvent) => {
+      if (screen !== 'game') return;
+      if (dyingState || pendingReaction || showSkillModal || wuguSelection || isAiTakeover) return;
+      if (!players.length) return;
+      const meNow = players.find(p => p.isHuman) || players[0];
+      if (!meNow || meNow.isDead || turnIndex !== meNow.id) return;
+
+      // 数字键 1-9：选择第 N 张手牌
+      if (/^[1-9]$/.test(e.key) && phase === GamePhase.ACTION) {
+        const idx = Number(e.key) - 1;
+        const card = meNow.hand[idx];
+        if (card) {
+          e.preventDefault();
+          dispatchCardClick(card);
+        }
+        return;
+      }
+      // Enter：确认出牌（非目标牌）/ 确认弃牌
+      if (e.key === 'Enter') {
+        if (phase === GamePhase.ACTION && selectedCardIds.length > 0 && !isProcessing) {
+          e.preventDefault();
+          handleConfirmPlay();
+        } else if (phase === GamePhase.DISCARD) {
+          e.preventDefault();
+          handleDiscardConfirm();
+        }
+        return;
+      }
+      // E：结束回合
+      if (e.key === 'e' || e.key === 'E') {
+        if (phase === GamePhase.ACTION && !isProcessing) {
+          e.preventDefault();
+          endTurn();
+        }
+      }
+    };
+    window.addEventListener('keydown', onHotkey);
+    return () => window.removeEventListener('keydown', onHotkey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [screen, phase, turnIndex, players, selectedCardIds, dyingState, pendingReaction, showSkillModal, wuguSelection, isAiTakeover, isProcessing]);
+
   const clickGuard = useRef(false);
   const handleCardClick = (card: Card, e?: React.MouseEvent) => {
     // 改进的点击防护机制
@@ -737,8 +842,8 @@ const App: React.FC = () => {
       const skillCardName = pendingReaction.skillCardName || 
                            (neededCard === CardName.SHAN ? CardName.SHA : CardName.SHAN);
       
-      // 检查是否使用了无懈可击
-      if (card.name === CardName.WUXIE && responder.hand.some(c => c.name === CardName.WUXIE)) {
+      // 检查是否使用了无懈可击（仅无懈响应阶段可打出）
+      if (card.name === CardName.WUXIE && neededCard === CardName.WUXIE && responder.hand.some(c => c.name === CardName.WUXIE)) {
         // 使用无懈可击
         playCard(me.id, card);
         addLog(`${me.hero.name} 使用了【无懈可击】`, 'info');
@@ -763,8 +868,10 @@ const App: React.FC = () => {
           // 记录日志，显示是否使用了技能
           if (isUsingSkillCard) {
             addLog(`${me.hero.name} 使用技能「龙胆」，将【${card.name}】当【${neededCard}】使用`, 'skill');
+            showSkillBanner(me.hero.name, '龙胆');
           } else if (isUsingWusheng) {
             addLog(`${me.hero.name} 使用技能「武圣」，将【${card.name}】当【${neededCard}】使用`, 'skill');
+            showSkillBanner(me.hero.name, '武圣');
           } else {
             addLog(`${me.hero.name} 打出了【${card.name}】`, 'info');
           }
@@ -867,6 +974,12 @@ const App: React.FC = () => {
         setActiveSelectedId(null);
         setIsSelectingTarget(false);
       } else {
+        // 无懈可击不能主动使用：仅提示，不进入选择
+        if (card.name === CardName.WUXIE) {
+          addLog('【无懈可击】只能在你或队友被锦囊牌指定时打出响应', 'warning');
+          setTimeout(() => { clickGuard.current = false; }, 200);
+          return;
+        }
         // 选中新卡牌，确保只选这一张
         setSelectedCardIds([card.id]);
         setActiveSelectedId(card.id);
@@ -1130,12 +1243,14 @@ const App: React.FC = () => {
       if (isUsingLongdan) {
         // 赵云将闪当杀使用
         addLog(`${me.hero.name} 使用技能「龙胆」，将【${card.name}】当【杀】使用`, 'skill');
+        showSkillBanner(me.hero.name, '龙胆');
         // 创建一个临时的杀卡牌对象用于效果处理
         const tempShaCard = { ...card, name: CardName.SHA };
         await useCardEffect(me, [target], tempShaCard);
       } else if (isUsingWusheng) {
         // 关羽将红色牌当杀使用
         addLog(`${me.hero.name} 使用技能「武圣」，将【${card.name}】当【杀】使用`, 'skill');
+        showSkillBanner(me.hero.name, '武圣');
         // 创建一个临时的杀卡牌对象用于效果处理
         const tempShaCard = { ...card, name: CardName.SHA };
         await useCardEffect(me, [target], tempShaCard);
@@ -1353,13 +1468,54 @@ const App: React.FC = () => {
     }
   };
 
-  const showCardVisual = (card: Card, playerName: string) => {
+  const showCardVisual = (card: Card, playerName: string, duration: number = 1200) => {
     setVisualCard({ card, playerName });
     // Play sound based on card name
     playSound(card.name);
     // 减少显示时间，从2秒减少到1.2秒
-    setTimeout(() => setVisualCard(null), 1200);
+    setTimeout(() => setVisualCard(null), duration / speedRef.current);
   };
+
+  // 技能发动横幅：武将名 + 技能名 金色大字短暂展示
+  const showSkillBanner = useCallback((hero: string, skill: string) => {
+    if (skillBannerTimerRef.current) clearTimeout(skillBannerTimerRef.current);
+    setSkillBanner({ hero, skill, id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6) });
+    skillBannerTimerRef.current = setTimeout(() => setSkillBanner(null), 1500);
+  }, []);
+
+  // 通用判定：从牌堆顶翻一张判定牌并展示，返回判定牌
+  const performJudgment = async (playerId: number, reason: string): Promise<Card | null> => {
+    let currentDeck = [...deckRef.current];
+    if (currentDeck.length === 0) {
+      if (discardPileRef.current.length === 0) {
+        addLog('牌堆与弃牌堆均空，判定失败', 'warning');
+        return null;
+      }
+      currentDeck = shuffle([...discardPileRef.current]);
+      setDiscardPile([]);
+      discardPileRef.current = [];
+      addLog('牌堆已洗切', 'info');
+    }
+    const judgmentCard = currentDeck.pop()!;
+    setDeck(currentDeck);
+    deckRef.current = currentDeck;
+
+    const playerName = getPlayer(playerId)?.hero.name || '';
+    const rankDisplay = judgmentCard.rank.replace(/\d+$/, '');
+    addLog(`⚖️ ${playerName} 的【${reason}】判定：${judgmentCard.suit} ${rankDisplay}（判定牌：【${judgmentCard.name}】）`, 'warning');
+    showCardVisual(judgmentCard, `${playerName} 判定`, 1500);
+    await delay(1600);
+    return judgmentCard;
+  };
+
+  // 以最新 state 为准的手牌修改器，避免闭包旧 hand 导致的“卡牌复活”bug
+  const mutateHand = useCallback((id: number, fn: (hand: Card[]) => Card[]) => {
+    setPlayers(prev => {
+      const updated = prev.map(p => p.id === id ? { ...p, hand: fn(p.hand) } : p);
+      playersRef.current = updated;
+      return updated;
+    });
+  }, []);
 
   const playCard = (playerId: number, card: Card) => {
     discardCards(playerId, [card]);
@@ -1379,16 +1535,12 @@ const App: React.FC = () => {
           addLog(`${source.hero.name} 使用了【${card.name}】`, 'chat');
       }
 
-      // SHA
+      // SHA（基本牌，不可被无懈可击响应）
       if (card.name === CardName.SHA) {
         playCard(source.id, card);
         const target = targets[0];
-        // 先询问是否使用无懈可击
-        const isWuxieUsed = await triggerReaction(target.id, source.id, CardName.WUXIE, card);
-        if (!isWuxieUsed) {
-          // 如果没有使用无懈可击，再询问是否使用闪
-          await triggerReaction(target.id, source.id, CardName.SHAN, card);
-        }
+        // 直接询问是否使用闪
+        await triggerReaction(target.id, source.id, CardName.SHAN, card);
       }
       // JUEDOU
       else if (card.name === CardName.JUEDOU) {
@@ -1477,26 +1629,12 @@ const App: React.FC = () => {
             // 如果没有使用无懈可击，执行偷牌效果
             const randomIndex = Math.floor(Math.random() * target.hand.length);
             const stolenCard = target.hand[randomIndex];
-            
-            // 从目标手牌中移除
-            updatePlayer(target.id, { 
-              hand: target.hand.filter((_, index) => index !== randomIndex) 
-            });
-            
-            // 添加到源玩家手牌
-            setPlayers(prev => {
-              const updated = prev.map(p => {
-                if (p.id === source.id) {
-                  // 使用最新的手牌状态，不包含已经被弃置的顺手牵羊卡牌
-                  return { ...p, hand: [...p.hand, stolenCard] };
-                }
-                return p;
-              });
-              playersRef.current = updated;
-              return updated;
-            });
-            
-            addLog(`${source.hero.name} 从 ${target.hero.name} 那里偷到了一张牌`, 'chat');
+
+            // 从目标手牌中移除、加入自己手牌（基于最新 state，避免旧闭包导致卡牌复活）
+            mutateHand(target.id, hand => hand.filter(c => c.id !== stolenCard.id));
+            mutateHand(source.id, hand => [...hand, stolenCard]);
+
+            addLog(`${source.hero.name} 从 ${target.hero.name} 那里偷到了【${stolenCard.name}】`, 'chat');
           } else {
             addLog(`${target.hero.name} 使用了【无懈可击】，免疫了【${card.name}】的效果！`, 'success');
           }
@@ -1517,7 +1655,7 @@ const App: React.FC = () => {
         }
         // 设置乐不思蜀状态
         updatePlayer(target.id, { isLeBuSiShu: true });
-        addLog(`${target.hero.name} 中了【乐不思蜀】，下回合可能跳过出牌阶段`, 'warning');
+        addLog(`${target.hero.name} 中了【乐不思蜀】，下回合判定非红桃将跳过出牌阶段`, 'warning');
       }
       // 过河拆桥
       else if (card.name === CardName.GUOHE) {
@@ -1529,13 +1667,17 @@ const App: React.FC = () => {
           if (!isWuxieUsed) {
             // 如果没有使用无懈可击，执行拆牌效果
             const randomIndex = Math.floor(Math.random() * target.hand.length);
-            
-            // 从目标手牌中弃置
-            updatePlayer(target.id, { 
-              hand: target.hand.filter((_, index) => index !== randomIndex) 
+            const brokenCard = target.hand[randomIndex];
+
+            // 从目标手牌中弃置（基于最新 state），进入弃牌堆
+            mutateHand(target.id, hand => hand.filter(c => c.id !== brokenCard.id));
+            setDiscardPile(prev => {
+              const newPile = [...prev, brokenCard];
+              discardPileRef.current = newPile;
+              return newPile;
             });
-            
-            addLog(`${source.hero.name} 弃置了 ${target.hero.name} 的一张手牌`, 'chat');
+
+            addLog(`${source.hero.name} 弃置了 ${target.hero.name} 的【${brokenCard.name}】`, 'chat');
           } else {
             addLog(`${target.hero.name} 使用了【无懈可击】，免疫了【${card.name}】的效果！`, 'success');
           }
@@ -1543,12 +1685,9 @@ const App: React.FC = () => {
           addLog(`${target.hero.name} 没有手牌可弃置，【${card.name}】不消耗！`, 'warning');
         }
       }
-      // 无懈可击 (只能在受到负面效果时使用)
+      // 无懈可击（只能在自己或队友成为锦囊牌目标时响应使用，主动使用无效且不消耗）
       else if (card.name === CardName.WUXIE) {
-        playCard(source.id, card);
-        addLog(`${source.hero.name} 使用了无懈可击`, 'info');
-        // 完整实现需要在triggerReaction中添加打断机制
-        // 这里简化处理，只记录日志
+        addLog('【无懈可击】只能在你或队友被锦囊牌指定时打出响应，已取消使用', 'warning');
       }
       // 火攻
       else if (card.name === CardName.HUOGONG) {
@@ -1577,7 +1716,17 @@ const App: React.FC = () => {
           });
           setDiscardPile(prev => [...prev, sameSuitCard]);
           addLog(`${source.hero.name} 弃置了【${sameSuitCard.name}】(${sameSuitCard.suit})，对 ${target.hero.name} 造成1点火焰伤害！`, 'danger');
-          await takeDamage(target.id, source.id, 1, card);
+          // 铁索连环传导：目标被横置时，火焰伤害波及所有横置角色（先重置避免连环循环）
+          const chainedPlayers = playersRef.current.filter(p => p.isChained && !p.isDead);
+          if (target.isChained && chainedPlayers.length > 1) {
+            addLog(`🔗【铁索连环】传导！火焰伤害波及 ${chainedPlayers.map(p => p.hero.name).join('、')}`, 'danger');
+            chainedPlayers.forEach(cp => updatePlayer(cp.id, { isChained: false }));
+            for (const cp of chainedPlayers) {
+              await takeDamage(cp.id, source.id, 1, card);
+            }
+          } else {
+            await takeDamage(target.id, source.id, 1, card);
+          }
         } else {
           addLog(`${source.hero.name} 没有${shownCard.suit}花色的手牌，【火攻】失败！`, 'warning');
         }
@@ -1633,7 +1782,7 @@ const App: React.FC = () => {
         }
         // 设置兵粮寸断状态
         updatePlayer(target.id, { isBingLiangCunDuan: true });
-        addLog(`${target.hero.name} 中了【兵粮寸断】，下回合可能跳过摸牌阶段`, 'warning');
+        addLog(`${target.hero.name} 中了【兵粮寸断】，下回合判定非梅花将跳过摸牌阶段`, 'warning');
       }
       // 五谷丰登
       else if (card.name === CardName.WUGU) {
@@ -1643,17 +1792,22 @@ const App: React.FC = () => {
         // 获取所有存活角色
         const alivePlayers = players.filter(p => !p.isDead);
         const cardCount = alivePlayers.length;
-        
-        // 从牌堆顶亮出等同于存活角色数量的牌
-        let revealedCards: Card[] = [];
-        setDeck(prevDeck => {
-          const cardsToReveal = prevDeck.slice(0, cardCount);
-          revealedCards = cardsToReveal;
-          return prevDeck.slice(cardCount);
-        });
-        
+
+        // 从牌堆顶亮出等同于存活角色数量的牌（基于 deckRef，必要时洗切弃牌堆）
+        let currentDeck = [...deckRef.current];
+        if (currentDeck.length < cardCount && discardPileRef.current.length > 0) {
+          currentDeck = shuffle([...discardPileRef.current, ...currentDeck]);
+          setDiscardPile([]);
+          discardPileRef.current = [];
+          addLog('牌堆已洗切', 'info');
+        }
+        const drawCount = Math.min(cardCount, currentDeck.length);
+        let revealedCards: Card[] = currentDeck.splice(currentDeck.length - drawCount, drawCount);
+        setDeck(currentDeck);
+        deckRef.current = currentDeck;
+
         await delay(500);
-        addLog(`亮出了 ${cardCount} 张牌: ${revealedCards.map(c => c.name).join('、')}`, 'info');
+        addLog(`亮出了 ${revealedCards.length} 张牌: ${revealedCards.map(c => c.name).join('、')}`, 'info');
         
         // 按照行动顺序（从当前角色开始）依次选择牌
         const playerCount = players.length;
@@ -1678,9 +1832,7 @@ const App: React.FC = () => {
             
             if (selectedCard) {
               revealedCards = revealedCards.filter(c => c.id !== selectedCard.id);
-              updatePlayer(player.id, {
-                hand: [...player.hand, selectedCard]
-              });
+              mutateHand(player.id, hand => [...hand, selectedCard]);
               addLog(`${player.hero.name} 选择了【${selectedCard.name}】`, 'success');
             }
           } else {
@@ -1688,9 +1840,7 @@ const App: React.FC = () => {
             const randomIndex = Math.floor(Math.random() * revealedCards.length);
             const selectedCard = revealedCards[randomIndex];
             revealedCards = revealedCards.filter(c => c.id !== selectedCard.id);
-            updatePlayer(player.id, {
-              hand: [...player.hand, selectedCard]
-            });
+            mutateHand(player.id, hand => [...hand, selectedCard]);
             addLog(`${player.hero.name} 选择了【${selectedCard.name}】`, 'success');
             await delay(800);
           }
@@ -1746,121 +1896,39 @@ const App: React.FC = () => {
           return;
         }
         
-        // 目标选择：打出杀或者交出武器
-        // 简化处理：50%概率打出杀，50%概率交出武器
-        const willUseSha = Math.random() < 0.5;
-        
-        if (willUseSha && target.hand.some(c => c.name === CardName.SHA)) {
+        // 目标有【杀】则必须使用；受害者可打出【闪】抵消
+        if (target.hand.some(c => c.name === CardName.SHA)) {
           // 使用杀攻击目标
           const shaCard = target.hand.find(c => c.name === CardName.SHA)!;
           playCard(target.id, shaCard);
-          addLog(`${target.hero.name} 使用【借刀杀人】的效果，对 ${victim.hero.name} 使用了【杀】`, 'info');
-          
-          // 询问受害者是否出闪
-          const hasShan = victim.hand.some(c => c.name === CardName.SHAN);
-          if (hasShan) {
-            // 简化处理：70%概率出闪
-            const willUseShan = Math.random() < 0.7;
-            if (willUseShan) {
-              const shanCard = victim.hand.find(c => c.name === CardName.SHAN)!;
-              playCard(victim.id, shanCard);
-              addLog(`${victim.hero.name} 使用了【闪】，抵消了【杀】`, 'success');
-            } else {
-              // 受到伤害
-              const newHp = victim.hp - 1;
-              updatePlayer(victim.id, { hp: newHp });
-              addLog(`${victim.hero.name} 受到【杀】的伤害，体力: ${newHp}/${victim.maxHp}`, 'danger');
-              
-              // 触发受伤动画
-              setDamageAnimTarget(victim.id);
-              setDamageNumber({ targetId: victim.id, amount: 1, id: Date.now().toString() });
-              setTimeout(() => setDamageAnimTarget(null), 600);
-              setTimeout(() => setDamageNumber(null), 1000);
-            }
-          } else {
-            // 没有闪，受到伤害
-            const newHp = victim.hp - 1;
-            updatePlayer(victim.id, { hp: newHp });
-            addLog(`${victim.hero.name} 没有【闪】，受到【杀】的伤害，体力: ${newHp}/${victim.maxHp}`, 'danger');
-            
-            // 触发受伤动画
-            setDamageAnimTarget(victim.id);
-            setDamageNumber({ targetId: victim.id, amount: 1, id: Date.now().toString() });
-            setTimeout(() => setDamageAnimTarget(null), 600);
-            setTimeout(() => setDamageNumber(null), 1000);
-          }
+          addLog(`${target.hero.name} 被【借刀杀人】所迫，对 ${victim.hero.name} 使用了【杀】`, 'info');
+
+          // 受害者通过响应流程打出【闪】（人类玩家会收到响应弹窗）
+          await triggerReaction(victim.id, target.id, CardName.SHAN, card);
         } else {
-          // 无法或不愿使用杀，交出武器（简化处理：直接弃置一张牌代替）
+          // 无【杀】：交出一张手牌（代替武器）给使用者
           if (target.hand.length > 0) {
-            const randomCard = target.hand[Math.floor(Math.random() * target.hand.length)];
-            discardCards(target.id, [randomCard]);
-            addLog(`${target.hero.name} 无法使用【杀】，弃置了一张牌`, 'info');
+            const giveCard = target.hand[Math.floor(Math.random() * target.hand.length)];
+            mutateHand(target.id, hand => hand.filter(c => c.id !== giveCard.id));
+            mutateHand(source.id, hand => [...hand, giveCard]);
+            addLog(`${target.hero.name} 没有【杀】，将【${giveCard.name}】交给了 ${source.hero.name}`, 'info');
           } else {
             addLog(`${target.hero.name} 没有手牌，无法执行【借刀杀人】的效果`, 'info');
           }
         }
       }
-      // 闪电
+      // 闪电（延时锦囊）：挂置于自己判定区，下回合开始时判定
       else if (card.name === CardName.SHANDIAN) {
         playCard(source.id, card);
-        addLog(`${source.hero.name} 使用了【闪电】，将其放置于判定区`, 'warning');
-        
+        addLog(`${source.hero.name} 使用了【闪电】，将其放置于自己的判定区`, 'warning');
+
         // 询问是否使用无懈可击（对自己使用的情况）
         const isWuxieUsed = await triggerReaction(source.id, source.id, CardName.WUXIE, card);
         if (isWuxieUsed) {
           addLog(`${source.hero.name} 使用了【无懈可击】，【闪电】被抵消！`, 'success');
-          return;
-        }
-        
-        // 设置闪电状态（简化版：立即判定）
-        // 从牌堆顶摸一张牌进行判定
-        let judgmentCard: Card | null = null;
-        setDeck(prevDeck => {
-          if (prevDeck.length === 0) {
-            // 牌堆为空，将弃牌堆洗牌（使用 ref 获取最新状态）
-            const shuffled = shuffle([...discardPileRef.current]);
-            judgmentCard = shuffled[0];
-            // 清空弃牌堆
-            setDiscardPile([]);
-            discardPileRef.current = [];
-            return shuffled.slice(1);
-          } else {
-            judgmentCard = prevDeck[0];
-            return prevDeck.slice(1);
-          }
-        });
-        
-        if (judgmentCard) {
-          addLog(`【闪电】判定牌: ${judgmentCard.suit}${judgmentCard.rank} ${judgmentCard.name}`, 'info');
-          
-          // 判定条件：黑桃2-9
-          const isSpade = judgmentCard.suit === Suit.SPADE;
-          const rankNum = parseInt(judgmentCard.rank.replace(/[^0-9]/g, '')) || 0;
-          const isInRange = rankNum >= 2 && rankNum <= 9;
-          
-          if (isSpade && isInRange) {
-            // 闪电命中！造成3点雷电伤害
-            addLog(`【闪电】命中！${source.hero.name} 受到3点雷电伤害！`, 'danger');
-            const newHp = source.hp - 3;
-            updatePlayer(source.id, { hp: Math.max(0, newHp) });
-            
-            // 触发受伤动画
-            setDamageAnimTarget(source.id);
-            setDamageNumber({ targetId: source.id, amount: 3, id: Date.now().toString() });
-            setTimeout(() => setDamageAnimTarget(null), 600);
-            setTimeout(() => setDamageNumber(null), 1000);
-            
-            // 检查是否死亡
-            if (newHp <= 0) {
-              addLog(`${source.hero.name} 被【闪电】击中身亡！`, 'danger');
-              // 修复：原代码调用了不存在的 handlePlayerDeath（会导致运行时崩溃），改走统一死亡结算
-              handleDeath(source.id);
-            }
-          } else {
-            // 闪电未命中，移动到下一个角色（简化处理：直接弃置）
-            addLog(`【闪电】未命中，判定失败`, 'info');
-            setDiscardPile(prev => [...prev, judgmentCard!]);
-          }
+        } else {
+          updatePlayer(source.id, { isShandian: true });
+          addLog(`⚡【闪电】悬于 ${source.hero.name} 头顶，下回合开始时判定`, 'warning');
         }
       }
     } finally {
@@ -1886,13 +1954,17 @@ const App: React.FC = () => {
 
       updatePlayer(player.id, { hp: player.hp + 1 });
       addLog(`${player.hero.name} 使用技能「鬼才」，恢复1点体力！`, 'skill');
+      showSkillBanner(player.hero.name, '鬼才');
     } else {
-      const newDeck = [...deck];
+      // 基于 deckRef 取最新牌堆，摸牌入最新手牌
+      const newDeck = [...deckRef.current];
       if (newDeck.length > 0) {
-        const drawnCard = newDeck.shift()!;
-        updatePlayer(player.id, { hand: [...player.hand, drawnCard] });
+        const drawnCard = newDeck.pop()!;
         setDeck(newDeck);
+        deckRef.current = newDeck;
+        mutateHand(player.id, hand => [...hand, drawnCard]);
         addLog(`${player.hero.name} 使用技能「鬼才」，血量已满，摸到一张【${drawnCard.name}】！`, 'skill');
+        showSkillBanner(player.hero.name, '鬼才');
       }
     }
   };
@@ -2111,8 +2183,10 @@ const App: React.FC = () => {
             // 区分赵云的龙胆和关羽的武圣
             if (responder.hero.name === '关羽') {
               addLog(`${responder.hero.name} 使用技能「武圣」，将【${cardToPlay.name}】当【${neededCard}】使用`, 'skill');
+              showSkillBanner(responder.hero.name, '武圣');
             } else {
               addLog(`${responder.hero.name} 使用技能「龙胆」，将【${cardToPlay.name}】当【${neededCard}】使用`, 'skill');
+              showSkillBanner(responder.hero.name, '龙胆');
             }
           } else {
             addLog(`${responder.hero.name} 打出了【${neededCard}】`, 'info');
@@ -2182,18 +2256,9 @@ const App: React.FC = () => {
           }
           return false;
         } else {
-          // 检查是否可以使用无懈可击
-          const hasWuxie = responder.hand.some(c => c.name === CardName.WUXIE);
-          if (hasWuxie) {
-            const wuxieCard = responder.hand.find(c => c.name === CardName.WUXIE)!;
-            playCard(responder.id, wuxieCard);
-            addLog(`${responder.hero.name} 使用了【无懈可击】`, 'info');
-            await handleFumoSkill(responder, triggerCard.name);
-            return true;
-          } else {
-            await takeDamage(responderId, sourceId, 1, triggerCard);
-            return false;
-          }
+          // AI 没有所需的牌：直接承受伤害（无懈可击不能代替闪/杀）
+          await takeDamage(responderId, sourceId, 1, triggerCard);
+          return false;
         }
       }
     } finally {
@@ -2419,6 +2484,7 @@ const App: React.FC = () => {
           return updated;
         });
         addLog(`${victim.hero.name} 使用技能「奸雄」，获得了【${damageCard.name}】！`, 'skill');
+        showSkillBanner(victim.hero.name, '奸雄');
       }
 
       // 当体力值小于等于0时，进入濒死状态
@@ -2467,11 +2533,12 @@ const App: React.FC = () => {
       if (cardsToDiscard.length > 0) {
         // At most discard 2 cards (simple strategy)
         cardsToDiscard = cardsToDiscard.slice(0, 2);
-        
+
         // Execute Zhiheng
         discardCards(aiPlayer.id, cardsToDiscard);
         drawCards(aiPlayer.id, cardsToDiscard.length);
         addLog(`${aiPlayer.hero.name} 使用技能「制衡」，弃置了 ${cardsToDiscard.length} 张牌，摸了 ${cardsToDiscard.length} 张牌！`, 'skill');
+        showSkillBanner(aiPlayer.hero.name, '制衡');
         await delay(1500);
       }
     }
@@ -2586,6 +2653,25 @@ const App: React.FC = () => {
     if (jiu && targetId !== -1) {
       await useCardEffect(aiPlayer, [aiPlayer], jiu);
       await delay(1000);
+    }
+
+    // 11.5 Play Juedou（决斗：对血量最低的敌人）
+    const juedou = aiPlayer.hand.find(c => c.name === CardName.JUEDOU);
+    if (juedou && targetId !== -1) {
+      const target = getPlayer(targetId)!;
+      await useCardEffect(aiPlayer, [target], juedou);
+      await delay(1500);
+    }
+
+    // 11.6 Play Jiedao（借刀杀人：借敌人之手攻击另一名敌人）
+    const jiedao = aiPlayer.hand.find(c => c.name === CardName.JIEDAO);
+    if (jiedao && targetId !== -1) {
+      const weaponTarget = getPlayer(targetId)!;
+      const victim = players.filter(p => !p.isDead && p.id !== aiPlayer.id && p.id !== weaponTarget.id && isEnemy(aiPlayer, p))[0];
+      if (victim) {
+        await useCardEffect(aiPlayer, [weaponTarget, victim], jiedao);
+        await delay(1500);
+      }
     }
 
     // 12. Play Slash
@@ -2796,6 +2882,19 @@ const App: React.FC = () => {
                 </div>
               </button>
               
+              {/* 玩法说明入口 */}
+              <button
+                onClick={() => setShowRules(true)}
+                className={`group flex items-center gap-2 px-6 py-2 rounded-full border transition-all hover:scale-105 ${
+                  theme === 'dark'
+                    ? 'border-[#8b7355]/50 text-[#c8bda8] hover:border-[#d4af37] hover:text-[#e8cf94]'
+                    : 'border-[#c4a77d]/60 text-[#5d4037] hover:border-[#8b6914] hover:text-[#3d2914]'
+                }`}
+              >
+                <span>📖</span>
+                <span className="tracking-widest font-semibold">玩法说明</span>
+              </button>
+
               {/* 特性标签 */}
               <div className={`flex gap-6 md:gap-10 text-sm mt-6 ${theme === 'dark' ? 'text-stone-400' : 'text-[#3d2914]'}`}>
                 <span className="flex items-center gap-2 group cursor-default">
@@ -2814,9 +2913,83 @@ const App: React.FC = () => {
             </div>
         </div>
         
+        {/* 玩法说明弹窗 */}
+        {showRules && (
+          <div className="absolute inset-0 z-[120] flex items-center justify-center bg-black/85 backdrop-blur-md animate-fade-in p-4" onClick={() => setShowRules(false)}>
+            <div
+              className="bg-gradient-to-b from-[#2a2018] to-[#151009] border-2 border-[#d4af37]/60 rounded-xl shadow-[0_0_60px_rgba(212,175,55,0.35)] max-w-3xl w-full max-h-[85vh] overflow-y-auto p-6 md:p-8"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="text-center mb-6">
+                <h3 className="text-4xl font-ancient text-[#d4af37]">📖 玩法说明</h3>
+                <div className="w-40 h-0.5 bg-gradient-to-r from-transparent via-[#d4af37]/60 to-transparent mx-auto mt-3"></div>
+              </div>
+
+              <div className="space-y-5 text-[#e5dcc8]">
+                {/* 身份 */}
+                <section className="bg-black/25 rounded-lg p-4 border border-[#8b7355]/30">
+                  <h4 className="font-ancient text-xl text-[#e8cf94] mb-2">身份与胜利</h4>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+                    <div className="p-2 rounded bg-[#c8a45c]/10 border border-[#c8a45c]/30"><span className="font-bold text-[#e8cf94]">主公</span>：明示身份，体力上限+1</div>
+                    <div className="p-2 rounded bg-[#c8a45c]/10 border border-[#c8a45c]/30"><span className="font-bold text-[#e8cf94]">忠臣</span>：与主公同阵营</div>
+                    <div className="p-2 rounded bg-[#9e2b25]/15 border border-[#c86b62]/40"><span className="font-bold text-[#f0c8c2]">反贼</span>：击杀主公即胜</div>
+                    <div className="p-2 rounded bg-[#3a3a4a]/30 border border-[#7a7a96]/40"><span className="font-bold text-[#e8e8f0]">内奸</span>：最后与主公单挑并获胜</div>
+                  </div>
+                  <p className="text-xs text-[#bfae94] mt-2">身份在角色阵亡时公开。杀死反贼摸3张牌；主公误杀忠臣需弃光手牌。</p>
+                </section>
+
+                {/* 流程 */}
+                <section className="bg-black/25 rounded-lg p-4 border border-[#8b7355]/30">
+                  <h4 className="font-ancient text-xl text-[#e8cf94] mb-2">回合流程</h4>
+                  <div className="flex flex-wrap items-center gap-2 text-sm">
+                    {['回合开始', '判定', '摸牌阶段', '出牌阶段', '弃牌阶段', '回合结束'].map((s, i) => (
+                      <span key={s} className="flex items-center gap-2">
+                        {i > 0 && <span className="text-[#8b7355]">→</span>}
+                        <span className="px-2 py-0.5 rounded bg-[#2a2018] border border-[#8b7355]/40">{s}</span>
+                      </span>
+                    ))}
+                  </div>
+                  <p className="text-xs text-[#bfae94] mt-2">判定区有延时锦囊（闪电 / 乐不思蜀 / 兵粮寸断）时，回合开始与摸牌、出牌阶段前会进行判定。弃牌阶段手牌不能超过当前体力值。</p>
+                </section>
+
+                {/* 牌类 */}
+                <section className="bg-black/25 rounded-lg p-4 border border-[#8b7355]/30">
+                  <h4 className="font-ancient text-xl text-[#e8cf94] mb-2">牌型速览</h4>
+                  <ul className="text-sm space-y-1.5">
+                    <li><span className="text-[#e8cf94] font-bold">基本牌</span>：杀（攻击）、闪（抵消杀）、桃（回血）、酒（杀伤害+1 或濒死自救）</li>
+                    <li><span className="text-[#e8cf94] font-bold">锦囊牌</span>：决斗、无中生有、南蛮入侵、万箭齐发、顺手牵羊、过河拆桥、无懈可击、火攻、铁索连环、五谷丰登、桃园结义、借刀杀人、乐不思蜀、兵粮寸断、闪电</li>
+                    <li><span className="text-[#e8cf94] font-bold">无懈可击</span>：仅在锦囊牌生效前打出响应，抵消其对一名角色的效果</li>
+                    <li><span className="text-[#e8cf94] font-bold">铁索连环</span>：横置1-2名角色，被横置者受到属性伤害（如火攻）时伤害传导</li>
+                  </ul>
+                </section>
+
+                {/* 操作 */}
+                <section className="bg-black/25 rounded-lg p-4 border border-[#8b7355]/30">
+                  <h4 className="font-ancient text-xl text-[#e8cf94] mb-2">操作技巧</h4>
+                  <ul className="text-sm space-y-1.5">
+                    <li>点击手牌选择，点击头像指定目标；再点一次可取消</li>
+                    <li>桌面端快捷键：<span className="text-[#e8cf94] font-bold">1-9</span> 选手牌 · <span className="text-[#e8cf94] font-bold">Enter</span> 出牌/确认 · <span className="text-[#e8cf94] font-bold">E</span> 结束回合 · <span className="text-[#e8cf94] font-bold">Esc</span> 取消选择</li>
+                    <li>右上角 <span className="text-[#e8cf94] font-bold">⚡×N</span> 可加速 AI 结算节奏</li>
+                    <li>遇到危险时别慌——弹出响应框前先看清需要什么牌</li>
+                  </ul>
+                </section>
+              </div>
+
+              <div className="mt-6 flex justify-center">
+                <button
+                  onClick={() => setShowRules(false)}
+                  className="px-10 py-3 bg-gradient-to-b from-[#8b4513] to-[#654321] text-[#f5deb3] rounded-lg border-2 border-[#d4af37]/50 hover:from-[#a0522d] hover:to-[#8b4513] hover:scale-105 transition-all font-ancient text-xl"
+                >
+                  知道了
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* 版本信息 */}
         <div className={`absolute bottom-6 text-xs tracking-widest ${theme === 'dark' ? 'text-stone-500' : 'text-[#5d4037]/70'}`} style={theme === 'light' ? { textShadow: '0 1px 2px rgba(255,255,255,0.6)' } : {}}>
-          <span className={theme === 'dark' ? 'text-amber-700/50' : 'text-[#8b6f4a]/60'}>◆</span> 三国杀 · {playerCount}人军争篇 v2.0 <span className={theme === 'dark' ? 'text-amber-700/50' : 'text-[#8b6f4a]/60'}>◆</span>
+          <span className={theme === 'dark' ? 'text-amber-700/50' : 'text-[#8b6f4a]/60'}>◆</span> 三国杀 · {playerCount}人军争篇 v3.0 <span className={theme === 'dark' ? 'text-amber-700/50' : 'text-[#8b6f4a]/60'}>◆</span>
         </div>
       </div>
     );
@@ -2989,16 +3162,33 @@ const App: React.FC = () => {
                 </div>
               </div>
               
-              <button 
-                onClick={() => startGame(selectedHero)}
-                className={`group relative px-12 py-3 rounded-full font-bold text-xl transition-all transform hover:scale-105 hover:-translate-y-1 font-ancient tracking-widest border-2 shadow-[0_0_25px_rgba(234,179,8,0.4),inset_0_1px_0_rgba(255,255,255,0.2)] ${
-                  theme === 'dark'
-                    ? 'bg-gradient-to-b from-yellow-600 to-yellow-800 hover:from-yellow-500 hover:to-yellow-700 text-stone-100 border-yellow-500'
-                    : 'bg-gradient-to-b from-[#c4a77d] to-[#a08050] hover:from-[#d4b87d] hover:to-[#b09060] text-white border-[#8b6914]'
-                }`}
-              >
-                <span className="relative z-10">确认出战</span>
-              </button>
+              <div className="flex items-center gap-4">
+                <button
+                  onClick={() => {
+                    const pool = HEROES.filter(h => h.id !== selectedHero?.id);
+                    const pick = pool[Math.floor(Math.random() * pool.length)];
+                    startGame(pick);
+                  }}
+                  className={`px-6 py-3 rounded-full font-bold text-lg transition-all transform hover:scale-105 hover:-translate-y-1 font-ancient tracking-widest border-2 shadow-lg ${
+                    theme === 'dark'
+                      ? 'bg-gradient-to-b from-[#2a2520] to-[#1a1815] text-[#c8bda8] border-[#8b7355]/60 hover:border-[#d4af37] hover:text-[#e8cf94]'
+                      : 'bg-gradient-to-b from-[#e8dcc8] to-[#d4c4a8] text-[#5d4037] border-[#a08060] hover:border-[#8b6914]'
+                  }`}
+                  title="随机挑选一名武将立即出战"
+                >
+                  🎲 天命随机
+                </button>
+                <button
+                  onClick={() => startGame(selectedHero)}
+                  className={`group relative px-12 py-3 rounded-full font-bold text-xl transition-all transform hover:scale-105 hover:-translate-y-1 font-ancient tracking-widest border-2 shadow-[0_0_25px_rgba(234,179,8,0.4),inset_0_1px_0_rgba(255,255,255,0.2)] ${
+                    theme === 'dark'
+                      ? 'bg-gradient-to-b from-yellow-600 to-yellow-800 hover:from-yellow-500 hover:to-yellow-700 text-stone-100 border-yellow-500'
+                      : 'bg-gradient-to-b from-[#c4a77d] to-[#a08050] hover:from-[#d4b87d] hover:to-[#b09060] text-white border-[#8b6914]'
+                  }`}
+                >
+                  <span className="relative z-10">确认出战</span>
+                </button>
+              </div>
             </div>
           </div>
         )}
@@ -3108,24 +3298,24 @@ const App: React.FC = () => {
          
          <div className="z-10 bg-stone-900/80 backdrop-blur-sm rounded-2xl p-8 mb-8 border border-stone-700 max-w-4xl w-full shadow-2xl">
            <h3 className="text-3xl text-stone-300 font-ancient mb-6 border-b border-stone-600 pb-3">玩家身份</h3>
-           <div className="grid grid-cols-5 gap-4">
+           <div className="flex flex-wrap justify-center gap-4">
              {players.map(player => (
-               <div 
+               <div
                  key={player.id}
-                 className={`flex flex-col items-center p-4 rounded-xl border-2 transition-all duration-300
-                   ${player.isDead 
-                     ? 'bg-stone-900/80 border-red-900 grayscale opacity-70' 
+                 className={`flex flex-col items-center p-4 rounded-xl border-2 transition-all duration-300 w-[104px]
+                   ${player.isDead
+                     ? 'bg-stone-900/80 border-red-900 grayscale opacity-70'
                      : 'bg-stone-800/80 border-stone-600 hover:border-yellow-500'
                    }
                  `}
                >
                  <img src={player.hero.avatarUrl} alt={player.hero.name} loading="lazy" decoding="async" className="w-16 h-16 rounded-full mb-3 border-2 border-stone-600" />
-                 <div className="text-xl text-stone-200 font-bold mb-2">
+                 <div className="text-lg text-stone-200 font-bold mb-2">
                    {player.hero.name}
                  </div>
-                 <div className={`text-lg font-ancient px-3 py-1 rounded-full
-                   ${player.isDead 
-                     ? 'bg-red-900/60 text-red-300' 
+                 <div className={`text-base font-ancient px-3 py-1 rounded-full
+                   ${player.isDead
+                     ? 'bg-red-900/60 text-red-300'
                      : player.identity === Identity.ZHUGONG ? 'bg-yellow-700/60 text-yellow-300' :
                        player.identity === Identity.ZHONGCHEN ? 'bg-blue-800/60 text-blue-300' :
                        player.identity === Identity.FANZEI ? 'bg-red-800/60 text-red-300' :
@@ -3142,12 +3332,23 @@ const App: React.FC = () => {
            </div>
          </div>
 
-         <button 
-          onClick={() => setScreen('start')}
-          className="z-10 group relative bg-gradient-to-b from-stone-700 to-stone-900 border-2 border-stone-500 text-stone-300 px-12 py-4 hover:bg-stone-600 hover:text-white hover:border-yellow-500 transition-all font-ancient text-2xl rounded-lg"
-        >
-          返回主营
-        </button>
+         <div className="z-10 flex gap-4">
+           <button
+            onClick={() => {
+              const myHero = players.find(p => p.isHuman)?.hero;
+              if (myHero) startGame(myHero);
+            }}
+            className="group relative bg-gradient-to-b from-yellow-600 to-yellow-800 border-2 border-yellow-400 text-stone-100 px-10 py-4 hover:from-yellow-500 hover:to-yellow-700 hover:scale-105 transition-all font-ancient text-2xl rounded-lg shadow-[0_0_25px_rgba(234,179,8,0.35)]"
+          >
+            再来一局
+          </button>
+           <button
+            onClick={() => setScreen('start')}
+            className="z-10 group relative bg-gradient-to-b from-stone-700 to-stone-900 border-2 border-stone-500 text-stone-300 px-10 py-4 hover:bg-stone-600 hover:text-white hover:border-yellow-500 transition-all font-ancient text-2xl rounded-lg"
+          >
+            返回主营
+          </button>
+         </div>
       </div>
     );
   }
@@ -3247,6 +3448,16 @@ const App: React.FC = () => {
         </div>
       )}
 
+      {/* 技能发动横幅 - 金色大字短暂展示 */}
+      {skillBanner && (
+        <div key={skillBanner.id} className="absolute inset-x-0 top-[20%] z-[80] flex justify-center pointer-events-none">
+          <div className="skill-banner text-center">
+            <div className="skill-banner-skill font-ancient">{skillBanner.skill}</div>
+            <div className="skill-banner-hero font-ancient">{skillBanner.hero} · 发动技能</div>
+          </div>
+        </div>
+      )}
+
       {/* 弃牌堆查看器 */}
       {showDiscardViewer && (
          <div className="absolute inset-0 z-[90] flex items-center justify-center bg-black/75 backdrop-blur-md animate-fade-in" onClick={() => setShowDiscardViewer(false)}>
@@ -3295,12 +3506,16 @@ const App: React.FC = () => {
                    const skillCardName = neededCard === CardName.SHAN ? CardName.SHA : CardName.SHAN;
                    const responder = players.find(p => p.id === pendingReaction.targetId) || me;
                    const hasWuxie = responder.hand.some(c => c.name === CardName.WUXIE);
-                    
-                   // 过滤可用卡牌：需要的卡牌、技能卡牌、无懈可击
+                   // 关羽「武圣」：红色牌可当【杀】打出
+                   const canWusheng = me.hero.name === '关羽' && neededCard === CardName.SHA;
+                   const isWushengCard = (c: Card) => canWusheng && (c.suit === Suit.HEART || c.suit === Suit.DIAMOND);
+
+                   // 过滤可用卡牌：需要的卡牌、技能卡牌、武圣红牌、无懈可击（仅无懈响应阶段）
                    const usableCards = responder.hand.filter(c => {
                      return c.name === neededCard || 
                             (canUseSkill && c.name === skillCardName) ||
-                            (hasWuxie && c.name === CardName.WUXIE);
+                            isWushengCard(c) ||
+                            (neededCard === CardName.WUXIE && c.name === CardName.WUXIE);
                    });
                     
                    return usableCards.length > 0 ? (
@@ -3786,6 +4001,21 @@ const App: React.FC = () => {
           </button>
         </div>
 
+        {/* 游戏速度控制 */}
+        <div className="absolute top-2 right-28 z-50">
+          <button
+            onClick={() => setSpeedLevel(speedLevel === 1 ? 2 : speedLevel === 2 ? 3 : 1)}
+            className={`h-10 px-3 rounded-full border-2 hover:scale-110 transition-all flex items-center justify-center shadow-lg font-bold text-sm tracking-wider ${
+              theme === 'dark'
+                ? 'bg-gradient-to-b from-[#2a2018] to-[#1a1410] border-[#d4af37]/50 hover:border-[#d4af37] text-[#e8cf94]'
+                : 'bg-gradient-to-b from-[#faf8f5] to-[#f5f0eb] border-[#e5e0db] hover:border-[#c4a77d] text-[#5c5854]'
+            }`}
+            title="切换游戏速度"
+          >
+            ⚡ ×{speedLevel}
+          </button>
+        </div>
+
         {/* 环形座位布局 */}
         <div className="relative w-full h-[280px] md:h-[320px]">
           {enemies.map((p, index) => {
@@ -3981,6 +4211,11 @@ const App: React.FC = () => {
                       {p.isBingLiangCunDuan && (
                         <div className="w-5 h-5 rounded-full bg-blue-700 border border-blue-500 flex items-center justify-center" title="兵粮寸断">
                           <span className="text-[10px] text-blue-200 font-bold">兵</span>
+                        </div>
+                      )}
+                      {p.isShandian && (
+                        <div className="w-5 h-5 rounded-full bg-purple-700 border border-purple-400 flex items-center justify-center animate-pulse" title="闪电悬顶">
+                          <span className="text-[10px] text-purple-100 font-bold">电</span>
                         </div>
                       )}
                     </div>
@@ -4352,7 +4587,7 @@ const App: React.FC = () => {
               </div>
               
               {/* 状态标志 */}
-              {(me.isChained || me.isLeBuSiShu || me.isBingLiangCunDuan) && (
+              {(me.isChained || me.isLeBuSiShu || me.isBingLiangCunDuan || me.isShandian) && (
                 <div className="flex items-center gap-2 mb-2">
                   <span className={`text-xs ${theme === 'dark' ? 'text-stone-500' : 'text-[#8a8680]'}`}>状态</span>
                   <div className="flex gap-1.5">
@@ -4369,6 +4604,11 @@ const App: React.FC = () => {
                     {me.isBingLiangCunDuan && (
                       <div className="px-2 py-0.5 rounded-[4px] bg-[#2b4353] border border-[#6a9ab0]/50 text-[#cfe8f0] text-[11px] font-bold" title="兵粮寸断">
                         兵
+                      </div>
+                    )}
+                    {me.isShandian && (
+                      <div className="px-2 py-0.5 rounded-[4px] bg-[#4a3560] border border-[#a97fd0]/60 text-[#eadcfa] text-[11px] font-bold animate-pulse" title="闪电悬顶">
+                        电
                       </div>
                     )}
                   </div>
@@ -4527,6 +4767,7 @@ const App: React.FC = () => {
                             });
                             
                             addLog(`${me.hero.name} 使用技能「仁德」，将 ${cardsToGive.length} 张牌交给了 ${target.hero.name}！`, 'skill');
+                            showSkillBanner(me.hero.name, '仁德');
 
                             // 如果给出了2张或更多牌，回复1点体力
                             if (cardsToGive.length >= 2 && me.hp < me.maxHp) {
@@ -4597,6 +4838,7 @@ const App: React.FC = () => {
                                // 摸等量的牌
                                drawCards(me.id, cardsToDiscard.length);
                                addLog(`${me.hero.name} 使用技能「制衡」，弃置了 ${cardsToDiscard.length} 张牌，摸了 ${cardsToDiscard.length} 张牌！`, 'skill');
+                               showSkillBanner(me.hero.name, '制衡');
                                setHasUsedZhiheng(true); // 标记制衡技能已使用
                              }
                              // 退出制衡模式并重置所有相关状态
@@ -4660,6 +4902,7 @@ const App: React.FC = () => {
                                  // 弃置选中的牌
                                  discardCards(me.id, [card]);
                                  addLog(`${me.hero.name} 弃置了【${card.name}】，发动「离间」技能！`, 'skill');
+                                 showSkillBanner(me.hero.name, '离间');
                                  
                                  // 获取两个目标
                                  const target1 = getPlayer(lijianSelectedTargets[0]);
@@ -4793,8 +5036,14 @@ const App: React.FC = () => {
                   const neededCard = pendingReaction.cardName;
                   const canUseSkill = me.hero.name === '赵云';
                   const skillCardName = neededCard === CardName.SHAN ? CardName.SHA : CardName.SHAN;
+                  // 关羽「武圣」：红色牌可当【杀】打出
+                  const isWushengCard = me.hero.name === '关羽' && neededCard === CardName.SHA &&
+                    (card.suit === Suit.HEART || card.suit === Suit.DIAMOND);
 
-                  isPlayable = card.name === neededCard || (canUseSkill && card.name === skillCardName);
+                  isPlayable = card.name === neededCard ||
+                    (canUseSkill && card.name === skillCardName) ||
+                    isWushengCard ||
+                    (neededCard === CardName.WUXIE && card.name === CardName.WUXIE);
                }
 
                // When one is selected in ACTION phase (not Zhiheng mode, not Rende mode), disable others

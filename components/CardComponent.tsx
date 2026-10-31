@@ -90,6 +90,7 @@ const CardComponent: React.FC<CardProps> = ({ card, onClick, disabled, selected,
         }
       }}
       disabled={disabled}
+      title={`${card.name}（${card.suit} ${card.rank.replace(/\d+$/, '')}）：${card.description}`}
       className={`
         group relative flex flex-col items-center text-left
         rounded-lg overflow-hidden transition-all duration-200

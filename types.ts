@@ -78,6 +78,7 @@ export interface Player {
   isChained?: boolean; // 铁索连环状态
   isLeBuSiShu?: boolean; // 乐不思蜀状态
   isBingLiangCunDuan?: boolean; // 兵粮寸断状态
+  isShandian?: boolean; // 闪电挂置状态（判定区）
 }
 
 export enum GamePhase {
