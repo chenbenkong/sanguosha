@@ -17,6 +17,7 @@ const SKILL_SLUG: Record<string, string> = {
   '烈弓': 'liegong', '刚烈': 'ganglie', '英姿': 'yingzi', '倾国': 'qingguo',
   '洛神': 'luoshen', '集智': 'jizhi', '枭姬': 'xiaoji', '结姻': 'jieyin',
   '伤逝': 'shangshi', '流离': 'liuli', '断肠': 'duanchang',
+  '奇袭': 'qixi', '克己': 'keji', '秘计': 'miji', '追忆': 'zhuiyi',
 };
 
 const cache = new Map<string, HTMLAudioElement>();

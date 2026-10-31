@@ -143,6 +143,9 @@ const App: React.FC = () => {
   const [jieyinTarget, setJieyinTarget] = useState<number | null>(null);
   const [hasUsedJieyin, setHasUsedJieyin] = useState<boolean>(false);
 
+  // 甘宁「奇袭」技能状态：将黑色牌当【过河拆桥】使用
+  const [isQixiMode, setIsQixiMode] = useState<boolean>(false);
+
   // 战绩统计（localStorage 持久化）
   const [stats, setStats] = useState<{ games: number; wins: number; losses: number }>(() => {
     try {
@@ -650,6 +653,18 @@ const App: React.FC = () => {
         discardCards(killerId, killer.hand); 
       }
     }
+
+    // 步练师「追忆」：死亡时可令一名其他角色摸三张牌（自动选择己方体力最低的同伴）
+    if (victim.hero.name === '步练师') {
+      const others = playersRef.current.filter(p => !p.isDead && p.id !== victimId);
+      const allies = others.filter(p => isAlly(victim, p));
+      const chosen = pickWeakest(allies.length ? allies : others);
+      if (chosen) {
+        addLog(`${victim.hero.name} 发动「追忆」，令 ${chosen.hero.name} 摸三张牌`, 'skill');
+        showSkillBanner(victim.hero.name, '追忆');
+        drawCards(chosen.id, 3);
+      }
+    }
     
     // 使用 setTimeout 确保状态已更新后再检查游戏结束
     // 延迟检查游戏结束，让玩家先看到阵亡信息和身份
@@ -743,6 +758,8 @@ const App: React.FC = () => {
         setIsJieyinMode(false);
         setJieyinTarget(null);
         setHasUsedJieyin(false);
+        // 重置甘宁奇袭
+        setIsQixiMode(false);
         addLog(`>>> ${currentPlayer.hero.name} (${currentPlayer.isHuman ? '你' : 'AI'}) 回合开始 <<<`, 'info');
 
         // 甄姬「洛神」：回合开始时判定，黑色则获得该判定牌并可继续（最多 3 次）
@@ -758,6 +775,17 @@ const App: React.FC = () => {
             addLog(`${currentPlayer.hero.name} 发动「洛神」，获得【${jc.name}】`, 'skill');
             showSkillBanner(currentPlayer.hero.name, '洛神');
             await delay(400);
+          }
+        }
+
+        // 王异「秘计」：回合开始时若已受伤，摸等同于已损失体力的牌
+        if (currentPlayer.hero.name === '王异') {
+          const lostHp = currentPlayer.maxHp - currentPlayer.hp;
+          if (lostHp > 0) {
+            addLog(`${currentPlayer.hero.name} 发动「秘计」，已损失 ${lostHp} 点体力，摸 ${lostHp} 张牌`, 'skill');
+            showSkillBanner(currentPlayer.hero.name, '秘计');
+            drawCards(currentPlayer.id, lostHp);
+            await delay(600);
           }
         }
 
@@ -867,7 +895,15 @@ const App: React.FC = () => {
         
         const excess = updatedPlayer.hand.length - updatedPlayer.hp;
         
-        if (updatedPlayer.isHuman && !isAiTakeover) {
+        // 吕蒙「克己」：本回合出牌阶段未使用【杀】，可跳过弃牌阶段
+        if (updatedPlayer.hero.name === '吕蒙' && (slashUsageRef.current[updatedPlayer.id] ?? 0) === 0) {
+          if (excess > 0) {
+            addLog(`${updatedPlayer.hero.name} 发动「克己」，本回合未出【杀】，跳过弃牌阶段`, 'skill');
+            showSkillBanner(updatedPlayer.hero.name, '克己');
+            await delay(500);
+          }
+          setPhase(GamePhase.END);
+        } else if (updatedPlayer.isHuman && !isAiTakeover) {
            if (excess <= 0) {
              // Auto skip if no need to discard
              setPhase(GamePhase.END);
@@ -1198,8 +1234,28 @@ const App: React.FC = () => {
         return;
       }
       
+      // 甘宁「奇袭」模式：只能选黑色牌，选完再点目标角色
+      if (isQixiMode) {
+        const isBlackCard = card.suit === Suit.SPADE || card.suit === Suit.CLUB;
+        if (!isBlackCard) {
+          addLog('「奇袭」只能将黑色牌当【过河拆桥】使用', 'warning');
+        } else if (selectedCardIds.includes(card.id)) {
+          setSelectedCardIds([]);
+          setActiveSelectedId(null);
+          setIsSelectingTarget(false);
+          addLog('已取消「奇袭」选牌', 'info');
+        } else {
+          setSelectedCardIds([card.id]);
+          setActiveSelectedId(card.id);
+          setIsSelectingTarget(true);
+          addLog(`已选择【${card.name}】，请选择【过河拆桥】的目标`, 'info');
+        }
+        setTimeout(() => { clickGuard.current = false; }, 200);
+        return;
+      }
+
       // 装备牌：点击即上装，无需选择目标（技能选牌模式除外）
-      if (card.type === CardType.EQUIPMENT && EQUIP_META[card.name]) {
+      if (card.type === CardType.EQUIPMENT && EQUIP_META[card.name] && !isQixiMode) {
         equipCard(me.id, card);
         setSelectedCardIds([]);
         setActiveSelectedId(null);
@@ -1306,6 +1362,37 @@ const App: React.FC = () => {
 
   const handleTargetClick = async (targetId: number) => {
     if (dyingState || isProcessing) return;
+
+    // 甘宁「奇袭」：将选中的黑色牌当【过河拆桥】对目标使用
+    if (isQixiMode) {
+      const meQ = players.find(p => p.isHuman) || players[0];
+      const target = players.find(p => p.id === targetId);
+      const card = meQ.hand.find(c => c.id === selectedCardIds[0]);
+      if (!target || !card || target.isDead) {
+        setTimeout(() => { clickGuard.current = false; }, 200);
+        return;
+      }
+      if (target.id === meQ.id) {
+        addLog('「奇袭」不能对自己使用，请选择其他角色', 'warning');
+        setTimeout(() => { clickGuard.current = false; }, 200);
+        return;
+      }
+      setIsQixiMode(false);
+      setSelectedCardIds([]);
+      setActiveSelectedId(null);
+      setIsSelectingTarget(false);
+      addLog(`${meQ.hero.name} 使用技能「奇袭」，将【${card.name}】当【过河拆桥】使用`, 'skill');
+      showSkillBanner(meQ.hero.name, '奇袭');
+      setIsProcessing(p => p + 1);
+      try {
+        const tempGuohe = { ...card, name: CardName.GUOHE };
+        await useCardEffect(meQ, [target], tempGuohe);
+      } finally {
+        setIsProcessing(p => Math.max(0, p - 1));
+        setTimeout(() => { clickGuard.current = false; }, 200);
+      }
+      return;
+    }
 
     // 孙尚香「结姻」：弃两张手牌，与一名已受伤的男性角色各回复 1 点体力
     if (isJieyinMode) {
@@ -3127,6 +3214,25 @@ const App: React.FC = () => {
       await useCardEffect(aiPlayer, [target], guohe);
       await delay(1500);
     }
+
+    // 6.5 甘宁「奇袭」：黑色牌当【过河拆桥】
+    if (aiPlayer.hero.name === '甘宁' && targetId !== -1) {
+      const target = getPlayer(targetId);
+      const targetHasCards = target && !target.isDead && (target.hand.length > 0 ||
+        !!(target.equipment?.weapon || target.equipment?.armor || target.equipment?.horsePlus || target.equipment?.horseMinus));
+      const blackCards = aiPlayer.hand.filter(c => (c.suit === Suit.SPADE || c.suit === Suit.CLUB) &&
+        c.name !== CardName.GUOHE && c.name !== CardName.WUXIE);
+      // 优先用价值较低的黑色牌，避免浪费【杀】/【酒】等重要牌
+      const lowValueBlack = blackCards.find(c => c.name !== CardName.SHA && c.name !== CardName.JIU && c.type !== CardType.EQUIPMENT);
+      const blackCard = lowValueBlack ?? blackCards.find(c => c.name === CardName.SHA);
+      if (target && targetHasCards && blackCard) {
+        addLog(`${aiPlayer.hero.name} 发动「奇袭」，将【${blackCard.name}】当【过河拆桥】使用`, 'skill');
+        showSkillBanner(aiPlayer.hero.name, '奇袭');
+        const tempGuohe = { ...blackCard, name: CardName.GUOHE };
+        await useCardEffect(aiPlayer, [target], tempGuohe);
+        await delay(1500);
+      }
+    }
     
     // 7. Play Leshi Busi Shu
     const lesi = aiPlayer.hand.find(c => c.name === CardName.LESI);
@@ -3554,7 +3660,7 @@ const App: React.FC = () => {
             )}
           </div>
           <div>
-            <span className={theme === 'dark' ? 'text-amber-700/50' : 'text-[#8b6f4a]/60'}>◆</span> 三国杀 · {playerCount}人军争篇 v3.7 <span className={theme === 'dark' ? 'text-amber-700/50' : 'text-[#8b6f4a]/60'}>◆</span>
+            <span className={theme === 'dark' ? 'text-amber-700/50' : 'text-[#8b6f4a]/60'}>◆</span> 三国杀 · {playerCount}人军争篇 v3.8 <span className={theme === 'dark' ? 'text-amber-700/50' : 'text-[#8b6f4a]/60'}>◆</span>
           </div>
         </div>
       </div>
@@ -4312,6 +4418,34 @@ const App: React.FC = () => {
                            <p>• 你阵亡时，击杀你的角色失去所有手牌</p>
                            <p>• 敌人击杀你需付出代价，可用来威慑</p>
                            <p>• <span className="text-yellow-400">示例</span>：蔡文姬被击杀，凶手手牌全部进入弃牌堆</p>
+                         </>
+                       )}
+                       {me.hero.name === '甘宁' && (
+                         <>
+                           <p>• 点击「奇袭」按钮后，选一张黑色牌（♠♣），再点目标角色，即当【过河拆桥】使用</p>
+                           <p>• 无需距离限制，可拆手牌或装备</p>
+                           <p>• <span className="text-yellow-400">示例</span>：甘宁用黑色【酒】当【过河拆桥】，拆掉远处敌人的武器</p>
+                         </>
+                       )}
+                       {me.hero.name === '吕蒙' && (
+                         <>
+                           <p>• 出牌阶段没有使用过【杀】，弃牌阶段自动跳过</p>
+                           <p>• 手上牌多时可以放心留牌蓄势</p>
+                           <p>• <span className="text-yellow-400">示例</span>：吕蒙本回合只上装、不出杀，回合结束无需弃牌</p>
+                         </>
+                       )}
+                       {me.hero.name === '王异' && (
+                         <>
+                           <p>• 回合开始时若已受伤，自动摸等同于已损失体力的牌</p>
+                           <p>• 越受伤收益越大，适合主动换血</p>
+                           <p>• <span className="text-yellow-400">示例</span>：王异 3 上限、当前 1 体力，回合开始摸 2 张</p>
+                         </>
+                       )}
+                       {me.hero.name === '步练师' && (
+                         <>
+                           <p>• 你阵亡时，自动令己方体力最低的一名角色摸三张牌</p>
+                           <p>• 阵亡也能为队友留下资源</p>
+                           <p>• <span className="text-yellow-400">示例</span>：步练师阵亡，队友主公摸三张牌继续作战</p>
                          </>
                        )}
                      </div>
@@ -5620,6 +5754,37 @@ const App: React.FC = () => {
                            className="bg-[#221b16] hover:bg-[#2e2520] text-[#c8bda8] px-4 py-2 rounded-lg border border-[#6a5642] hover:border-[#c8a45c] hover:text-[#e8cf94] transition-colors font-ancient text-base shadow-lg"
                          >
                            取消结姻
+                         </button>
+                       )}
+
+                       {/* 甘宁「奇袭」技能按钮 */}
+                       {players[0].hero.name === '甘宁' && !isQixiMode && (
+                         <button
+                           onClick={() => {
+                             setIsQixiMode(true);
+                             setSelectedCardIds([]);
+                             setActiveSelectedId(null);
+                             setIsSelectingTarget(false);
+                             addLog('请选择一张黑色牌（甘宁「奇袭」）...', 'info');
+                           }}
+                           className="bg-[#2b2f3a] hover:bg-[#373d4a] text-[#d6ddf0] px-5 py-2 rounded-lg border border-[#6a7690]/70 hover:border-[#93a2c4] hover:text-white transition-colors font-ancient text-base shadow-lg"
+                         >
+                           奇袭
+                         </button>
+                       )}
+
+                       {isQixiMode && (
+                         <button
+                           onClick={() => {
+                             setIsQixiMode(false);
+                             setSelectedCardIds([]);
+                             setActiveSelectedId(null);
+                             setIsSelectingTarget(false);
+                             addLog('取消了「奇袭」技能', 'info');
+                           }}
+                           className="bg-[#221b16] hover:bg-[#2e2520] text-[#c8bda8] px-4 py-2 rounded-lg border border-[#6a5642] hover:border-[#c8a45c] hover:text-[#e8cf94] transition-colors font-ancient text-base shadow-lg"
+                         >
+                           取消奇袭
                          </button>
                        )}
 
