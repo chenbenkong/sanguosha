@@ -34,6 +34,17 @@ const CARD_THEMES: Record<string, { face: string; accent: string; ink: string }>
   '桃园结义': { face: 'from-[#fceef0] via-[#f8dee2] to-[#f0c8ce]', accent: '#ad4450', ink: '#8e3742' },
   '借刀杀人': { face: 'from-[#eef1f5] via-[#e2e8ef] to-[#d0dae4]', accent: '#41607e', ink: '#344d66' },
   '闪电': { face: 'from-[#f2edf9] via-[#e9e1f4] to-[#d9cdea]', accent: '#6441a0', ink: '#523384' },
+  // —— 装备牌 ——
+  '青釭剑': { face: 'from-[#eef1f6] via-[#e3e8f1] to-[#cfd7e4]', accent: '#3c5a80', ink: '#2f4766' },
+  '青龙偃月刀': { face: 'from-[#eef7f0] via-[#e0efe4] to-[#c8dfd0]', accent: '#2f6e52', ink: '#255741' },
+  '方天画戟': { face: 'from-[#f6efe2] via-[#ece0cc] to-[#dcc9a8]', accent: '#8a6a2a', ink: '#70541f' },
+  '诸葛连弩': { face: 'from-[#f2ece6] via-[#e7ddd2] to-[#d6c7b6]', accent: '#7a5230', ink: '#634126' },
+  '八卦阵': { face: 'from-[#f1f5f2] via-[#e3ebe6] to-[#cfdad3]', accent: '#3f6b58', ink: '#325545' },
+  '仁王盾': { face: 'from-[#f4f1ed] via-[#e9e4dd] to-[#d9d1c6]', accent: '#5b5148', ink: '#4a413a' },
+  '赤兔': { face: 'from-[#fbeeee] via-[#f4dcdc] to-[#e7c3c3]', accent: '#9a3a34', ink: '#7e2e29' },
+  '紫骍': { face: 'from-[#f3eefb] via-[#e8e0f4] to-[#d6c9e8]', accent: '#5b3d8f', ink: '#4a2f78' },
+  '的卢': { face: 'from-[#eef2fb] via-[#e0e7f6] to-[#cbd6ea]', accent: '#3c5a90', ink: '#2f476f' },
+  '绝影': { face: 'from-[#f0f1f3] via-[#e4e6ea] to-[#ced2d8]', accent: '#4a4f58', ink: '#3c4048' },
 };
 
 const TYPE_STAMPS: Record<CardType, { label: string; color: string; border: string }> = {

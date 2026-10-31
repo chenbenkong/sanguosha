@@ -31,6 +31,17 @@ export enum CardName {
   TAOYUAN = '桃园结义', // Oath of the Peach Garden
   JIEDAO = '借刀杀人', // Borrowed Sword
   SHANDIAN = '闪电', // Lightning
+  // —— 装备牌 ——
+  QINGGANG = '青釭剑',
+  QINGLONG = '青龙偃月刀',
+  FANGTIAN = '方天画戟',
+  ZHUGE = '诸葛连弩',
+  BAGUA = '八卦阵',
+  RENWANG = '仁王盾',
+  CHITU = '赤兔',
+  ZIXING = '紫骍',
+  DILU = '的卢',
+  JUEYING = '绝影',
 }
 
 export interface Card {
@@ -79,7 +90,19 @@ export interface Player {
   isLeBuSiShu?: boolean; // 乐不思蜀状态
   isBingLiangCunDuan?: boolean; // 兵粮寸断状态
   isShandian?: boolean; // 闪电挂置状态（判定区）
+  // 装备区
+  equipment?: Equipment;
 }
+
+/** 装备区：武器 / 防具 / +1马 / -1马 */
+export interface Equipment {
+  weapon?: Card;
+  armor?: Card;
+  horsePlus?: Card; // 防御马：别人到你的距离 +1
+  horseMinus?: Card; // 进攻马：你到别人的距离 -1
+}
+
+export type EquipmentSlot = keyof Equipment;
 
 export enum GamePhase {
   START = '回合开始',

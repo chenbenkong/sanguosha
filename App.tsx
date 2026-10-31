@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo, memo } from 'react';
 import { Hero, Player, Card, GamePhase, CardName, LogEntry, Identity, Suit, CardType } from './types';
-import { HEROES, INITIAL_DECK, BGM_URL } from './constants';
+import { HEROES, INITIAL_DECK, BGM_URL, EQUIP_META } from './constants';
 import { playSfx, SFX_FOR_NAME } from './src/audio/sfx';
 import CardComponent from './components/CardComponent';
 import Avatar from './components/Avatar';
@@ -127,6 +127,21 @@ const App: React.FC = () => {
   const [jiedaoWeaponTarget, setJiedaoWeaponTarget] = useState<number | null>(null); // 有武器的目标
   const [jiedaoVictimTarget, setJiedaoVictimTarget] = useState<number | null>(null); // 被攻击的目标
 
+  // 出牌阶段【杀】的使用次数（有诸葛连弩则不限）
+  const slashUsageRef = useRef<Record<number, number>>({});
+
+  // 战绩统计（localStorage 持久化）
+  const [stats, setStats] = useState<{ games: number; wins: number; losses: number }>(() => {
+    try {
+      const raw = localStorage.getItem('sgs-stats');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (typeof parsed?.games === 'number') return parsed;
+      }
+    } catch { /* ignore */ }
+    return { games: 0, wins: 0, losses: 0 };
+  });
+
   // Dying State
   const [dyingState, setDyingState] = useState<{
     victimId: number;
@@ -218,6 +233,15 @@ const App: React.FC = () => {
   // 从ref中获取最新的玩家信息
   const getPlayer = (id: number) => playersRef.current.find(p => p.id === id);
 
+  // 以最新 state 为准的手牌修改器，避免闭包旧 hand 导致的“卡牌复活”bug
+  const mutateHand = useCallback((id: number, fn: (hand: Card[]) => Card[]) => {
+    setPlayers(prev => {
+      const updated = prev.map(p => p.id === id ? { ...p, hand: fn(p.hand) } : p);
+      playersRef.current = updated;
+      return updated;
+    });
+  }, []);
+
   const updatePlayer = (id: number, updates: Partial<Player>) => {
     setPlayers(prev => {
       const updated = prev.map(p => p.id === id ? { ...p, ...updates } : p);
@@ -252,6 +276,61 @@ const App: React.FC = () => {
     const sorted = [...pool].sort((a, b) => a.hp - b.hp);
     return sorted[0];
   };
+
+  // --- 距离与攻击范围 ---
+  // 座位距离：环形相邻为 1；-1 马减少自己到他人的距离，+1 马增加他人到自己的距离
+  const getDistance = useCallback((fromId: number, toId: number) => {
+    const list = playersRef.current;
+    const n = list.length;
+    if (!n) return 1;
+    const raw = Math.abs(fromId - toId);
+    let d = Math.min(raw, n - raw);
+    const from = list.find(p => p.id === fromId);
+    const to = list.find(p => p.id === toId);
+    if (from?.equipment?.horseMinus) d -= 1;
+    if (to?.equipment?.horsePlus) d += 1;
+    return Math.max(1, d);
+  }, []);
+
+  // 攻击范围 = 1 + 武器范围
+  const getAttackRange = useCallback((p: Player) => {
+    const weapon = p.equipment?.weapon;
+    const bonus = weapon ? (EQUIP_META[weapon.name]?.range ?? 1) : 0;
+    return 1 + bonus;
+  }, []);
+
+  const canReach = useCallback((from: Player, to: Player) => getDistance(from.id, to.id) <= getAttackRange(from), [getDistance, getAttackRange]);
+
+  // 本回合是否还能使用【杀】（诸葛连弩不限）
+  const canPlaySlash = useCallback((p: Player) => {
+    if (p.equipment?.weapon?.name === CardName.ZHUGE) return true;
+    return (slashUsageRef.current[p.id] ?? 0) < 1;
+  }, []);
+
+  // 装备牌上装：同槽位旧装备进入弃牌堆
+  const equipCard = useCallback((playerId: number, card: Card) => {
+    const meta = EQUIP_META[card.name];
+    if (!meta) return false;
+    const player = getPlayer(playerId);
+    if (!player) return false;
+    const slot = meta.slot;
+    const prev = player.equipment?.[slot];
+    const nextEquipment = { ...(player.equipment ?? {}), [slot]: card };
+
+    mutateHand(playerId, hand => hand.filter(c => c.id !== card.id));
+    updatePlayer(playerId, { equipment: nextEquipment });
+    if (prev) {
+      setDiscardPile(pile => {
+        const next = [...pile, prev];
+        discardPileRef.current = next;
+        return next;
+      });
+      addLog(`${player.hero.name} 弃置了旧装备【${prev.name}】`, 'info');
+    }
+    playSound('equip');
+    addLog(`${player.hero.name} 装备了【${card.name}】${meta.range ? `（攻击范围 ${meta.range}）` : ''}`, 'success');
+    return true;
+  }, [getPlayer, mutateHand, updatePlayer]);
 
   // --- Initialization ---
 
@@ -421,6 +500,22 @@ const App: React.FC = () => {
     if (isGameOverRef.current) return; // 防止重复触发
     isGameOverRef.current = true;
     setWinnerIdentity(winner);
+    // 记录战绩
+    const myIdentity = playersRef.current.find(p => p.isHuman)?.identity;
+    const isVictory = myIdentity !== undefined && (
+      (winner === Identity.FANZEI && myIdentity === Identity.FANZEI) ||
+      ((winner === Identity.ZHUGONG || winner === Identity.ZHONGCHEN) && (myIdentity === Identity.ZHUGONG || myIdentity === Identity.ZHONGCHEN)) ||
+      (winner === Identity.NEIJIAN && myIdentity === Identity.NEIJIAN)
+    );
+    setStats(prev => {
+      const next = {
+        games: prev.games + 1,
+        wins: prev.wins + (isVictory ? 1 : 0),
+        losses: prev.losses + (isVictory ? 0 : 1),
+      };
+      try { localStorage.setItem('sgs-stats', JSON.stringify(next)); } catch { /* ignore */ }
+      return next;
+    });
     // 先亮明所有身份
     revealAllIdentities();
     // 延迟3秒后切换到结束画面，确保状态已更新
@@ -538,6 +633,7 @@ const App: React.FC = () => {
         setHasUsedZhiheng(false); // 重置制衡技能使用状态
         setHasUsedFumo(false); // 重置司马懿鬼才技能使用状态
         setHasUsedLijian(false); // 重置貂蝉离间技能使用状态
+        slashUsageRef.current[currentPlayer.id] = 0; // 重置本回合【杀】使用次数
         setIsJiedaoMode(false); // 重置借刀杀人模式
         setJiedaoWeaponTarget(null); // 重置借刀目标
         setJiedaoVictimTarget(null); // 重置被攻击目标
@@ -897,7 +993,7 @@ const App: React.FC = () => {
       const isZhaoyun = me.hero.name === '赵云';
       const isGuanyu = me.hero.name === '关羽';
       const isRedCard = [Suit.HEART, Suit.DIAMOND].includes(card.suit); // 红色牌（红桃和方块）
-      
+
       // 制衡模式：支持多选
       if (isZhihengMode) {
         if (selectedCardIds.includes(card.id)) {
@@ -960,6 +1056,16 @@ const App: React.FC = () => {
         return;
       }
       
+      // 装备牌：点击即上装，无需选择目标（技能选牌模式除外）
+      if (card.type === CardType.EQUIPMENT && EQUIP_META[card.name]) {
+        equipCard(me.id, card);
+        setSelectedCardIds([]);
+        setActiveSelectedId(null);
+        setIsSelectingTarget(false);
+        setTimeout(() => { clickGuard.current = false; }, 200);
+        return;
+      }
+
       // 普通模式：严格控制单选
       if (selectedCardIds.includes(card.id)) {
         // 取消选择
@@ -1146,7 +1252,36 @@ const App: React.FC = () => {
     const card = me.hand.find(c => c.id === selectedCardIds[0]);
 
     if (!target || !card || target.isDead) return;
-    
+
+    // 距离限制：顺手牵羊 / 兵粮寸断 仅限距离 1
+    if (card.name === CardName.SHUNSHOU || card.name === CardName.BINGLIANG) {
+      const dist = getDistance(me.id, target.id);
+      if (dist > 1) {
+        addLog(`【${card.name}】只能对距离为1的角色使用（当前距离 ${dist}）`, 'warning');
+        setTimeout(() => { clickGuard.current = false; }, 200);
+        return;
+      }
+    }
+
+    // 【杀】的距离与次数限制（含 龙胆 / 武圣 转化的杀）
+    const isSlashLike = card.name === CardName.SHA ||
+      (me.hero.name === '赵云' && card.name === CardName.SHAN) ||
+      (me.hero.name === '关羽' && [Suit.HEART, Suit.DIAMOND].includes(card.suit));
+    if (isSlashLike && target.id !== me.id) {
+      const reach = getAttackRange(me);
+      const dist = getDistance(me.id, target.id);
+      if (dist > reach) {
+        addLog(`距离不足：你与 ${target.hero.name} 距离 ${dist}，攻击范围 ${reach}`, 'warning');
+        setTimeout(() => { clickGuard.current = false; }, 200);
+        return;
+      }
+      if (!canPlaySlash(me)) {
+        addLog('出牌阶段只能使用一张【杀】（装备诸葛连弩可无限使用）', 'warning');
+        setTimeout(() => { clickGuard.current = false; }, 200);
+        return;
+      }
+    }
+
     // 借刀杀人目标选择
     if (card.name === CardName.JIEDAO && isJiedaoMode) {
       // 第一步：选择有武器的角色（不能是自己）
@@ -1156,7 +1291,11 @@ const App: React.FC = () => {
           setTimeout(() => { clickGuard.current = false; }, 200);
           return;
         }
-        // 简化判断：假设所有角色都有"武器"（在实际游戏中应该检查装备区）
+        if (!target.equipment?.weapon) {
+          addLog(`【${target.hero.name}】装备区没有武器，无法成为借刀目标`, 'warning');
+          setTimeout(() => { clickGuard.current = false; }, 200);
+          return;
+        }
         setJiedaoWeaponTarget(targetId);
         addLog(`已选择【${target.hero.name}】作为借刀目标，请选择其攻击范围内的另一名角色`, 'info');
         setTimeout(() => { clickGuard.current = false; }, 200);
@@ -1501,15 +1640,6 @@ const App: React.FC = () => {
     return judgmentCard;
   };
 
-  // 以最新 state 为准的手牌修改器，避免闭包旧 hand 导致的“卡牌复活”bug
-  const mutateHand = useCallback((id: number, fn: (hand: Card[]) => Card[]) => {
-    setPlayers(prev => {
-      const updated = prev.map(p => p.id === id ? { ...p, hand: fn(p.hand) } : p);
-      playersRef.current = updated;
-      return updated;
-    });
-  }, []);
-
   const playCard = (playerId: number, card: Card) => {
     discardCards(playerId, [card]);
     showCardVisual(card, getPlayer(playerId)?.hero.name || '');
@@ -1531,7 +1661,17 @@ const App: React.FC = () => {
       // SHA（基本牌，不可被无懈可击响应）
       if (card.name === CardName.SHA) {
         playCard(source.id, card);
+        slashUsageRef.current[source.id] = (slashUsageRef.current[source.id] ?? 0) + 1;
         const target = targets[0];
+        // 防具判定：仁王盾免疫黑色【杀】；青釭剑无视防具
+        const armor = target.equipment?.armor?.name;
+        const ignoreArmor = source.equipment?.weapon?.name === CardName.QINGGANG;
+        const isBlackSlash = card.suit === Suit.SPADE || card.suit === Suit.CLUB;
+        if (!ignoreArmor && armor === CardName.RENWANG && isBlackSlash) {
+          addLog(`${target.hero.name} 的【仁王盾】挡住了黑色【杀】，伤害无效`, 'success');
+          await delay(600);
+          return;
+        }
         // 直接询问是否使用闪
         await triggerReaction(target.id, source.id, CardName.SHAN, card);
       }
@@ -1614,20 +1754,37 @@ const App: React.FC = () => {
       // 顺手牵羊
       else if (card.name === CardName.SHUNSHOU) {
         const target = targets[0];
-        if (target.hand.length > 0) {
+        const targetHasEquip = !!(target.equipment?.weapon || target.equipment?.armor || target.equipment?.horsePlus || target.equipment?.horseMinus);
+        if (target.hand.length > 0 || targetHasEquip) {
           playCard(source.id, card);
           // 询问目标是否使用无懈可击
           const isWuxieUsed = await triggerReaction(target.id, source.id, CardName.WUXIE, card);
           if (!isWuxieUsed) {
-            // 如果没有使用无懈可击，执行偷牌效果
-            const randomIndex = Math.floor(Math.random() * target.hand.length);
-            const stolenCard = target.hand[randomIndex];
+            // 优先偷装备（有则 40% 概率），否则偷手牌
+            const equipCards = [target.equipment?.weapon, target.equipment?.armor, target.equipment?.horsePlus, target.equipment?.horseMinus].filter(Boolean) as Card[];
+            const stealEquip = equipCards.length > 0 && (target.hand.length === 0 || Math.random() < 0.4);
 
-            // 从目标手牌中移除、加入自己手牌（基于最新 state，避免旧闭包导致卡牌复活）
-            mutateHand(target.id, hand => hand.filter(c => c.id !== stolenCard.id));
-            mutateHand(source.id, hand => [...hand, stolenCard]);
+            if (stealEquip) {
+              const stolenEquip = equipCards[Math.floor(Math.random() * equipCards.length)];
+              const nextEquip = { ...(target.equipment ?? {}) };
+              (Object.keys(nextEquip) as Array<keyof typeof nextEquip>).forEach(k => {
+                if (nextEquip[k]?.id === stolenEquip.id) delete nextEquip[k];
+              });
+              updatePlayer(target.id, { equipment: nextEquip });
+              mutateHand(source.id, hand => [...hand, stolenEquip]);
+              addLog(`${source.hero.name} 顺手牵走了 ${target.hero.name} 的装备【${stolenEquip.name}】`, 'chat');
+            } else if (target.hand.length > 0) {
+              const randomIndex = Math.floor(Math.random() * target.hand.length);
+              const stolenCard = target.hand[randomIndex];
 
-            addLog(`${source.hero.name} 从 ${target.hero.name} 那里偷到了【${stolenCard.name}】`, 'chat');
+              // 从目标手牌中移除、加入自己手牌（基于最新 state，避免旧闭包导致卡牌复活）
+              mutateHand(target.id, hand => hand.filter(c => c.id !== stolenCard.id));
+              mutateHand(source.id, hand => [...hand, stolenCard]);
+
+              addLog(`${source.hero.name} 从 ${target.hero.name} 那里偷到了【${stolenCard.name}】`, 'chat');
+            } else {
+              addLog(`${target.hero.name} 没有牌可偷`, 'info');
+            }
           } else {
             addLog(`${target.hero.name} 使用了【无懈可击】，免疫了【${card.name}】的效果！`, 'success');
           }
@@ -1653,29 +1810,46 @@ const App: React.FC = () => {
       // 过河拆桥
       else if (card.name === CardName.GUOHE) {
         const target = targets[0];
-        if (target.hand.length > 0) {
+        const equipCards = [target.equipment?.weapon, target.equipment?.armor, target.equipment?.horsePlus, target.equipment?.horseMinus].filter(Boolean) as Card[];
+        if (target.hand.length > 0 || equipCards.length > 0) {
           playCard(source.id, card);
           // 询问目标是否使用无懈可击
           const isWuxieUsed = await triggerReaction(target.id, source.id, CardName.WUXIE, card);
           if (!isWuxieUsed) {
-            // 如果没有使用无懈可击，执行拆牌效果
-            const randomIndex = Math.floor(Math.random() * target.hand.length);
-            const brokenCard = target.hand[randomIndex];
+            // 有装备且（无手牌 或 35% 概率）则拆装备
+            const useEquip = equipCards.length > 0 && (target.hand.length === 0 || Math.random() < 0.35);
+            if (useEquip) {
+              const brokenEquip = equipCards[Math.floor(Math.random() * equipCards.length)];
+              const nextEquip = { ...(target.equipment ?? {}) };
+              (Object.keys(nextEquip) as Array<keyof typeof nextEquip>).forEach(k => {
+                if (nextEquip[k]?.id === brokenEquip.id) delete nextEquip[k];
+              });
+              updatePlayer(target.id, { equipment: nextEquip });
+              setDiscardPile(prev => {
+                const newPile = [...prev, brokenEquip];
+                discardPileRef.current = newPile;
+                return newPile;
+              });
+              addLog(`${source.hero.name} 拆掉了 ${target.hero.name} 的装备【${brokenEquip.name}】`, 'chat');
+            } else {
+              // 从目标手牌中弃置（基于最新 state），进入弃牌堆
+              const randomIndex = Math.floor(Math.random() * target.hand.length);
+              const brokenCard = target.hand[randomIndex];
 
-            // 从目标手牌中弃置（基于最新 state），进入弃牌堆
-            mutateHand(target.id, hand => hand.filter(c => c.id !== brokenCard.id));
-            setDiscardPile(prev => {
-              const newPile = [...prev, brokenCard];
-              discardPileRef.current = newPile;
-              return newPile;
-            });
+              mutateHand(target.id, hand => hand.filter(c => c.id !== brokenCard.id));
+              setDiscardPile(prev => {
+                const newPile = [...prev, brokenCard];
+                discardPileRef.current = newPile;
+                return newPile;
+              });
 
-            addLog(`${source.hero.name} 弃置了 ${target.hero.name} 的【${brokenCard.name}】`, 'chat');
+              addLog(`${source.hero.name} 弃置了 ${target.hero.name} 的【${brokenCard.name}】`, 'chat');
+            }
           } else {
             addLog(`${target.hero.name} 使用了【无懈可击】，免疫了【${card.name}】的效果！`, 'success');
           }
         } else {
-          addLog(`${target.hero.name} 没有手牌可弃置，【${card.name}】不消耗！`, 'warning');
+          addLog(`${target.hero.name} 没有牌可弃置，【${card.name}】不消耗！`, 'warning');
         }
       }
       // 无懈可击（只能在自己或队友成为锦囊牌目标时响应使用，主动使用无效且不消耗）
@@ -1899,14 +2073,16 @@ const App: React.FC = () => {
           // 受害者通过响应流程打出【闪】（人类玩家会收到响应弹窗）
           await triggerReaction(victim.id, target.id, CardName.SHAN, card);
         } else {
-          // 无【杀】：交出一张手牌（代替武器）给使用者
-          if (target.hand.length > 0) {
-            const giveCard = target.hand[Math.floor(Math.random() * target.hand.length)];
-            mutateHand(target.id, hand => hand.filter(c => c.id !== giveCard.id));
-            mutateHand(source.id, hand => [...hand, giveCard]);
-            addLog(`${target.hero.name} 没有【杀】，将【${giveCard.name}】交给了 ${source.hero.name}`, 'info');
+          // 无【杀】：将武器牌交给使用者
+          const weapon = target.equipment?.weapon;
+          if (weapon) {
+            const nextEquip = { ...(target.equipment ?? {}) };
+            delete nextEquip.weapon;
+            updatePlayer(target.id, { equipment: nextEquip });
+            mutateHand(source.id, hand => [...hand, weapon]);
+            addLog(`${target.hero.name} 无法使用【杀】，将【${weapon.name}】交给了 ${source.hero.name}`, 'info');
           } else {
-            addLog(`${target.hero.name} 没有手牌，无法执行【借刀杀人】的效果`, 'info');
+            addLog(`${target.hero.name} 没有【杀】也没有武器，【借刀杀人】无效果`, 'info');
           }
         }
       }
@@ -1980,7 +2156,24 @@ const App: React.FC = () => {
       const isLubuWushuang = source.hero.name === '吕布';
       const needTwoCards = isLubuWushuang && !isSecondReaction && (neededCard === CardName.SHAN || neededCard === CardName.SHA);
       const wushuangCardName = neededCard === CardName.SHAN ? '闪' : '杀';
-      
+
+      // 八卦阵：需要【闪】时自动判定，红色视为打出【闪】（青釭剑无视防具）
+      if (
+        neededCard === CardName.SHAN &&
+        !isSecondReaction &&
+        responder.equipment?.armor?.name === CardName.BAGUA &&
+        source.equipment?.weapon?.name !== CardName.QINGGANG
+      ) {
+        const judgment = await performJudgment(responderId, '八卦阵');
+        if (judgment && (judgment.suit === Suit.HEART || judgment.suit === Suit.DIAMOND)) {
+          addLog(`${responder.hero.name} 的【八卦阵】判定为红色，视为打出了【闪】！`, 'success');
+          await delay(400);
+          return false;
+        }
+        addLog(`${responder.hero.name} 的【八卦阵】判定失败，仍需自行出【闪】`, 'warning');
+        await delay(300);
+      }
+
       // HUMAN REACTION
       if (responder.isHuman && !isAiTakeover) {
         const hasCard = responder.hand.some(c => c.name === neededCard);
@@ -2503,6 +2696,19 @@ const App: React.FC = () => {
     const alivePlayers = players.filter(p => !p.isDead && p.id !== aiPlayer.id);
     let targetId = -1;
 
+    // 0. 装备优先：空槽直接上装，武器仅替换为攻击范围更大的
+    const equipCandidates = aiPlayer.hand.filter(c => c.type === CardType.EQUIPMENT && EQUIP_META[c.name]);
+    if (equipCandidates.length > 0) {
+      const pick = equipCandidates.sort((a, b) => (EQUIP_META[b.name]?.range ?? 0) - (EQUIP_META[a.name]?.range ?? 0))[0];
+      const slot = EQUIP_META[pick.name]!.slot;
+      const current = aiPlayer.equipment?.[slot];
+      const betterWeapon = slot === 'weapon' && (!current || (EQUIP_META[pick.name]?.range ?? 0) > (EQUIP_META[current.name]?.range ?? 0));
+      if (!current || betterWeapon) {
+        equipCard(aiPlayer.id, pick);
+        await delay(900);
+      }
+    }
+
     // 1. Sun Quan's Zhiheng Skill: AI automatically uses it when appropriate
     if (aiPlayer.hero.name === '孙权') {
       // Simple AI strategy: Use Zhiheng when hand has more than 3 cards and has at least 1 useless card
@@ -2538,6 +2744,12 @@ const App: React.FC = () => {
 
     const picked = pickTargetByIdentity(aiPlayer);
     targetId = picked ? picked.id : -1;
+    // 距离为 1 的可达敌人（顺手/兵粮/杀 使用）
+    const adjacentEnemy = players.find(p => !p.isDead && p.id !== aiPlayer.id && isEnemy(aiPlayer, p) && getDistance(aiPlayer.id, p.id) <= 1);
+    // 攻击范围内可打的敌人
+    const reachableEnemy = players
+      .filter(p => !p.isDead && p.id !== aiPlayer.id && isEnemy(aiPlayer, p) && canReach(aiPlayer, p))
+      .sort((a, b) => a.hp - b.hp)[0];
 
     // 2. Play Tao
     if (aiPlayer.hp < aiPlayer.maxHp) {
@@ -2567,11 +2779,10 @@ const App: React.FC = () => {
       }
     }
     
-    // 5. Play Shunshou Qianyang
+    // 5. Play Shunshou Qianyang（仅限距离 1）
     const shunshou = aiPlayer.hand.find(c => c.name === CardName.SHUNSHOU);
-    if (shunshou && targetId !== -1) {
-      const target = getPlayer(targetId)!;
-      await useCardEffect(aiPlayer, [target], shunshou);
+    if (shunshou && adjacentEnemy) {
+      await useCardEffect(aiPlayer, [adjacentEnemy], shunshou);
       await delay(1500);
     }
     
@@ -2613,11 +2824,10 @@ const App: React.FC = () => {
       }
     }
 
-    // 10. Play Bingliang Cunduan
+    // 10. Play Bingliang Cunduan（仅限距离 1）
     const bingliang = aiPlayer.hand.find(c => c.name === CardName.BINGLIANG);
-    if (bingliang && targetId !== -1) {
-      const target = getPlayer(targetId)!;
-      await useCardEffect(aiPlayer, [target], bingliang);
+    if (bingliang && adjacentEnemy) {
+      await useCardEffect(aiPlayer, [adjacentEnemy], bingliang);
       await delay(1500);
     }
 
@@ -2656,22 +2866,24 @@ const App: React.FC = () => {
       await delay(1500);
     }
 
-    // 11.6 Play Jiedao（借刀杀人：借敌人之手攻击另一名敌人）
+    // 11.6 Play Jiedao（借刀杀人：借有武器的敌人之手攻击另一名敌人）
     const jiedao = aiPlayer.hand.find(c => c.name === CardName.JIEDAO);
-    if (jiedao && targetId !== -1) {
-      const weaponTarget = getPlayer(targetId)!;
-      const victim = players.filter(p => !p.isDead && p.id !== aiPlayer.id && p.id !== weaponTarget.id && isEnemy(aiPlayer, p))[0];
-      if (victim) {
-        await useCardEffect(aiPlayer, [weaponTarget, victim], jiedao);
-        await delay(1500);
+    if (jiedao) {
+      const weaponTarget = players.find(p => !p.isDead && p.id !== aiPlayer.id && p.equipment?.weapon && isEnemy(aiPlayer, p));
+      if (weaponTarget) {
+        const victim = players.filter(p => !p.isDead && p.id !== aiPlayer.id && p.id !== weaponTarget.id && isEnemy(aiPlayer, p))[0]
+          || players.find(p => !p.isDead && p.id !== aiPlayer.id && p.id !== weaponTarget.id);
+        if (victim) {
+          await useCardEffect(aiPlayer, [weaponTarget, victim], jiedao);
+          await delay(1500);
+        }
       }
     }
 
-    // 12. Play Slash
+    // 12. Play Slash（受攻击范围限制）
     const slash = aiPlayer.hand.find(c => c.name === CardName.SHA);
-    if (slash && targetId !== -1) {
-       const target = getPlayer(targetId)!;
-       await useCardEffect(aiPlayer, [target], slash);
+    if (slash && reachableEnemy) {
+       await useCardEffect(aiPlayer, [reachableEnemy], slash);
        await delay(1500);
     } else {
        // 13. Play Nanman
@@ -2951,6 +3163,8 @@ const App: React.FC = () => {
                   <ul className="text-sm space-y-1.5">
                     <li><span className="text-[#e8cf94] font-bold">基本牌</span>：杀（攻击）、闪（抵消杀）、桃（回血）、酒（杀伤害+1 或濒死自救）</li>
                     <li><span className="text-[#e8cf94] font-bold">锦囊牌</span>：决斗、无中生有、南蛮入侵、万箭齐发、顺手牵羊、过河拆桥、无懈可击、火攻、铁索连环、五谷丰登、桃园结义、借刀杀人、乐不思蜀、兵粮寸断、闪电</li>
+                    <li><span className="text-[#e8cf94] font-bold">装备牌</span>：武器（青釭剑 / 青龙偃月刀 / 方天画戟 / 诸葛连弩）、防具（八卦阵 / 仁王盾）、坐骑（赤兔 / 紫骍 为 -1 进攻马，的卢 / 绝影 为 +1 防御马）。点击装备牌即刻上装</li>
+                    <li><span className="text-[#e8cf94] font-bold">距离与范围</span>：默认攻击范围 1（左右相邻），装备武器可提升；【杀】无法打到范围外角色，顺手牵羊 / 兵粮寸断仅限距离 1</li>
                     <li><span className="text-[#e8cf94] font-bold">无懈可击</span>：仅在锦囊牌生效前打出响应，抵消其对一名角色的效果</li>
                     <li><span className="text-[#e8cf94] font-bold">铁索连环</span>：横置1-2名角色，被横置者受到属性伤害（如火攻）时伤害传导</li>
                   </ul>
@@ -2981,8 +3195,23 @@ const App: React.FC = () => {
         )}
 
         {/* 版本信息 */}
-        <div className={`absolute bottom-6 text-xs tracking-widest ${theme === 'dark' ? 'text-stone-500' : 'text-[#5d4037]/70'}`} style={theme === 'light' ? { textShadow: '0 1px 2px rgba(255,255,255,0.6)' } : {}}>
-          <span className={theme === 'dark' ? 'text-amber-700/50' : 'text-[#8b6f4a]/60'}>◆</span> 三国杀 · {playerCount}人军争篇 v3.0 <span className={theme === 'dark' ? 'text-amber-700/50' : 'text-[#8b6f4a]/60'}>◆</span>
+        <div className={`absolute bottom-6 flex flex-col items-center gap-1 text-xs tracking-widest ${theme === 'dark' ? 'text-stone-500' : 'text-[#5d4037]/70'}`} style={theme === 'light' ? { textShadow: '0 1px 2px rgba(255,255,255,0.6)' } : {}}>
+          <div className={`flex items-center gap-3 ${theme === 'dark' ? 'text-stone-400' : 'text-[#5d4037]'}`}>
+            <span>对局 <span className="font-bold text-[#e8cf94]">{stats.games}</span></span>
+            <span className={theme === 'dark' ? 'text-stone-600' : 'text-[#c4b8a8]'}>|</span>
+            <span>胜 <span className="font-bold text-emerald-500">{stats.wins}</span></span>
+            <span className={theme === 'dark' ? 'text-stone-600' : 'text-[#c4b8a8]'}>|</span>
+            <span>负 <span className="font-bold text-rose-500">{stats.losses}</span></span>
+            {stats.games > 0 && (
+              <>
+                <span className={theme === 'dark' ? 'text-stone-600' : 'text-[#c4b8a8]'}>|</span>
+                <span>胜率 <span className="font-bold text-[#e8cf94]">{Math.round((stats.wins / stats.games) * 100)}%</span></span>
+              </>
+            )}
+          </div>
+          <div>
+            <span className={theme === 'dark' ? 'text-amber-700/50' : 'text-[#8b6f4a]/60'}>◆</span> 三国杀 · {playerCount}人军争篇 v3.1 <span className={theme === 'dark' ? 'text-amber-700/50' : 'text-[#8b6f4a]/60'}>◆</span>
+          </div>
         </div>
       </div>
     );
@@ -3351,6 +3580,13 @@ const App: React.FC = () => {
   const me = players.find(p => p.isHuman) || players[0];
   const enemies = players.filter(p => !p.isHuman);
   const isMyTurn = turnIndex === me.id;
+  // 当前选中的牌是否为「杀」类（含技能转化），用于超出攻击范围的目标灰显
+  const activeCard = selectedCardIds.length ? me.hand.find(c => c.id === selectedCardIds[0]) : undefined;
+  const slashLikeActive = !!activeCard && (
+    activeCard.name === CardName.SHA ||
+    (me.hero.name === '赵云' && activeCard.name === CardName.SHAN) ||
+    (me.hero.name === '关羽' && [Suit.HEART, Suit.DIAMOND].includes(activeCard.suit))
+  );
 
   return (
     <div className={`h-screen w-full flex flex-col overflow-hidden relative font-serif ${theme === 'light' ? 'parchment-bg' : 'bg-[#1c1c1c]'}`}>
@@ -4023,6 +4259,8 @@ const App: React.FC = () => {
             const radius = 42; // 半径百分比
             const left = centerX - radius * Math.cos(radian);
             const top = radius * Math.sin(radian) * 0.6; // 压缩垂直方向
+            // 选中【杀】类牌时，超出攻击范围的目标灰显
+            const outOfRange = !p.isDead && isSelectingTarget && slashLikeActive && getDistance(me.id, p.id) > getAttackRange(me);
             
             return (
             <div 
@@ -4086,6 +4324,7 @@ const App: React.FC = () => {
                 }
                 ${damageAnimTarget === p.id ? 'animate-damage-shake' : ''}
                 ${healAnimTarget === p.id ? 'animate-heal-pulse' : ''}
+                ${outOfRange ? 'opacity-40 saturate-[0.6]' : ''}
               `}>
                 {/* 伤害数字显示 */}
                 {damageNumber && damageNumber.targetId === p.id && (
@@ -4214,10 +4453,40 @@ const App: React.FC = () => {
                     </div>
                   )}
                   
+                  {/* 装备区 */}
+                  {(p.equipment?.weapon || p.equipment?.armor || p.equipment?.horsePlus || p.equipment?.horseMinus) && (
+                    <div className="flex items-center justify-center gap-1 mb-1 flex-wrap max-w-[120px] mx-auto">
+                      {p.equipment?.weapon && (
+                        <span className="px-1 py-0.5 rounded-[3px] bg-[#2b3a2b]/80 border border-[#6a8a6a]/50 text-[#cfe8cf] text-[10px] leading-none" title={`武器：${p.equipment.weapon.name}`}>
+                          {p.equipment.weapon.name.length > 3 ? p.equipment.weapon.name.slice(0, 3) : p.equipment.weapon.name}
+                        </span>
+                      )}
+                      {p.equipment?.armor && (
+                        <span className="px-1 py-0.5 rounded-[3px] bg-[#2b3340]/80 border border-[#6a8296]/50 text-[#cfe0ee] text-[10px] leading-none" title={`防具：${p.equipment.armor.name}`}>
+                          {p.equipment.armor.name}
+                        </span>
+                      )}
+                      {p.equipment?.horsePlus && (
+                        <span className="px-1 py-0.5 rounded-[3px] bg-[#2b3346]/80 border border-[#6a7ea0]/50 text-[#d0dcf0] text-[10px] leading-none" title={`防御马：${p.equipment.horsePlus.name}`}>
+                          +1马
+                        </span>
+                      )}
+                      {p.equipment?.horseMinus && (
+                        <span className="px-1 py-0.5 rounded-[3px] bg-[#402b33]/80 border border-[#a06a7e]/50 text-[#f0d0dc] text-[10px] leading-none" title={`进攻马：${p.equipment.horseMinus.name}`}>
+                          -1马
+                        </span>
+                      )}
+                    </div>
+                  )}
+
                   {/* 手牌数 */}
-                  <div className="flex items-center justify-center gap-1 text-xs mt-1">
+                  <div className="flex items-center justify-center gap-2 text-xs mt-1">
                     <span className="text-stone-500">手牌</span>
                     <span className="text-yellow-500 font-bold">{p.hand.length}</span>
+                    <span className="text-stone-500">距离</span>
+                    <span className={`font-bold ${getDistance(me.id, p.id) <= getAttackRange(me) ? 'text-emerald-400' : 'text-stone-500'}`}>
+                      {getDistance(me.id, p.id)}
+                    </span>
                   </div>
                 </div>
               </div>
@@ -4618,6 +4887,35 @@ const App: React.FC = () => {
                   <span className={theme === 'dark' ? 'text-stone-500' : 'text-[#8a8680]'}>技能</span>
                   <span className={`font-bold ${theme === 'dark' ? 'text-[#8fb4d9]' : 'text-[#3a6a8f]'}`}>{me.hero.skillName}</span>
                 </div>
+                <div className="flex items-center gap-1">
+                  <span className={theme === 'dark' ? 'text-stone-500' : 'text-[#8a8680]'}>范围</span>
+                  <span className="text-emerald-400 font-bold">{getAttackRange(me)}</span>
+                </div>
+              </div>
+
+              {/* 我的装备区 */}
+              <div className="flex items-center gap-1.5 mt-2 flex-wrap">
+                <span className={`text-xs ${theme === 'dark' ? 'text-stone-500' : 'text-[#8a8680]'}`}>装备</span>
+                {me.equipment?.weapon ? (
+                  <span className="px-2 py-0.5 rounded-[4px] bg-[#2b3a2b]/80 border border-[#6a8a6a]/60 text-[#cfe8cf] text-[11px] font-bold" title={EQUIP_META[me.equipment.weapon.name]?.desc}>
+                    {me.equipment.weapon.name}({EQUIP_META[me.equipment.weapon.name]?.range ?? 1})
+                  </span>
+                ) : (
+                  <span className={`px-2 py-0.5 rounded-[4px] border border-dashed text-[11px] ${theme === 'dark' ? 'border-[#4a3f33] text-stone-600' : 'border-[#c4b8a8] text-[#b0aba5]'}`}>武器</span>
+                )}
+                {me.equipment?.armor ? (
+                  <span className="px-2 py-0.5 rounded-[4px] bg-[#2b3340]/80 border border-[#6a8296]/60 text-[#cfe0ee] text-[11px] font-bold" title={EQUIP_META[me.equipment.armor.name]?.desc}>
+                    {me.equipment.armor.name}
+                  </span>
+                ) : (
+                  <span className={`px-2 py-0.5 rounded-[4px] border border-dashed text-[11px] ${theme === 'dark' ? 'border-[#4a3f33] text-stone-600' : 'border-[#c4b8a8] text-[#b0aba5]'}`}>防具</span>
+                )}
+                {me.equipment?.horseMinus && (
+                  <span className="px-2 py-0.5 rounded-[4px] bg-[#402b33]/80 border border-[#a06a7e]/60 text-[#f0d0dc] text-[11px] font-bold">-1马</span>
+                )}
+                {me.equipment?.horsePlus && (
+                  <span className="px-2 py-0.5 rounded-[4px] bg-[#2b3346]/80 border border-[#6a7ea0]/60 text-[#d0dcf0] text-[11px] font-bold">+1马</span>
+                )}
               </div>
             </div>
           </div>

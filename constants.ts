@@ -1,8 +1,30 @@
-﻿import { Hero, Card, CardName, CardType, Suit } from './types';
+﻿import { Hero, Card, CardName, CardType, Suit, EquipmentSlot } from './types';
 
 export const BGM_URL = "./背景音乐.mp3"; // 本地背景音乐文件
 
 // 音效已在 src/audio/sfx.ts 中改为本地 WebAudio 合成，不再依赖外部 CDN
+
+/** 装备元数据：槽位、攻击范围、描述、卡面配色 */
+export interface EquipMeta {
+  slot: EquipmentSlot;
+  range?: number; // 仅武器：攻击范围
+  desc: string;
+  face: string;
+  accent: string;
+}
+
+export const EQUIP_META: Partial<Record<CardName, EquipMeta>> = {
+  [CardName.QINGGANG]: { slot: 'weapon', range: 2, desc: '攻击范围2。你使用的【杀】无视目标防具。', face: 'from-[#eef1f6] via-[#e3e8f1] to-[#cfd7e4]', accent: '#3c5a80' },
+  [CardName.QINGLONG]: { slot: 'weapon', range: 3, desc: '攻击范围3。', face: 'from-[#eef7f0] via-[#e0efe4] to-[#c8dfd0]', accent: '#2f6e52' },
+  [CardName.FANGTIAN]: { slot: 'weapon', range: 4, desc: '攻击范围4。', face: 'from-[#f6efe2] via-[#ece0cc] to-[#dcc9a8]', accent: '#8a6a2a' },
+  [CardName.ZHUGE]: { slot: 'weapon', range: 1, desc: '攻击范围1。出牌阶段你可以使用任意数量的【杀】。', face: 'from-[#f2ece6] via-[#e7ddd2] to-[#d6c7b6]', accent: '#7a5230' },
+  [CardName.BAGUA]: { slot: 'armor', desc: '需要使用【闪】时，可进行一次判定：红色则视为你打出【闪】。', face: 'from-[#f1f5f2] via-[#e3ebe6] to-[#cfdad3]', accent: '#3f6b58' },
+  [CardName.RENWANG]: { slot: 'armor', desc: '黑色的【杀】对你无效。', face: 'from-[#f4f1ed] via-[#e9e4dd] to-[#d9d1c6]', accent: '#5b5148' },
+  [CardName.CHITU]: { slot: 'horseMinus', desc: '进攻马：你计算与其他角色的距离-1。', face: 'from-[#fbeeee] via-[#f4dcdc] to-[#e7c3c3]', accent: '#9a3a34' },
+  [CardName.ZIXING]: { slot: 'horseMinus', desc: '进攻马：你计算与其他角色的距离-1。', face: 'from-[#f3eefb] via-[#e8e0f4] to-[#d6c9e8]', accent: '#5b3d8f' },
+  [CardName.DILU]: { slot: 'horsePlus', desc: '防御马：其他角色计算与你的距离+1。', face: 'from-[#eef2fb] via-[#e0e7f6] to-[#cbd6ea]', accent: '#3c5a90' },
+  [CardName.JUEYING]: { slot: 'horsePlus', desc: '防御马：其他角色计算与你的距离+1。', face: 'from-[#f0f1f3] via-[#e4e6ea] to-[#ced2d8]', accent: '#4a4f58' },
+};
 
 export const HEROES: Hero[] = [
   {
@@ -189,6 +211,24 @@ const generateDeck = (): Card[] => {
 
   // 闪电
   addCard(CardName.SHANDIAN, CardType.SCROLL, Suit.SPADE, 'A', 1, '延时锦囊，出牌阶段对自己使用，将此牌横置于判定区。判定阶段进行判定：若判定结果为黑桃2-9，则目标角色受到3点雷电伤害，并将此牌置入弃牌堆；否则将此牌移动到下一个角色的判定区。', 'from-purple-700 to-indigo-900');
+
+  // —— 装备牌 ——
+  const addEquip = (name: CardName, suit: Suit, rank: string) => {
+    const meta = EQUIP_META[name]!;
+    addCard(name, CardType.EQUIPMENT, suit, rank, 1, meta.desc, meta.face);
+  };
+  addEquip(CardName.QINGGANG, Suit.SPADE, '6');
+  addEquip(CardName.QINGLONG, Suit.SPADE, '5');
+  addEquip(CardName.FANGTIAN, Suit.DIAMOND, 'Q');
+  addEquip(CardName.ZHUGE, Suit.CLUB, 'A');
+  addEquip(CardName.ZHUGE, Suit.DIAMOND, 'A');
+  addEquip(CardName.BAGUA, Suit.SPADE, '2');
+  addEquip(CardName.BAGUA, Suit.CLUB, '2');
+  addEquip(CardName.RENWANG, Suit.CLUB, '8');
+  addEquip(CardName.CHITU, Suit.HEART, 'K');
+  addEquip(CardName.ZIXING, Suit.DIAMOND, 'K');
+  addEquip(CardName.DILU, Suit.CLUB, 'K');
+  addEquip(CardName.JUEYING, Suit.SPADE, 'K');
 
   return shuffle(deck);
 };
