@@ -2,28 +2,7 @@
 
 export const BGM_URL = "./背景音乐.mp3"; // 本地背景音乐文件
 
-export const SOUNDS: Record<string, string> = {
-  [CardName.SHA]: "https://cdn.pixabay.com/audio/2022/03/15/audio_244e0f6319.mp3", // Sword slash
-  [CardName.SHAN]: "https://cdn.pixabay.com/audio/2022/03/24/audio_349666f747.mp3", // Whoosh
-  [CardName.TAO]: "https://cdn.pixabay.com/audio/2022/03/10/audio_c874288094.mp3", // Magic heal/chime
-  [CardName.JUEDOU]: "https://cdn.pixabay.com/audio/2022/01/18/audio_d0a13f69d0.mp3", // Clash
-  [CardName.NANMAN]: "https://cdn.pixabay.com/audio/2022/03/19/audio_827cb63a23.mp3", // War horn/drum
-  [CardName.WUZHONG]: "https://cdn.pixabay.com/audio/2022/03/15/audio_78385627b0.mp3", // Mystery sound
-  [CardName.WUXIE]: "https://cdn.pixabay.com/audio/2022/03/16/audio_417d9f70cf.mp3", // Counter spell
-  [CardName.WANJIAN]: "https://cdn.pixabay.com/audio/2022/02/08/audio_437d3a3773.mp3", // Volley of arrows
-  [CardName.SHUNSHOU]: "https://cdn.pixabay.com/audio/2022/03/17/audio_51cc5e0d3a.mp3", // Sneak
-  [CardName.GUOHE]: "https://cdn.pixabay.com/audio/2022/03/18/audio_771c62e928.mp3", // Destroy
-  [CardName.LESI]: "https://cdn.pixabay.com/audio/2022/03/14/audio_c13d3d6e2a.mp3", // Imprison
-  [CardName.HUOGONG]: "https://cdn.pixabay.com/audio/2022/03/10/audio_c874288094.mp3", // Fire
-  [CardName.TIESUO]: "https://cdn.pixabay.com/audio/2022/03/15/audio_78385627b0.mp3", // Chain
-  [CardName.JIU]: "https://cdn.pixabay.com/audio/2022/03/10/audio_c874288094.mp3", // Wine
-  [CardName.BINGLIANG]: "https://cdn.pixabay.com/audio/2022/03/14/audio_c13d3d6e2a.mp3", // Supply
-  [CardName.WUGU]: "https://cdn.pixabay.com/audio/2022/03/15/audio_78385627b0.mp3", // Harvest/Abundant
-  [CardName.TAOYUAN]: "https://cdn.pixabay.com/audio/2022/03/10/audio_c874288094.mp3", // Peach Garden/Heal
-  'equip': "https://cdn.pixabay.com/audio/2022/03/22/audio_d17676e10c.mp3",
-  'damage': "https://cdn.pixabay.com/audio/2022/03/10/audio_5103704289.mp3", // Impact
-  'death': "https://cdn.pixabay.com/audio/2021/08/09/audio_03d6d0e80a.mp3" // Sad gong
-};
+// 音效已在 src/audio/sfx.ts 中改为本地 WebAudio 合成，不再依赖外部 CDN
 
 export const HEROES: Hero[] = [
   {

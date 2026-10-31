@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo, memo } from 'react';
 import { Hero, Player, Card, GamePhase, CardName, LogEntry, Identity, Suit, CardType } from './types';
-import { HEROES, INITIAL_DECK, BGM_URL, SOUNDS } from './constants';
+import { HEROES, INITIAL_DECK, BGM_URL } from './constants';
+import { playSfx, SFX_FOR_NAME } from './src/audio/sfx';
 import CardComponent from './components/CardComponent';
 import Avatar from './components/Avatar';
 import { useTheme } from './src/contexts/ThemeContext';
@@ -171,7 +172,6 @@ const App: React.FC = () => {
   // Audio
   const [isMuted, setIsMuted] = useState<boolean>(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
-  const sfxRef = useRef<HTMLAudioElement | null>(null);
   const logsEndRef = useRef<HTMLDivElement>(null);
   const logsContainerRef = useRef<HTMLDivElement>(null);
   const isUserScrollingRef = useRef<boolean>(false);
@@ -208,14 +208,11 @@ const App: React.FC = () => {
     });
   }, []);
 
+  // 音效：本地 WebAudio 合成，无外部 CDN 依赖
   const playSound = (key: string) => {
-    const url = SOUNDS[key];
-    if (url) {
-      if (!sfxRef.current) sfxRef.current = new Audio();
-      sfxRef.current.src = url;
-      sfxRef.current.volume = 0.6;
-      sfxRef.current.play().catch(e => console.warn('SFX play failed', e));
-    }
+    if (isMuted) return;
+    const kind = SFX_FOR_NAME[key];
+    if (kind) playSfx(kind);
   };
 
   // 从ref中获取最新的玩家信息
