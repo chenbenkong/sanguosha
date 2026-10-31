@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback, useMemo, memo } from '
 import { Hero, Player, Card, GamePhase, CardName, LogEntry, Identity, Suit, CardType } from './types';
 import { HEROES, INITIAL_DECK, BGM_URL, EQUIP_META } from './constants';
 import { playSfx, SFX_FOR_NAME } from './src/audio/sfx';
+import { playCardVoice, playSkillVoice, playDeathVoice, hasCardVoice } from './src/audio/voice';
 import CardComponent from './components/CardComponent';
 import Avatar from './components/Avatar';
 import { useTheme } from './src/contexts/ThemeContext';
@@ -191,6 +192,8 @@ const App: React.FC = () => {
 
   // Audio
   const [isMuted, setIsMuted] = useState<boolean>(false);
+  const isMutedRef = useRef<boolean>(false);
+  useEffect(() => { isMutedRef.current = isMuted; }, [isMuted]);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const logsEndRef = useRef<HTMLDivElement>(null);
   const logsContainerRef = useRef<HTMLDivElement>(null);
@@ -228,9 +231,10 @@ const App: React.FC = () => {
     });
   }, []);
 
-  // 音效：本地 WebAudio 合成，无外部 CDN 依赖
-  const playSound = (key: string) => {
+  // 音效：优先播放角色/卡牌台词，缺失时回退到本地合成音效
+  const playSound = (key: string, gender: 'male' | 'female' = 'male') => {
     if (isMuted) return;
+    if (hasCardVoice(key) && playCardVoice(key, gender)) return;
     const kind = SFX_FOR_NAME[key];
     if (kind) playSfx(kind);
   };
@@ -398,7 +402,7 @@ const App: React.FC = () => {
       addLog(`${player.hero.name} 弃置了旧装备【${prev.name}】`, 'info');
       triggerXiaoji(playerId);
     }
-    playSound('equip');
+    playSound(card.name, player.hero.gender);
     addLog(`${player.hero.name} 装备了【${card.name}】${meta.range ? `（攻击范围 ${meta.range}）` : ''}`, 'success');
     return true;
   }, [getPlayer, mutateHand, updatePlayer, triggerXiaoji]);
@@ -564,7 +568,10 @@ const App: React.FC = () => {
 
   const handleDeath = async (victimId: number, killerId?: number) => {
     const victim = getPlayer(victimId)!;
-    playSound('death');
+    // 优先播放武将阵亡台词，缺失时回退合成音
+    if (!isMuted) {
+      if (!playDeathVoice(victim.hero.id)) playSound('death');
+    }
     addLog(`${victim.hero.name} 阵亡！身份是：【${victim.identity}】`, 'danger');
     
     // 先更新状态
@@ -1721,16 +1728,17 @@ const App: React.FC = () => {
     }
   };
 
-  const showCardVisual = (card: Card, playerName: string, duration: number = 1200) => {
+  const showCardVisual = (card: Card, playerName: string, duration: number = 1200, gender: 'male' | 'female' = 'male') => {
     setVisualCard({ card, playerName });
     // Play sound based on card name
-    playSound(card.name);
+    playSound(card.name, gender);
     // 减少显示时间，从2秒减少到1.2秒
     setTimeout(() => setVisualCard(null), duration / speedRef.current);
   };
 
   // 技能发动横幅：武将名 + 技能名 金色大字短暂展示
   const showSkillBanner = useCallback((hero: string, skill: string) => {
+    if (!isMutedRef.current) playSkillVoice(skill);
     if (skillBannerTimerRef.current) clearTimeout(skillBannerTimerRef.current);
     setSkillBanner({ hero, skill, id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6) });
     skillBannerTimerRef.current = setTimeout(() => setSkillBanner(null), 1500);
@@ -1761,14 +1769,14 @@ const App: React.FC = () => {
       : judgmentCard;
     const rankDisplay = judgmentCard.rank.replace(/\d+$/, '');
     addLog(`⚖️ ${playerName} 的【${reason}】判定：${judgmentCard.suit} ${rankDisplay}（判定牌：【${judgmentCard.name}】）${isXiaoqiao && finalCard.suit !== judgmentCard.suit ? '，触发「红颜」视为红桃' : ''}`, 'warning');
-    showCardVisual(finalCard, `${playerName} 判定`, 1500);
+    showCardVisual(finalCard, `${playerName} 判定`, 1500, getPlayer(playerId)?.hero.gender);
     await delay(1600);
     return finalCard;
   };
 
   const playCard = (playerId: number, card: Card) => {
     discardCards(playerId, [card]);
-    showCardVisual(card, getPlayer(playerId)?.hero.name || '');
+    showCardVisual(card, getPlayer(playerId)?.hero.name || '', 1200, getPlayer(playerId)?.hero.gender);
   };
 
   const useCardEffect = async (source: Player, targets: Player[], card: Card) => {
