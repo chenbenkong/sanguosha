@@ -264,7 +264,8 @@ const App: React.FC = () => {
       audioRef.current.loop = true;
       audioRef.current.volume = isMuted ? 0 : 0.3;
     }
-    audioRef.current.play().catch(e => console.log("Audio play failed, waiting for interaction", e));
+    // 浏览器自动播放策略会拦截无交互的播放请求（控制台出现 ERR_ABORTED），静默忽略即可
+    audioRef.current.play().catch(() => {});
   };
 
   // 切换静音状态
@@ -509,11 +510,6 @@ const App: React.FC = () => {
       });
     }
   }, [logs]);
-
-  // 组件挂载时初始化音频（在所有界面都能播放背景音乐）
-  useEffect(() => {
-    initAudio();
-  }, []);
 
   // Main Loop Effect
   useEffect(() => {
@@ -2861,7 +2857,7 @@ const App: React.FC = () => {
               
               {/* 点兵出征按钮 */}
               <button 
-                onClick={() => setScreen('select')}
+                onClick={() => { initAudio(); setScreen('select'); }}
                 className="group relative"
               >
                 {/* 按钮外发光 - 白天模式更强 */}
