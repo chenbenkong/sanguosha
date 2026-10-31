@@ -39,7 +39,7 @@ export enum CardName {
   BAGUA = '八卦阵',
   RENWANG = '仁王盾',
   CHITU = '赤兔',
-  ZIXING = '紫骍',
+  DAWAN = '大宛',
   DILU = '的卢',
   JUEYING = '绝影',
 }

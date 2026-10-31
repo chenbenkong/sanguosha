@@ -130,6 +130,11 @@ const App: React.FC = () => {
   // 出牌阶段【杀】的使用次数（有诸葛连弩则不限）
   const slashUsageRef = useRef<Record<number, number>>({});
 
+  // 孙尚香「结姻」技能状态
+  const [isJieyinMode, setIsJieyinMode] = useState<boolean>(false);
+  const [jieyinTarget, setJieyinTarget] = useState<number | null>(null);
+  const [hasUsedJieyin, setHasUsedJieyin] = useState<boolean>(false);
+
   // 战绩统计（localStorage 持久化）
   const [stats, setStats] = useState<{ games: number; wins: number; losses: number }>(() => {
     try {
@@ -268,13 +273,35 @@ const App: React.FC = () => {
     return false;
   };
 
-  const pickTargetByIdentity = (ai: Player) => {
-    const candidates = players.filter(p => !p.isDead && p.id !== ai.id && isEnemy(ai, p));
-    const revealed = candidates.filter(p => p.isRevealed);
-    const pool = revealed.length ? revealed : candidates;
-    if (pool.length === 0) return null;
-    const sorted = [...pool].sort((a, b) => a.hp - b.hp);
-    return sorted[0];
+  // --- 身份推理 ---
+  // AI 依据公开信息（阵亡亮明、攻击主公、救援主公）推测他人身份
+  const identityGuessRef = useRef<Record<number, Identity>>({});
+  const guessIdentity = (p: Player): Identity | undefined => (p.isRevealed ? p.identity : identityGuessRef.current[p.id]);
+  const pickWeakest = (pool: Player[]) => (pool.length ? [...pool].sort((a, b) => a.hp - b.hp)[0] : null);
+
+  // 按自身阵营选择最有价值的目标：反贼集火主公，忠臣/主公先打反贼，内奸先清反贼并留主公
+  const pickAITarget = (ai: Player): Player | null => {
+    const others = playersRef.current.filter(p => !p.isDead && p.id !== ai.id);
+    if (others.length === 0) return null;
+    const lord = others.find(p => p.identity === Identity.ZHUGONG);
+    const rebels = others.filter(p => guessIdentity(p) === Identity.FANZEI);
+
+    if (ai.identity === Identity.FANZEI) {
+      // 反贼：优先集火主公（主公身份始终公开）
+      if (lord && lord.id !== ai.id) return lord;
+      return pickWeakest(others.filter(p => guessIdentity(p) !== Identity.FANZEI)) ?? pickWeakest(others);
+    }
+
+    if (ai.identity === Identity.ZHONGCHEN || ai.identity === Identity.ZHUGONG) {
+      if (rebels.length) return pickWeakest(rebels);
+      const suspects = others.filter(p => guessIdentity(p) !== Identity.ZHONGCHEN && guessIdentity(p) !== Identity.ZHUGONG);
+      return pickWeakest(suspects) ?? pickWeakest(others.filter(p => guessIdentity(p) !== Identity.ZHUGONG));
+    }
+
+    // 内奸：先帮主公清反贼，最后才动主公
+    if (rebels.length) return pickWeakest(rebels);
+    const nonLord = others.filter(p => p.identity !== Identity.ZHUGONG);
+    return pickWeakest(nonLord) ?? (lord && others.length === 1 ? lord : null);
   };
 
   // --- 摸牌 ---
@@ -656,7 +683,27 @@ const App: React.FC = () => {
         setIsRendeMode(false);
         setRendeSelectedCardIds([]);
         setRendeSelectedTarget(null);
+        // 重置孙尚香结姻
+        setIsJieyinMode(false);
+        setJieyinTarget(null);
+        setHasUsedJieyin(false);
         addLog(`>>> ${currentPlayer.hero.name} (${currentPlayer.isHuman ? '你' : 'AI'}) 回合开始 <<<`, 'info');
+
+        // 甄姬「洛神」：回合开始时判定，黑色则获得该判定牌并可继续（最多 3 次）
+        if (currentPlayer.hero.name === '甄姬') {
+          for (let i = 0; i < 3; i++) {
+            const jc = await performJudgment(currentPlayer.id, '洛神');
+            if (!jc) break;
+            if (jc.suit !== Suit.SPADE && jc.suit !== Suit.CLUB) {
+              addLog(`「洛神」判定为红色，结束`, 'info');
+              break;
+            }
+            mutateHand(currentPlayer.id, hand => [...hand, jc]);
+            addLog(`${currentPlayer.hero.name} 发动「洛神」，获得【${jc.name}】`, 'skill');
+            showSkillBanner(currentPlayer.hero.name, '洛神');
+            await delay(400);
+          }
+        }
 
         // 闪电判定：判定牌为黑桃2-9时受到3点雷电伤害，否则传递给下一名角色
         if (currentPlayer.isShandian) {
@@ -1203,6 +1250,41 @@ const App: React.FC = () => {
 
   const handleTargetClick = async (targetId: number) => {
     if (dyingState || isProcessing) return;
+
+    // 孙尚香「结姻」：弃两张手牌，与一名已受伤的男性角色各回复 1 点体力
+    if (isJieyinMode) {
+      const meJ = players.find(p => p.isHuman) || players[0];
+      const target = players.find(p => p.id === targetId);
+      if (!target || target.isDead || target.id === meJ.id) return;
+      if (target.hero.gender !== 'male') {
+        addLog(`【${target.hero.name}】不是男性角色，无法结姻`, 'warning');
+        setTimeout(() => { clickGuard.current = false; }, 200);
+        return;
+      }
+      if (target.hp >= target.maxHp) {
+        addLog(`【${target.hero.name}】未受伤，无法结姻`, 'warning');
+        setTimeout(() => { clickGuard.current = false; }, 200);
+        return;
+      }
+      if (meJ.hand.length < 2) {
+        addLog('「结姻」需要弃置两张手牌', 'warning');
+        setIsJieyinMode(false);
+        setTimeout(() => { clickGuard.current = false; }, 200);
+        return;
+      }
+      const cardsToDiscard = meJ.hand.slice(0, 2);
+      discardCards(meJ.id, cardsToDiscard);
+      const myHp = Math.min(meJ.maxHp, meJ.hp + 1);
+      const tgHp = Math.min(target.maxHp, target.hp + 1);
+      updatePlayer(meJ.id, { hp: myHp });
+      updatePlayer(target.id, { hp: tgHp });
+      addLog(`${meJ.hero.name} 发动「结姻」，弃置两张牌，与 ${target.hero.name} 各回复 1 点体力`, 'skill');
+      showSkillBanner(meJ.hero.name, '结姻');
+      setHasUsedJieyin(true);
+      setIsJieyinMode(false);
+      setTimeout(() => { clickGuard.current = false; }, 200);
+      return;
+    }
     
     // 处理离间技能的目标选择
     if (isLijianMode && lijianSelectedCardId) {
@@ -1292,10 +1374,10 @@ const App: React.FC = () => {
 
     if (!target || !card || target.isDead) return;
 
-    // 距离限制：顺手牵羊 / 兵粮寸断 仅限距离 1
+    // 距离限制：顺手牵羊 / 兵粮寸断 仅限距离 1（黄月英「奇才」无距离限制）
     if (card.name === CardName.SHUNSHOU || card.name === CardName.BINGLIANG) {
       const dist = getDistance(me.id, target.id);
-      if (dist > 1) {
+      if (dist > 1 && me.hero.name !== '黄月英') {
         addLog(`【${card.name}】只能对距离为1的角色使用（当前距离 ${dist}）`, 'warning');
         setTimeout(() => { clickGuard.current = false; }, 200);
         return;
@@ -1842,6 +1924,10 @@ const App: React.FC = () => {
         setTimeout(() => setHealNumber(null), 1000);
 
         updatePlayer(target.id, { hp: newHp });
+        // 身份推理：给主公回血者视为忠臣
+        if (target.identity === Identity.ZHUGONG && source.id !== target.id) {
+          identityGuessRef.current[source.id] = Identity.ZHONGCHEN;
+        }
         // 显示谁使用桃救援了谁，以及救援后的体力
         if (source.id === target.id) {
           addLog(`${source.hero.name} 使用了【桃】自救，当前体力: ${newHp}/${target.maxHp}`, 'success');
@@ -2791,6 +2877,16 @@ const App: React.FC = () => {
       updatePlayer(victimId, { hp: newHp });
       addLog(`${victim.hero.name} 受到 ${finalAmount} 点伤害！当前体力: ${newHp}/${victim.maxHp}`, 'danger');
 
+      // 身份推理：攻击主公者视为反贼；击杀已亮明反贼者视为忠臣
+      if (sourceId !== victimId) {
+        if (victim.identity === Identity.ZHUGONG) {
+          identityGuessRef.current[sourceId] = Identity.FANZEI;
+        } else if (victim.isRevealed && victim.identity === Identity.FANZEI) {
+          const srcRole = getPlayer(sourceId)?.identity;
+          if (srcRole !== Identity.FANZEI) identityGuessRef.current[sourceId] = Identity.ZHONGCHEN;
+        }
+      }
+
       // 曹操的「奸雄」技能：受到伤害后，你可以获得造成伤害的牌
       if (victim.hero.name === '曹操' && damageCard) {
         // 曹操受到伤害，获得造成伤害的牌
@@ -2898,10 +2994,28 @@ const App: React.FC = () => {
       }
     }
 
-    const picked = pickTargetByIdentity(aiPlayer);
+    // 孙尚香「结姻」：自身受伤且存在已受伤男性时，弃两张牌双方回血
+    if (aiPlayer.hero.name === '孙尚香' && aiPlayer.hand.length >= 2 && aiPlayer.hp < aiPlayer.maxHp) {
+      const male = players.find(p => !p.isDead && p.id !== aiPlayer.id && p.hero.gender === 'male' && p.hp < p.maxHp);
+      if (male) {
+        const cost = aiPlayer.hand.slice(0, 2);
+        discardCards(aiPlayer.id, cost);
+        updatePlayer(aiPlayer.id, { hp: aiPlayer.hp + 1 });
+        updatePlayer(male.id, { hp: Math.min(male.maxHp, male.hp + 1) });
+        addLog(`${aiPlayer.hero.name} 发动「结姻」，弃置两张牌，与 ${male.hero.name} 各回复 1 点体力`, 'skill');
+        showSkillBanner(aiPlayer.hero.name, '结姻');
+        await delay(1200);
+      }
+    }
+
+    const picked = pickAITarget(aiPlayer);
     targetId = picked ? picked.id : -1;
     // 距离为 1 的可达敌人（顺手/兵粮/杀 使用）
     const adjacentEnemy = players.find(p => !p.isDead && p.id !== aiPlayer.id && isEnemy(aiPlayer, p) && getDistance(aiPlayer.id, p.id) <= 1);
+    // 黄月英「奇才」：使用锦囊牌无距离限制
+    const shunshouTarget = aiPlayer.hero.name === '黄月英'
+      ? players.find(p => !p.isDead && p.id !== aiPlayer.id && isEnemy(aiPlayer, p))
+      : adjacentEnemy;
     // 攻击范围内可打的敌人
     const reachableEnemy = players
       .filter(p => !p.isDead && p.id !== aiPlayer.id && isEnemy(aiPlayer, p) && canReach(aiPlayer, p))
@@ -2935,10 +3049,10 @@ const App: React.FC = () => {
       }
     }
     
-    // 5. Play Shunshou Qianyang（仅限距离 1）
+    // 5. Play Shunshou Qianyang（仅限距离 1；黄月英「奇才」无视距离）
     const shunshou = aiPlayer.hand.find(c => c.name === CardName.SHUNSHOU);
-    if (shunshou && adjacentEnemy) {
-      await useCardEffect(aiPlayer, [adjacentEnemy], shunshou);
+    if (shunshou && shunshouTarget) {
+      await useCardEffect(aiPlayer, [shunshouTarget], shunshou);
       await delay(1500);
     }
     
@@ -2980,10 +3094,10 @@ const App: React.FC = () => {
       }
     }
 
-    // 10. Play Bingliang Cunduan（仅限距离 1）
+    // 10. Play Bingliang Cunduan（仅限距离 1；黄月英「奇才」无视距离）
     const bingliang = aiPlayer.hand.find(c => c.name === CardName.BINGLIANG);
-    if (bingliang && adjacentEnemy) {
-      await useCardEffect(aiPlayer, [adjacentEnemy], bingliang);
+    if (bingliang && shunshouTarget) {
+      await useCardEffect(aiPlayer, [shunshouTarget], bingliang);
       await delay(1500);
     }
 
@@ -3329,7 +3443,7 @@ const App: React.FC = () => {
                   <ul className="text-sm space-y-1.5">
                     <li><span className="text-[#e8cf94] font-bold">基本牌</span>：杀（攻击）、闪（抵消杀）、桃（回血）、酒（杀伤害+1 或濒死自救）</li>
                     <li><span className="text-[#e8cf94] font-bold">锦囊牌</span>：决斗、无中生有、南蛮入侵、万箭齐发、顺手牵羊、过河拆桥、无懈可击、火攻、铁索连环、五谷丰登、桃园结义、借刀杀人、乐不思蜀、兵粮寸断、闪电</li>
-                    <li><span className="text-[#e8cf94] font-bold">装备牌</span>：武器（青釭剑 / 青龙偃月刀 / 方天画戟 / 诸葛连弩）、防具（八卦阵 / 仁王盾）、坐骑（赤兔 / 紫骍 为 -1 进攻马，的卢 / 绝影 为 +1 防御马）。点击装备牌即刻上装</li>
+                    <li><span className="text-[#e8cf94] font-bold">装备牌</span>：武器（青釭剑 / 青龙偃月刀 / 方天画戟 / 诸葛连弩）、防具（八卦阵 / 仁王盾）、坐骑（赤兔 / 大宛 为 -1 进攻马，的卢 / 绝影 为 +1 防御马）。点击装备牌即刻上装</li>
                     <li><span className="text-[#e8cf94] font-bold">距离与范围</span>：默认攻击范围 1（左右相邻），装备武器可提升；【杀】无法打到范围外角色，顺手牵羊 / 兵粮寸断仅限距离 1</li>
                     <li><span className="text-[#e8cf94] font-bold">无懈可击</span>：仅在锦囊牌生效前打出响应，抵消其对一名角色的效果</li>
                     <li><span className="text-[#e8cf94] font-bold">铁索连环</span>：横置1-2名角色，被横置者受到属性伤害（如火攻）时伤害传导</li>
@@ -4083,22 +4197,22 @@ const App: React.FC = () => {
                        {me.hero.name === '甄姬' && (
                          <>
                            <p>• 需要出【闪】时，任意黑色手牌（♠♣）都可以当【闪】打出</p>
-                           <p>• 大大提升防御稳定性，弃牌时优先保留黑色牌</p>
-                           <p>• <span className="text-yellow-400">示例</span>：甄姬被打出【杀】，用一张黑桃【顺手牵羊】当【闪】抵消</p>
+                           <p>• 回合开始自动「洛神」：判定为黑色则获得该牌并可继续，最多 3 次</p>
+                           <p>• <span className="text-yellow-400">示例</span>：甄姬开局洛神连翻两张黑牌，手牌直接+2</p>
                          </>
                        )}
                        {me.hero.name === '黄月英' && (
                          <>
-                           <p>• 每使用一张锦囊牌，立即摸一张牌</p>
-                           <p>• 锦囊越多收益越大，可形成连锁过牌</p>
-                           <p>• <span className="text-yellow-400">示例</span>：黄月英使用【无中生有】摸两张，再因「集智」额外摸一张</p>
+                           <p>• 每使用一张锦囊牌，立即摸一张牌（集智）</p>
+                           <p>• 使用锦囊牌无距离限制（奇才），可越位顺手</p>
+                           <p>• <span className="text-yellow-400">示例</span>：黄月英用【顺手牵羊】偷取远位敌人的装备</p>
                          </>
                        )}
                        {me.hero.name === '孙尚香' && (
                          <>
-                           <p>• 当你失去装备区的牌时（替换、被拆、被偷），摸两张牌</p>
-                           <p>• 主动换装也能触发，装备即是过牌资源</p>
-                           <p>• <span className="text-yellow-400">示例</span>：孙尚香被【过河拆桥】拆掉武器，随即摸两张牌</p>
+                           <p>• 失去装备区的牌时摸两张（枭姬，换装/被拆/被偷都触发）</p>
+                           <p>• 弃两张手牌可与一名已受伤男性各回复 1 点体力（结姻，每回合一次）</p>
+                           <p>• <span className="text-yellow-400">示例</span>：孙尚香点「结姻」→ 点一名受伤男将，双方回血</p>
                          </>
                        )}
                        {me.hero.name === '张春华' && (
@@ -4536,7 +4650,7 @@ const App: React.FC = () => {
               
               {/* 玩家卡牌容器 - 统一深墨描金 */}
               <div
-                onClick={(isSelectingTarget || isLijianMode || (isRendeMode && rendeSelectedCardIds.length > 0) || (isJiedaoMode && !p.isDead)) ? () => handleTargetClick(p.id) : undefined}
+                onClick={(isSelectingTarget || isLijianMode || isJieyinMode || (isRendeMode && rendeSelectedCardIds.length > 0) || (isJiedaoMode && !p.isDead)) ? () => handleTargetClick(p.id) : undefined}
                 className={`
                 relative p-2 rounded-lg border-2
                 ${damageAnimTarget === p.id || healAnimTarget === p.id
@@ -4568,6 +4682,10 @@ const App: React.FC = () => {
                 }
                 ${isRendeMode && rendeSelectedTarget === p.id
                   ? 'ring-4 ring-green-500 scale-110'
+                  : ''
+                }
+                ${isJieyinMode && !p.isDead && p.hero.gender === 'male' && p.hp < p.maxHp
+                  ? 'ring-2 ring-emerald-500 cursor-pointer'
                   : ''
                 }
                 ${isJiedaoMode && (jiedaoWeaponTarget === p.id || jiedaoVictimTarget === p.id)
@@ -5414,6 +5532,33 @@ const App: React.FC = () => {
                          </button>
                        )}
                        
+                       {/* Sun Shangxiang's Jieyin Skill Button */}
+                       {players[0].hero.name === '孙尚香' && !isJieyinMode && !hasUsedJieyin && players[0].hand.length >= 2 && (
+                         <button
+                           onClick={() => {
+                             setIsJieyinMode(true);
+                             setJieyinTarget(null);
+                             addLog('请选择一名已受伤的男性角色（孙尚香「结姻」）...', 'info');
+                           }}
+                           className="bg-[#2b3a33] hover:bg-[#37493f] text-[#cfe8dc] px-5 py-2 rounded-lg border border-[#6a9a80]/70 hover:border-[#8fc39a] hover:text-white transition-colors font-ancient text-base shadow-lg"
+                         >
+                           结姻
+                         </button>
+                       )}
+
+                       {isJieyinMode && (
+                         <button
+                           onClick={() => {
+                             setIsJieyinMode(false);
+                             setJieyinTarget(null);
+                             addLog('取消了「结姻」技能', 'info');
+                           }}
+                           className="bg-[#221b16] hover:bg-[#2e2520] text-[#c8bda8] px-4 py-2 rounded-lg border border-[#6a5642] hover:border-[#c8a45c] hover:text-[#e8cf94] transition-colors font-ancient text-base shadow-lg"
+                         >
+                           取消结姻
+                         </button>
+                       )}
+
                        {/* Diaochan's Lijian Skill Button */}
                        {players[0].hero.name === '貂蝉' && !isLijianMode && !hasUsedLijian && (
                          <button 

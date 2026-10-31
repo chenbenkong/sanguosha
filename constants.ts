@@ -21,7 +21,7 @@ export const EQUIP_META: Partial<Record<CardName, EquipMeta>> = {
   [CardName.BAGUA]: { slot: 'armor', desc: '需要使用【闪】时，可进行一次判定：红色则视为你打出【闪】。', face: 'from-[#f1f5f2] via-[#e3ebe6] to-[#cfdad3]', accent: '#3f6b58' },
   [CardName.RENWANG]: { slot: 'armor', desc: '黑色的【杀】对你无效。', face: 'from-[#f4f1ed] via-[#e9e4dd] to-[#d9d1c6]', accent: '#5b5148' },
   [CardName.CHITU]: { slot: 'horseMinus', desc: '进攻马：你计算与其他角色的距离-1。', face: 'from-[#fbeeee] via-[#f4dcdc] to-[#e7c3c3]', accent: '#9a3a34' },
-  [CardName.ZIXING]: { slot: 'horseMinus', desc: '进攻马：你计算与其他角色的距离-1。', face: 'from-[#f3eefb] via-[#e8e0f4] to-[#d6c9e8]', accent: '#5b3d8f' },
+  [CardName.DAWAN]: { slot: 'horseMinus', desc: '进攻马：你计算与其他角色的距离-1。', face: 'from-[#f3eefb] via-[#e8e0f4] to-[#d6c9e8]', accent: '#5b3d8f' },
   [CardName.DILU]: { slot: 'horsePlus', desc: '防御马：其他角色计算与你的距离+1。', face: 'from-[#eef2fb] via-[#e0e7f6] to-[#cbd6ea]', accent: '#3c5a90' },
   [CardName.JUEYING]: { slot: 'horsePlus', desc: '防御马：其他角色计算与你的距离+1。', face: 'from-[#f0f1f3] via-[#e4e6ea] to-[#ced2d8]', accent: '#4a4f58' },
 };
@@ -166,8 +166,8 @@ export const HEROES: Hero[] = [
     maxHp: 3,
     avatarUrl: 'images/heroes/甄姬.jpg',
     description: '洛水佳人',
-    skillName: '倾国',
-    skillDesc: '你可以将一张黑色手牌当【闪】使用或打出。',
+    skillName: '倾国 / 洛神',
+    skillDesc: '倾国：你可以将一张黑色手牌当【闪】使用或打出。洛神：回合开始时进行判定，若为黑色你获得该判定牌并可继续判定（最多3次）。',
     gender: 'female',
   },
   {
@@ -177,8 +177,8 @@ export const HEROES: Hero[] = [
     maxHp: 3,
     avatarUrl: 'images/heroes/黄月英.jpg',
     description: '归隐的才女',
-    skillName: '集智',
-    skillDesc: '你使用锦囊牌时，可以摸一张牌。',
+    skillName: '集智 / 奇才',
+    skillDesc: '集智：你使用锦囊牌时摸一张牌。奇才：你使用锦囊牌无距离限制。',
     gender: 'female',
   },
   {
@@ -188,8 +188,8 @@ export const HEROES: Hero[] = [
     maxHp: 3,
     avatarUrl: 'images/heroes/孙尚香.jpg',
     description: '弓腰姬',
-    skillName: '枭姬',
-    skillDesc: '当你失去装备区里的牌时，你摸两张牌。',
+    skillName: '枭姬 / 结姻',
+    skillDesc: '枭姬：当你失去装备区的牌时摸两张牌。结姻：出牌阶段限一次，弃置两张手牌，与一名已受伤的男性角色各回复1点体力。',
     gender: 'female',
   },
   {
@@ -358,7 +358,7 @@ const generateDeck = (): Card[] => {
   addEquip(CardName.BAGUA, Suit.CLUB, '2');
   addEquip(CardName.RENWANG, Suit.CLUB, '8');
   addEquip(CardName.CHITU, Suit.HEART, 'K');
-  addEquip(CardName.ZIXING, Suit.DIAMOND, 'K');
+  addEquip(CardName.DAWAN, Suit.DIAMOND, 'K');
   addEquip(CardName.DILU, Suit.CLUB, 'K');
   addEquip(CardName.JUEYING, Suit.SPADE, 'K');
 

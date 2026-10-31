@@ -42,10 +42,45 @@ const CARD_THEMES: Record<string, { face: string; accent: string; ink: string }>
   '八卦阵': { face: 'from-[#f1f5f2] via-[#e3ebe6] to-[#cfdad3]', accent: '#3f6b58', ink: '#325545' },
   '仁王盾': { face: 'from-[#f4f1ed] via-[#e9e4dd] to-[#d9d1c6]', accent: '#5b5148', ink: '#4a413a' },
   '赤兔': { face: 'from-[#fbeeee] via-[#f4dcdc] to-[#e7c3c3]', accent: '#9a3a34', ink: '#7e2e29' },
-  '紫骍': { face: 'from-[#f3eefb] via-[#e8e0f4] to-[#d6c9e8]', accent: '#5b3d8f', ink: '#4a2f78' },
+  '大宛': { face: 'from-[#f3eefb] via-[#e8e0f4] to-[#d6c9e8]', accent: '#5b3d8f', ink: '#4a2f78' },
   '的卢': { face: 'from-[#eef2fb] via-[#e0e7f6] to-[#cbd6ea]', accent: '#3c5a90', ink: '#2f476f' },
   '绝影': { face: 'from-[#f0f1f3] via-[#e4e6ea] to-[#ced2d8]', accent: '#4a4f58', ink: '#3c4048' },
 };
+
+// 卡面插画（取自开源三国杀项目 noname 的官方风格卡图）
+const CARD_ART: Record<string, string> = {
+  '杀': 'images/cards/sha.png',
+  '闪': 'images/cards/shan.png',
+  '桃': 'images/cards/tao.png',
+  '酒': 'images/cards/jiu.png',
+  '决斗': 'images/cards/juedou.png',
+  '无中生有': 'images/cards/wuzhong.png',
+  '南蛮入侵': 'images/cards/nanman.png',
+  '万箭齐发': 'images/cards/wanjian.png',
+  '无懈可击': 'images/cards/wuxie.png',
+  '顺手牵羊': 'images/cards/shunshou.png',
+  '过河拆桥': 'images/cards/guohe.png',
+  '乐不思蜀': 'images/cards/lebu.png',
+  '火攻': 'images/cards/huogong.png',
+  '铁索连环': 'images/cards/tiesuo.png',
+  '兵粮寸断': 'images/cards/bingliang.png',
+  '五谷丰登': 'images/cards/wugu.png',
+  '桃园结义': 'images/cards/taoyuan.png',
+  '借刀杀人': 'images/cards/jiedao.png',
+  '闪电': 'images/cards/shandian.png',
+  '青釭剑': 'images/cards/qinggang.png',
+  '青龙偃月刀': 'images/cards/qinglong.png',
+  '方天画戟': 'images/cards/fangtian.png',
+  '诸葛连弩': 'images/cards/zhuge.png',
+  '八卦阵': 'images/cards/bagua.png',
+  '仁王盾': 'images/cards/renwang.png',
+  '赤兔': 'images/cards/chitu.png',
+  '大宛': 'images/cards/dawan.png',
+  '的卢': 'images/cards/dilu.png',
+  '绝影': 'images/cards/jueying.png',
+};
+
+const CARD_BACK = 'images/cards/card-back.jpg';
 
 const TYPE_STAMPS: Record<CardType, { label: string; color: string; border: string }> = {
   [CardType.BASIC]: { label: '基', color: '#8a4a2a', border: '#8a4a2a' },
@@ -54,34 +89,25 @@ const TYPE_STAMPS: Record<CardType, { label: string; color: string; border: stri
 };
 
 const CardComponent: React.FC<CardProps> = ({ card, onClick, disabled, selected, isHidden, small, canUseSkill = false, skillName = '' }) => {
-  // ===== 牌背：黑漆描金 =====
+  // ===== 牌背：真实牌背图 =====
   if (isHidden) {
     return (
       <div
         className={`
-          relative rounded-lg overflow-hidden card-shadow flex items-center justify-center
-          bg-gradient-to-br from-[#2b2320] via-[#221b18] to-[#161110]
-          border-2 border-[#8b7355]/60
+          relative rounded-lg overflow-hidden card-shadow
+          border-2 border-[#8b7355]/70
           ${small ? 'w-12 h-18' : 'w-20 h-28 md:w-24 md:h-36'}
           transition-transform duration-200
         `}
       >
-        {/* 云纹底纹 */}
-        <div className="absolute inset-0 opacity-20" style={{
-          backgroundImage: `url("data:image/svg+xml,%3Csvg width='40' height='40' viewBox='0 0 40 40' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M8 20 Q14 12 20 20 T32 20' stroke='%23d4af37' stroke-width='0.8' fill='none'/%3E%3C/svg%3E")`
-        }}></div>
-        {/* 双层描金内框 */}
-        <div className="absolute inset-1.5 border border-[#d4af37]/50 rounded"></div>
-        <div className="absolute inset-3 border border-[#d4af37]/25 rounded-sm"></div>
-        {/* 中心印章 */}
-        <div className="relative z-10 w-10 h-10 md:w-12 md:h-12 rounded-md rotate-[-4deg] flex items-center justify-center
-          bg-gradient-to-br from-[#9e2b25] to-[#7a1f1a] border border-[#d4af37]/60 shadow-lg">
-          <span className="font-ancient text-[#f3d9a4] text-xl md:text-2xl leading-none">殺</span>
-        </div>
-        {/* 底部小字 */}
-        <div className="absolute bottom-1.5 inset-x-0 text-center text-[8px] tracking-[0.3em] text-[#d4af37]/50">
-          SANGUOSHA
-        </div>
+        <img
+          src={CARD_BACK}
+          alt="牌背"
+          loading="lazy"
+          draggable={false}
+          className="w-full h-full object-cover select-none"
+        />
+        <div className="absolute inset-0 bg-black/10 pointer-events-none" />
       </div>
     );
   }
@@ -91,6 +117,7 @@ const CardComponent: React.FC<CardProps> = ({ card, onClick, disabled, selected,
   const theme = CARD_THEMES[card.name] || { face: 'from-[#f5efe2] to-[#e3d5ba]', accent: '#2b2b2b', ink: '#1c1c1c' };
   const stamp = TYPE_STAMPS[card.type] || TYPE_STAMPS[CardType.BASIC];
   const bigName = card.name.length <= 2;
+  const art = CARD_ART[card.name];
 
   return (
     <button
@@ -115,30 +142,57 @@ const CardComponent: React.FC<CardProps> = ({ card, onClick, disabled, selected,
         ${canUseSkill && !disabled ? 'ring-2 ring-blue-500 animate-pulse' : ''}
       `}
     >
+      {/* 插画区 */}
+      {art && (
+        <div className={`relative w-full ${small ? 'h-[54%]' : 'h-[56%]'} overflow-hidden shrink-0`}>
+          <img
+            src={art}
+            alt={card.name}
+            loading="lazy"
+            draggable={false}
+            className="w-full h-full object-cover select-none transition-transform duration-300 group-hover:scale-[1.06]"
+          />
+          {/* 上缘压暗，保证左上角点数可读 */}
+          <div className="absolute inset-0 bg-gradient-to-b from-black/28 via-transparent to-transparent pointer-events-none" />
+          {/* 下缘融入牌面 */}
+          <div
+            className="absolute inset-x-0 bottom-0 h-1/2 pointer-events-none"
+            style={{ background: 'linear-gradient(180deg, rgba(255,250,240,0) 0%, rgba(255,250,240,0.30) 70%, rgba(255,250,240,0.62) 100%)' }}
+          />
+        </div>
+      )}
+
       {/* 外层描金细框 */}
-      <div className="absolute inset-1 rounded-md border border-[#8a6f3c]/40 pointer-events-none"></div>
-      {/* 内层细框 + 四角花 */}
-      <div className="absolute inset-1.5 rounded-[5px] border border-[#8a6f3c]/25 pointer-events-none">
+      <div className="absolute inset-1 rounded-md border border-[#8a6f3c]/40 pointer-events-none z-10"></div>
+      <div className="absolute inset-1.5 rounded-[5px] border border-[#8a6f3c]/25 pointer-events-none z-10">
         <div className="absolute -top-px -left-px w-2.5 h-2.5 border-t border-l border-[#8a6f3c]/60"></div>
         <div className="absolute -top-px -right-px w-2.5 h-2.5 border-t border-r border-[#8a6f3c]/60"></div>
         <div className="absolute -bottom-px -left-px w-2.5 h-2.5 border-b border-l border-[#8a6f3c]/60"></div>
         <div className="absolute -bottom-px -right-px w-2.5 h-2.5 border-b border-r border-[#8a6f3c]/60"></div>
       </div>
       {/* 纸张光泽 */}
-      <div className="absolute inset-0 bg-gradient-to-b from-white/25 via-transparent to-transparent pointer-events-none"></div>
+      <div className="absolute inset-0 bg-gradient-to-b from-white/20 via-transparent to-transparent pointer-events-none"></div>
 
-      {/* 左上角：点数 + 花色 竖排铭牌 */}
-      <div className="absolute top-2 left-2 flex flex-col items-center leading-none z-10">
-        <span className="font-serif font-bold text-lg md:text-xl tracking-tight" style={{ color: suitColor }}>
+      {/* 左上角：点数 + 花色 */}
+      <div className="absolute top-1.5 left-1.5 flex flex-col items-center leading-none z-20">
+        <span
+          className={`font-serif font-bold ${small ? 'text-sm' : 'text-lg md:text-xl'} tracking-tight`}
+          style={{ color: suitColor, textShadow: art ? '0 1px 2px rgba(255,255,255,0.85)' : undefined }}
+        >
           {card.rank.replace(/\d+$/, '')}
         </span>
-        <span className="text-base md:text-lg mt-0.5" style={{ color: suitColor }}>{card.suit}</span>
+        <span
+          className={`${small ? 'text-xs' : 'text-sm md:text-base'} mt-0.5`}
+          style={{ color: suitColor, textShadow: art ? '0 1px 2px rgba(255,255,255,0.85)' : undefined }}
+        >
+          {card.suit}
+        </span>
       </div>
 
       {/* 右上角：类型朱印 */}
-      <div className="absolute top-2 right-2 z-10">
+      <div className="absolute top-1.5 right-1.5 z-20">
         <div
-          className="w-5 h-5 md:w-6 md:h-6 rounded-[4px] rotate-6 flex items-center justify-center font-bold text-[10px] md:text-xs shadow-sm"
+          className={`${small ? 'w-4 h-4 text-[9px]' : 'w-5 h-5 md:w-6 md:h-6 text-[10px] md:text-xs'} rounded-[4px] rotate-6 flex items-center justify-center font-bold shadow-sm`}
           style={{
             color: '#f6e8d8',
             backgroundColor: stamp.color,
@@ -150,38 +204,36 @@ const CardComponent: React.FC<CardProps> = ({ card, onClick, disabled, selected,
         </div>
       </div>
 
-      {/* 中央：大字墨书 */}
-      <div className="flex-1 flex items-center justify-center z-0 w-full px-2">
+      {/* 文字区：花色水印 + 牌名 */}
+      <div className="relative flex-1 flex flex-col items-center justify-center w-full px-1 pb-1 z-10">
+        <span
+          className="absolute font-serif select-none pointer-events-none"
+          style={{ color: suitColor, opacity: 0.08, fontSize: small ? 44 : 62, lineHeight: 1 }}
+        >
+          {card.suit}
+        </span>
         <div
-          className="font-ancient font-bold select-none text-center leading-tight drop-shadow-[0_1px_0_rgba(255,255,255,0.6)]"
-          style={{ color: theme.ink }}
+          className="relative font-ancient font-bold select-none text-center leading-tight"
+          style={{ color: theme.ink, textShadow: '0 1px 0 rgba(255,255,255,0.55)' }}
         >
           {bigName ? (
-            <span className={small ? 'text-4xl' : 'text-4xl sm:text-5xl md:text-6xl'}>{card.name}</span>
+            <span className={small ? 'text-2xl' : 'text-2xl sm:text-3xl md:text-4xl'}>{card.name}</span>
           ) : (
-            <span className="flex flex-col items-center">
-              <span className={small ? 'text-3xl' : 'text-2xl sm:text-4xl md:text-5xl'}>{card.name[0]}</span>
-              <span className={small ? 'text-xl' : 'text-lg sm:text-2xl md:text-3xl'}>{card.name.slice(1)}</span>
+            <span className="flex flex-col items-center leading-none">
+              <span className={small ? 'text-xl' : 'text-xl sm:text-2xl md:text-3xl'}>{card.name[0]}</span>
+              <span className={small ? 'text-base' : 'text-base sm:text-lg md:text-xl'}>{card.name.slice(1)}</span>
             </span>
           )}
         </div>
-      </div>
-
-      {/* 底部：名称铭牌 */}
-      <div className="z-10 w-full px-2 pb-2">
-        <div className="border-t pt-1" style={{ borderColor: `${theme.accent}44` }}>
-          <div
-            className="font-ancient text-center leading-none tracking-[0.2em]"
-            style={{ color: theme.ink, fontSize: small ? '13px' : '16px' }}
-          >
-            {card.name}
-          </div>
-          {canUseSkill && !disabled && (
-            <div className="text-[8px] text-blue-700 font-bold text-center mt-0.5 animate-pulse">
-              {skillName || '技能可用'}
-            </div>
-          )}
+        <div className="relative flex items-center gap-1 mt-0.5">
+          <span className="font-serif leading-none" style={{ color: suitColor, fontSize: small ? 9 : 11 }}>{card.suit}</span>
+          <span className="leading-none" style={{ color: suitColor, fontSize: small ? 8 : 10 }}>{card.rank.replace(/\d+$/, '')}</span>
         </div>
+        {canUseSkill && !disabled && (
+          <div className="text-[8px] text-blue-700 font-bold text-center mt-0.5 animate-pulse">
+            {skillName || '技能可用'}
+          </div>
+        )}
       </div>
 
       {/* 技能指示器 */}
