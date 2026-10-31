@@ -255,7 +255,7 @@ export const HEROES: Hero[] = [
     avatarUrl: 'images/heroes/甘宁.jpg',
     description: '锦帆贼',
     skillName: '奇袭',
-    skillDesc: '你可以将一张黑色牌当【过河拆桥】使用；黑色【杀】对攻击范围内的目标仍按【杀】结算。',
+    skillDesc: '你可以将一张黑色牌当【过河拆桥】使用（点击「奇袭」按钮选一张黑色牌，再指定目标）。',
     gender: 'male',
   },
   {
