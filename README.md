@@ -2,6 +2,8 @@
 
 > 基于 React 19 + TypeScript + Vite 构建的网页版《三国杀》五人身份局，内置 AI 对手与「军师」战术顾问。
 
+**v2.0 更新**：Tailwind 改为构建期编译（告别 CDN 白屏闪烁）、全新手绘风卡面与朱印体系、开局印章标题 / 五阶段进度轨 / 扇形手牌 / 弃牌堆查看器 / 胜负判定横幅、修复子路径下图片 404 与 BGM 未打包等部署问题、新增 SEO meta 与站内 favicon、首屏水墨加载动画。
+
 ## 项目简介
 
 本项目是一个可直接在浏览器中运行的《三国杀》单机对局实现，规则参考经典的**五人身份局**（主公 / 忠臣 / 反贼 / 内奸）。你操作 1 号位人类玩家，其余 4 名角色由内置 AI 托管，完整走完「回合开始 → 摸牌 → 出牌 → 弃牌 → 回合结束」的回合流程。
@@ -44,10 +46,12 @@
 
 **视听与界面**
 
-- 本地背景音乐（`背景音乐.mp3`）+ 按牌名区分的技能音效
+- 本地背景音乐（`public/背景音乐.mp3`）+ 按牌名区分的技能音效
 - 背景图轮播组件 `BackgroundCarousel`，`public/backgrounds/` 下提供 20 张国风背景
 - 明暗主题切换（`ThemeContext` + `ThemeToggle` + `src/styles/theme.css`）
 - 移动端适配：禁用缩放与滚动回弹，适合手机竖屏对局
+- **卡面视觉（v2.0 重绘）**：每张牌名专属配色主题、基础/锦囊/装备朱印角章、竖排点数花色铭牌、黑漆描金牌背
+- **对局界面（v2.0）**：五阶段进度轨高亮当前阶段、手牌扇形排布（hover 摆正上浮）、弃牌堆点击可查看全部弃牌、牌堆低于 10 张红色告警、开局标题朱印装饰、结算界面「大获全胜 / 败走麦城」胜负横幅、首屏水墨加载动画与站内 favicon
 
 **AI 军师（可选）**
 
@@ -61,7 +65,7 @@
 | 框架 | React 19 |
 | 语言 | TypeScript 5.8 |
 | 构建 | Vite 6 + `@vitejs/plugin-react` |
-| 样式 | Tailwind CSS（CDN 引入）+ 自定义 CSS 变量主题 |
+| 样式 | Tailwind CSS 3.4（构建期编译，PostCSS + Autoprefixer）+ 自定义 CSS 变量主题 |
 | AI | `@google/genai`（Google Gemini） |
 | 部署 | GitHub Actions → GitHub Pages |
 
@@ -71,7 +75,9 @@
 sanguosha/
 ├── App.tsx                  # 核心对局逻辑与主界面（约 4700 行，含回合机、AI、结算）
 ├── index.tsx                # React 入口
-├── index.html               # HTML 模板（字体、木纹底色、Tailwind CDN）
+├── index.html               # HTML 模板（字体、SEO meta、首屏加载画面、favicon）
+├── tailwind.config.js       # Tailwind 构建期配置（古风字体、自定义间距与动画）
+├── postcss.config.js        # PostCSS（tailwindcss + autoprefixer）
 ├── constants.ts             # 武将表 HEROES、牌堆生成、音效与 BGM 配置
 ├── types.ts                 # Card / Hero / Player / Identity / GamePhase 等类型定义
 ├── components/
@@ -88,8 +94,9 @@ sanguosha/
 │   └── styles/theme.css
 ├── public/
 │   ├── backgrounds/         # 20 张国风背景图
-│   └── images/heroes/       # 8 张武将立绘
-├── 背景音乐.mp3              # 本地 BGM
+│   ├── images/heroes/       # 8 张武将立绘
+│   ├── 背景音乐.mp3          # 本地 BGM（置于 public/ 确保打包部署）
+│   └── favicon.svg          # 「殺」字印章站标
 ├── test_skills.js           # 技能相关脚本
 ├── vite.config.ts           # 构建优化：代码分割、资源分目录、esbuild 压缩
 └── .github/workflows/deploy.yml   # Pages 自动部署
@@ -130,6 +137,6 @@ https://chenbenkong.github.io/sanguosha/
 
 - **纯前端单机项目**：没有服务端，也没有联机对战，所有对局逻辑与 AI 决策都在浏览器里完成。
 - **API Key 会打进产物**：Vite 的 `define` 是编译期替换，构建后 Key 会出现在前端 JS 中。因此线上演示不带 Key，请勿把个人 Key 提交或部署到公开站点。
-- **音效来自外部 CDN**：技能音效引用 Pixabay 的公开音频链接，离线环境下音效可能无法播放；背景音乐为仓库内本地文件，不受影响。
+- **音效来自外部 CDN**：技能音效引用 Pixabay 的公开音频链接，离线环境下音效可能无法播放；背景音乐为仓库内本地文件（`public/背景音乐.mp3`），随构建打包，不受影响。
 - **规则为简化实现**：装备牌（武器 / 防具 / 坐骑）目前仅在类型定义与「借刀杀人」的描述中出现，尚未作为完整系统实装；实际可用牌以上文牌堆列表为准。
 - 仓库根目录的 `.trae/`、`metadata.json` 等为开发工具与元数据，与运行无关。

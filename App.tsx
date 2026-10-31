@@ -3,7 +3,6 @@ import { Hero, Player, Card, GamePhase, CardName, LogEntry, Identity, Suit, Card
 import { HEROES, INITIAL_DECK, BGM_URL, SOUNDS } from './constants';
 import CardComponent from './components/CardComponent';
 import Avatar from './components/Avatar';
-import { getTacticalAdvice } from './services/geminiService';
 import { useTheme } from './src/contexts/ThemeContext';
 import { BackgroundCarousel } from './src/components/BackgroundCarousel';
 import { BACKGROUND_IMAGES, CAROUSEL_CONFIG } from './src/config/backgrounds';
@@ -147,6 +146,9 @@ const App: React.FC = () => {
   const [healAnimTarget, setHealAnimTarget] = useState<number | null>(null);
   const [healNumber, setHealNumber] = useState<{ targetId: number, amount: number, id: string } | null>(null);
   const [visualCard, setVisualCard] = useState<{ card: Card, playerName: string } | null>(null);
+
+  // 弃牌堆查看器
+  const [showDiscardViewer, setShowDiscardViewer] = useState<boolean>(false);
 
   // Audio
   const [isMuted, setIsMuted] = useState<boolean>(false);
@@ -2686,6 +2688,14 @@ const App: React.FC = () => {
         <div className="z-10 text-center animate-fade-in">
             {/* 主标题区域 */}
             <div className="relative mb-8">
+              {/* 印章装饰 */}
+              <div className={`absolute -top-6 -right-10 md:-top-3 md:-right-24 rotate-6 w-12 h-12 md:w-16 md:h-16 rounded-md flex items-center justify-center border-2 shadow-[0_6px_20px_rgba(0,0,0,0.5)] ${
+                theme === 'dark'
+                  ? 'bg-gradient-to-br from-[#9e2b25] to-[#7a1f1a] border-[#d4af37]/60'
+                  : 'bg-gradient-to-br from-[#b03a32] to-[#8a2620] border-[#8a6914]/50'
+              }`}>
+                <span className="font-ancient text-3xl md:text-4xl text-[#f3d9a4] leading-none select-none">殺</span>
+              </div>
               {/* 标题背景光晕 - 白天模式更强 */}
               <div className={`absolute inset-0 blur-2xl transform scale-150 ${theme === 'dark' ? 'bg-gradient-to-b from-amber-600/20 to-transparent' : 'bg-gradient-to-b from-white/80 to-transparent'}`}></div>
               
@@ -2794,7 +2804,7 @@ const App: React.FC = () => {
         
         {/* 版本信息 */}
         <div className={`absolute bottom-6 text-xs tracking-widest ${theme === 'dark' ? 'text-stone-500' : 'text-[#5d4037]/70'}`} style={theme === 'light' ? { textShadow: '0 1px 2px rgba(255,255,255,0.6)' } : {}}>
-          <span className={theme === 'dark' ? 'text-amber-700/50' : 'text-[#8b6f4a]/60'}>◆</span> 三国杀 · {playerCount}人军争篇 v1.0 <span className={theme === 'dark' ? 'text-amber-700/50' : 'text-[#8b6f4a]/60'}>◆</span>
+          <span className={theme === 'dark' ? 'text-amber-700/50' : 'text-[#8b6f4a]/60'}>◆</span> 三国杀 · {playerCount}人军争篇 v2.0 <span className={theme === 'dark' ? 'text-amber-700/50' : 'text-[#8b6f4a]/60'}>◆</span>
         </div>
       </div>
     );
@@ -3055,12 +3065,32 @@ const App: React.FC = () => {
 
          <div className={`absolute top-1/3 left-1/4 w-96 h-96 rounded-full blur-[120px] ${theme === 'dark' ? 'bg-red-900/10' : 'bg-red-500/5'}`}></div>
          <div className={`absolute bottom-1/3 right-1/4 w-96 h-96 rounded-full blur-[120px] ${theme === 'dark' ? 'bg-yellow-900/10' : 'bg-amber-500/5'}`}></div>
-         
-         <h1 className="font-ancient text-8xl md:text-9xl mb-8 z-10 drop-shadow-2xl text-yellow-600 relative">
+
+         {/* 胜负判定横幅 */}
+         {(() => {
+           const myIdentity = players.find(p => p.isHuman)?.identity;
+           const winner = winnerIdentity;
+           const isVictory = myIdentity !== undefined && (
+             (winner === Identity.FANZEI && myIdentity === Identity.FANZEI) ||
+             ((winner === Identity.ZHUGONG || winner === Identity.ZHONGCHEN) && (myIdentity === Identity.ZHUGONG || myIdentity === Identity.ZHONGCHEN)) ||
+             (winner === Identity.NEIJIAN && myIdentity === Identity.NEIJIAN)
+           );
+           return (
+             <div className={`z-20 mb-6 px-10 py-3 rounded-lg border-2 font-ancient text-3xl md:text-4xl tracking-[0.3em] shadow-[0_10px_40px_rgba(0,0,0,0.5)] animate-fade-in-scale ${
+               isVictory
+                 ? 'bg-gradient-to-b from-[#c9a227] to-[#9a7a1a] text-[#fff8e0] border-[#f4d03f] shadow-[0_0_40px_rgba(212,175,55,0.4)]'
+                 : 'bg-gradient-to-b from-stone-700 to-stone-900 text-stone-300 border-stone-500'
+             }`}>
+               {isVictory ? '大 获 全 胜' : '败 走 麦 城'}
+             </div>
+           );
+         })()}
+
+         <h1 className={`font-ancient text-8xl md:text-9xl mb-8 z-10 drop-shadow-2xl relative ${theme === 'light' ? 'text-[#8b6914]' : 'text-yellow-600'}`}>
            游戏结束
            <span className="absolute -inset-4 bg-yellow-600/10 blur-xl rounded-lg"></span>
          </h1>
-         <h2 className="text-4xl md:text-5xl text-stone-200 font-ancient mb-12 z-10 border-b-2 border-stone-600 pb-4">
+         <h2 className={`text-4xl md:text-5xl font-ancient mb-12 z-10 border-b-2 pb-4 ${theme === 'dark' ? 'text-stone-200 border-stone-600' : 'text-[#2d2a26] border-[#c4a77d]'}`}>
            获胜方：<span className="text-red-500">{winnerIdentity}</span>
          </h2>
          
@@ -3220,6 +3250,37 @@ const App: React.FC = () => {
             <div className="absolute bottom-0 right-0 w-1.5 h-1.5 bg-yellow-300 rounded-full animate-particle-4"></div>
           </div>
         </div>
+      )}
+
+      {/* 弃牌堆查看器 */}
+      {showDiscardViewer && (
+         <div className="absolute inset-0 z-[90] flex items-center justify-center bg-black/75 backdrop-blur-md animate-fade-in" onClick={() => setShowDiscardViewer(false)}>
+            <div
+              className={`rounded-xl border-2 shadow-2xl max-w-3xl w-[92%] max-h-[80vh] flex flex-col overflow-hidden ${theme === 'dark' ? 'bg-gradient-to-b from-[#2a2018] to-[#1a1410] border-[#d4af37]/50' : 'bg-[#faf8f5] border-[#c4a77d]'}`}
+              onClick={(e) => e.stopPropagation()}
+            >
+               <div className={`flex items-center justify-between px-5 py-3 border-b ${theme === 'dark' ? 'border-[#8b7355]/40' : 'border-[#c4a77d]/50'}`}>
+                 <h3 className={`text-xl font-ancient ${theme === 'dark' ? 'text-[#d4af37]' : 'text-[#8b6914]'}`}>🗂️ 弃牌堆 <span className="text-sm opacity-60">({discardPile.length} 张)</span></h3>
+                 <button
+                   onClick={() => setShowDiscardViewer(false)}
+                   className={`w-8 h-8 rounded-full border flex items-center justify-center transition-colors ${theme === 'dark' ? 'border-stone-600 text-stone-300 hover:border-yellow-500 hover:text-yellow-400' : 'border-[#c4a77d] text-[#5c5854] hover:border-[#8b6914] hover:text-[#8b6914]'}`}
+                 >✕</button>
+               </div>
+               <div className="flex-1 overflow-y-auto p-5">
+                 {discardPile.length === 0 ? (
+                   <p className={`text-center py-10 ${theme === 'dark' ? 'text-stone-500' : 'text-[#8a8680]'}`}>弃牌堆空空如也</p>
+                 ) : (
+                   <div className="flex flex-wrap gap-2 justify-center">
+                     {[...discardPile].reverse().map(card => (
+                       <div key={card.id} title={card.description}>
+                         <CardComponent card={card} small disabled />
+                       </div>
+                     ))}
+                   </div>
+                 )}
+               </div>
+            </div>
+         </div>
       )}
 
       {/* Manual Reaction Modal */}
@@ -4037,17 +4098,42 @@ const App: React.FC = () => {
            ))}
         </div>
 
-        {/* Phase Indicator - 阶段指示器 */}
-        <div className="absolute top-4 right-4 bg-stone-900/80 border border-stone-600 rounded-lg px-4 py-2 z-10">
-          <div className="text-stone-400 text-xs">当前阶段</div>
-          <div className="text-yellow-500 font-ancient text-lg">{phase}</div>
+        {/* Phase Indicator - 五阶段进度轨 */}
+        <div className={`absolute top-4 right-4 rounded-xl px-4 py-2.5 z-10 border shadow-lg ${theme === 'dark' ? 'bg-stone-900/85 border-stone-600' : 'bg-[#faf8f5]/90 border-[#c4a77d]/60'}`}>
+          <div className={`text-[10px] mb-1.5 tracking-widest ${theme === 'dark' ? 'text-stone-400' : 'text-[#5c5854]'}`}>当前阶段</div>
+          <div className="flex items-center gap-1">
+            {[GamePhase.START, GamePhase.DRAW, GamePhase.ACTION, GamePhase.DISCARD, GamePhase.END].map((ph, i) => {
+              const phIndex = [GamePhase.START, GamePhase.DRAW, GamePhase.ACTION, GamePhase.DISCARD, GamePhase.END].indexOf(phase);
+              const active = ph === phase;
+              const passed = phIndex >= 0 && i < phIndex;
+              const short = ph.replace('回合', '').replace('阶段', '');
+              return (
+                <div key={ph} className="flex items-center gap-1">
+                  {i > 0 && <div className={`w-3 h-px ${passed || active ? (theme === 'dark' ? 'bg-yellow-600' : 'bg-[#8b6914]') : (theme === 'dark' ? 'bg-stone-600' : 'bg-[#d8d3ce]')}`}></div>}
+                  <div className={`
+                    px-1.5 py-0.5 rounded text-[11px] font-bold font-ancient transition-all duration-300
+                    ${active
+                      ? theme === 'dark'
+                        ? 'bg-gradient-to-b from-yellow-500 to-yellow-700 text-white shadow-[0_0_10px_rgba(234,179,8,0.5)] scale-110'
+                        : 'bg-gradient-to-b from-[#c9a86c] to-[#a08050] text-white shadow-[0_0_10px_rgba(184,149,106,0.5)] scale-110'
+                      : passed
+                        ? theme === 'dark' ? 'text-yellow-600/70' : 'text-[#8b6914]/70'
+                        : theme === 'dark' ? 'text-stone-500' : 'text-[#b0aba5]'
+                    }
+                  `}>
+                    {short}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
 
         {/* Center Decks - 牌堆和弃牌堆 - 原版三国杀风格 */}
         <div className="flex items-center gap-12 z-0 transform scale-90 md:scale-100">
-           {/* 弃牌堆 */}
-           <div className="relative group">
-              <div className="text-stone-400 text-sm text-center mb-2 font-ancient tracking-wider">弃牌堆</div>
+           {/* 弃牌堆（点击查看明细） */}
+           <div className="relative group cursor-pointer" onClick={() => setShowDiscardViewer(true)} title="点击查看弃牌堆">
+              <div className={`text-sm text-center mb-2 font-ancient tracking-wider transition-colors ${theme === 'dark' ? 'text-stone-400 group-hover:text-yellow-500' : 'text-[#5c5854] group-hover:text-[#8b6914]'}`}>弃牌堆</div>
               {discardPile.length > 0 ? (
                  <div className="relative">
                    <div className="transform transition-transform group-hover:scale-105">
@@ -4055,6 +4141,10 @@ const App: React.FC = () => {
                    </div>
                    <div className="absolute -bottom-3 -right-3 bg-gradient-to-br from-stone-600 to-stone-800 text-white text-sm font-bold w-8 h-8 rounded-full flex items-center justify-center border-2 border-stone-500 shadow-lg">
                      {discardPile.length}
+                   </div>
+                   {/* 查看提示 */}
+                   <div className="absolute inset-0 rounded-lg bg-black/0 group-hover:bg-black/30 transition-colors flex items-center justify-center pointer-events-none">
+                     <span className="opacity-0 group-hover:opacity-100 transition-opacity text-yellow-400 text-xs font-bold bg-black/70 px-2 py-1 rounded">查看</span>
                    </div>
                  </div>
                ) : (
@@ -4097,8 +4187,12 @@ const App: React.FC = () => {
                    <div className="absolute bottom-2 right-2 w-3 h-3 border-b-2 border-r-2 border-amber-600/40"></div>
                 </div>
                 
-                {/* 牌堆数量 */}
-                <div className="absolute -bottom-3 -right-3 bg-gradient-to-br from-yellow-600 to-yellow-800 text-white text-sm font-bold w-10 h-10 rounded-full flex items-center justify-center border-2 border-yellow-400 shadow-lg">
+                {/* 牌堆数量（低于10张时红色告警） */}
+                <div className={`absolute -bottom-3 -right-3 text-white text-sm font-bold w-10 h-10 rounded-full flex items-center justify-center border-2 shadow-lg transition-colors ${
+                  deck.length < 10
+                    ? 'bg-gradient-to-br from-red-600 to-red-800 border-red-400 animate-pulse'
+                    : 'bg-gradient-to-br from-yellow-600 to-yellow-800 border-yellow-400'
+                }`}>
                   {deck.length}
                 </div>
               </div>
@@ -4701,17 +4795,17 @@ const App: React.FC = () => {
                  ? selectedCardIds.includes(card.id) || (isLijianMode && lijianSelectedCardId === card.id) || (isRendeMode && rendeSelectedCardIds.includes(card.id))
                  : activeSelectedId === card.id;
                // Playability Check for Visuals
-               let isPlayable = isMyTurn && !isAiTakeover; 
-               if (phase === GamePhase.DISCARD && !isAiTakeover) isPlayable = true; 
+               let isPlayable = isMyTurn && !isAiTakeover;
+               if (phase === GamePhase.DISCARD && !isAiTakeover) isPlayable = true;
                else if (phase !== GamePhase.ACTION && phase !== GamePhase.DISCARD) isPlayable = false;
-               
+
                // Reaction Mode
                if (pendingReaction && !isAiTakeover) {
                   // 检查是否为需要的牌或可以通过技能使用的牌
                   const neededCard = pendingReaction.cardName;
                   const canUseSkill = me.hero.name === '赵云';
                   const skillCardName = neededCard === CardName.SHAN ? CardName.SHA : CardName.SHAN;
-                  
+
                   isPlayable = card.name === neededCard || (canUseSkill && card.name === skillCardName);
                }
 
@@ -4720,20 +4814,30 @@ const App: React.FC = () => {
 
                // 检查是否为赵云且卡牌是杀或闪，以显示技能提示
                const isZhaoyun = players[0]?.hero?.name === '赵云';
-               const canUseLongdan = isZhaoyun && 
+               const canUseLongdan = isZhaoyun &&
                                    ([CardName.SHA, CardName.SHAN].includes(card.name) && isPlayable);
-               
+
+               // 扇形排列参数：以中间牌为轴，两侧牌旋转并下沉
+               const handCount = me.hand.length;
+               const offset = index - (handCount - 1) / 2;
+               const fanRot = Math.max(-24, Math.min(24, offset * 3.2));
+               const fanY = Math.abs(offset) * Math.abs(offset) * 1.6;
+
                return (
-                <div 
-                  key={card.id} 
+                <div
+                  key={card.id}
                   className={`
-                    transform transition-all duration-200 origin-bottom relative
-                    ${isSelected ? 'z-20' : 'hover:-translate-y-2 hover:z-10'}
+                    fan-card origin-bottom relative shrink-0
+                    ${isSelected ? 'is-selected' : ''}
                     ${lockOthers && !isSelected ? 'pointer-events-none' : ''}
                   `}
+                  style={{
+                    '--fan-rot': `${fanRot}deg`,
+                    '--fan-y': `${fanY}px`,
+                  } as React.CSSProperties}
                 >
-                    <CardComponent 
-                      card={card} 
+                    <CardComponent
+                      card={card}
                       selected={isSelected}
                       disabled={!isPlayable || (lockOthers && !isSelected)}
                       onClick={(e) => handleCardClick(card, e)}

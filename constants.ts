@@ -1,6 +1,6 @@
-import { Hero, Card, CardName, CardType, Suit } from './types';
+﻿import { Hero, Card, CardName, CardType, Suit } from './types';
 
-export const BGM_URL = "/背景音乐.mp3"; // 本地背景音乐文件
+export const BGM_URL = "./背景音乐.mp3"; // 本地背景音乐文件
 
 export const SOUNDS: Record<string, string> = {
   [CardName.SHA]: "https://cdn.pixabay.com/audio/2022/03/15/audio_244e0f6319.mp3", // Sword slash
@@ -31,7 +31,7 @@ export const HEROES: Hero[] = [
     name: '曹操',
     kingdom: '魏',
     maxHp: 4,
-    avatarUrl: '/images/heroes/曹操.jpg',
+    avatarUrl: 'images/heroes/曹操.jpg',
     description: '乱世之奸雄',
     skillName: '奸雄',
     skillDesc: '受到伤害后，你可以获得造成伤害的牌。',
@@ -42,7 +42,7 @@ export const HEROES: Hero[] = [
     name: '刘备',
     kingdom: '蜀',
     maxHp: 4,
-    avatarUrl: '/images/heroes/刘备.jpg',
+    avatarUrl: 'images/heroes/刘备.jpg',
     description: '仁德之君',
     skillName: '仁德',
     skillDesc: '出牌阶段，你可以将任意手牌交给其他角色。每阶段给出2张或更多牌时，你回复1点体力。',
@@ -53,7 +53,7 @@ export const HEROES: Hero[] = [
     name: '孙权',
     kingdom: '吴',
     maxHp: 4,
-    avatarUrl: '/images/heroes/孙权.jpg',
+    avatarUrl: 'images/heroes/孙权.jpg',
     description: '年轻的贤君',
     skillName: '制衡',
     skillDesc: '出牌阶段，你可以弃置任意张牌，然后摸等量的牌。',
@@ -64,7 +64,7 @@ export const HEROES: Hero[] = [
     name: '吕布',
     kingdom: '群',
     maxHp: 5,
-    avatarUrl: '/images/heroes/吕布.jpg',
+    avatarUrl: 'images/heroes/吕布.jpg',
     description: '天下无双',
     skillName: '无双',
     skillDesc: '使用【杀】需两张【闪】抵消；与你【决斗】需打出两张【杀】。',
@@ -75,7 +75,7 @@ export const HEROES: Hero[] = [
     name: '赵云',
     kingdom: '蜀',
     maxHp: 4,
-    avatarUrl: '/images/heroes/赵云.jpg',
+    avatarUrl: 'images/heroes/赵云.jpg',
     description: '浑身是胆',
     skillName: '龙胆',
     skillDesc: '你可以将【杀】当【闪】，【闪】当【杀】使用。',
@@ -86,7 +86,7 @@ export const HEROES: Hero[] = [
     name: '关羽',
     kingdom: '蜀',
     maxHp: 4,
-    avatarUrl: '/images/heroes/关羽.jpg',
+    avatarUrl: 'images/heroes/关羽.jpg',
     description: '美髯公',
     skillName: '武圣',
     skillDesc: '你可以将一张红色牌当【杀】使用。',
@@ -97,7 +97,7 @@ export const HEROES: Hero[] = [
     name: '司马懿',
     kingdom: '魏',
     maxHp: 3,
-    avatarUrl: '/images/heroes/司马懿.jpg',
+    avatarUrl: 'images/heroes/司马懿.jpg',
     description: '狼顾之鬼',
     skillName: '鬼才',
     skillDesc: '成功使用卡牌免疫了对方的任何攻击，回复一滴血，如果血量是满的，则获得一张牌。',
@@ -108,7 +108,7 @@ export const HEROES: Hero[] = [
     name: '貂蝉',
     kingdom: '群',
     maxHp: 3,
-    avatarUrl: '/images/heroes/貂蝉.jpg',
+    avatarUrl: 'images/heroes/貂蝉.jpg',
     description: '绝世舞姬',
     skillName: '离间',
     skillDesc: '出牌阶段，弃置一张牌，令两名男性角色进行决斗。',

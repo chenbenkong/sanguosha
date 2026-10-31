@@ -1,3 +1,61 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ===== 手牌扇形排列 ===== */
+.fan-card {
+  transform: rotate(var(--fan-rot, 0deg)) translateY(var(--fan-y, 0px));
+  transform-origin: bottom center;
+  transition: transform 0.22s cubic-bezier(0.34, 1.2, 0.64, 1);
+}
+.fan-card:hover,
+.fan-card.is-selected {
+  transform: rotate(0deg) translateY(-16px) scale(1.05);
+  z-index: 20;
+}
+.fan-card:hover {
+  z-index: 15;
+}
+.fan-card.is-selected {
+  z-index: 20;
+}
+
+/* ===== 自定义工具类（修复此前 CDN 版缺失的定义） ===== */
+
+/* 白天模式羊皮纸底纹 */
+.parchment-bg {
+  background-color: #f5efe3;
+  background-image:
+    radial-gradient(ellipse at 20% 10%, rgba(196, 167, 125, 0.18) 0%, transparent 55%),
+    radial-gradient(ellipse at 85% 90%, rgba(139, 105, 20, 0.12) 0%, transparent 50%),
+    url("data:image/svg+xml,%3Csvg width='400' height='400' viewBox='0 0 400 400' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.06'/%3E%3C/svg%3E");
+}
+
+/* 隐藏滚动条 */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+/* 细滚动条 */
+.scrollbar-thin {
+  scrollbar-width: thin;
+}
+.scrollbar-thin::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+.scrollbar-thumb-stone-600::-webkit-scrollbar-thumb {
+  background-color: #57534e;
+  border-radius: 3px;
+}
+.scrollbar-track-transparent::-webkit-scrollbar-track {
+  background: transparent;
+}
+
 /* 白天模式 - 现代简约风格 */
 .theme-light {
   /* 背景色 */
