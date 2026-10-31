@@ -3490,7 +3490,7 @@ const App: React.FC = () => {
             )}
           </div>
           <div>
-            <span className={theme === 'dark' ? 'text-amber-700/50' : 'text-[#8b6f4a]/60'}>◆</span> 三国杀 · {playerCount}人军争篇 v3.1 <span className={theme === 'dark' ? 'text-amber-700/50' : 'text-[#8b6f4a]/60'}>◆</span>
+            <span className={theme === 'dark' ? 'text-amber-700/50' : 'text-[#8b6f4a]/60'}>◆</span> 三国杀 · {playerCount}人军争篇 v3.5 <span className={theme === 'dark' ? 'text-amber-700/50' : 'text-[#8b6f4a]/60'}>◆</span>
           </div>
         </div>
       </div>
