@@ -36,6 +36,26 @@
   .skill-glow { animation: none; box-shadow: 0 0 20px 6px rgba(212, 175, 55, 0.45); }
 }
 
+/* ===== AI 思考：头像外圈暖金呼吸光 ===== */
+@keyframes aiThinkingPulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(255, 214, 140, 0); }
+  50% { box-shadow: 0 0 0 4px rgba(255, 214, 140, 0.22), 0 0 26px 10px rgba(255, 200, 110, 0.34); }
+}
+.ai-thinking {
+  animation: aiThinkingPulse 1.15s ease-in-out infinite;
+  border-radius: 10px;
+}
+.ai-thinking img {
+  filter: brightness(1.1) saturate(1.06);
+}
+@media (prefers-reduced-motion: reduce) {
+  .ai-thinking {
+    animation: none;
+    box-shadow: 0 0 0 3px rgba(232, 207, 148, 0.14), 0 0 16px 6px rgba(232, 207, 148, 0.22);
+  }
+  .ai-thinking img { filter: none; }
+}
+
 @keyframes skillBannerIn {
   0% { opacity: 0; transform: scale(0.7) translateY(22px); }
   16% { opacity: 1; transform: scale(1.08) translateY(0); }

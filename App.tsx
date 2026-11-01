@@ -261,6 +261,8 @@ const App: React.FC = () => {
   // 技能发动时对应武将头像高亮
   const [skillGlowId, setSkillGlowId] = useState<number | null>(null);
   const skillGlowTimerRef = useRef<NodeJS.Timeout | null>(null);
+  // AI 思考中：头像暖光呼吸，避免 AI 秒出牌
+  const [aiThinkingId, setAiThinkingId] = useState<number | null>(null);
 
   // 弃牌堆查看器
   const [showDiscardViewer, setShowDiscardViewer] = useState<boolean>(false);
@@ -282,6 +284,13 @@ const App: React.FC = () => {
   // --- Helpers ---
   // delay 受全局速度倍率控制：2x/3x 下 AI 结算节奏等比加快
   const delay = useCallback((ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms / speedRef.current)), []);
+
+  // AI 思考停顿：头像暖光呼吸 + 随机逗留后再生效，避免 AI 瞬发决策
+  const aiThink = useCallback(async (playerId: number, ms?: number) => {
+    setAiThinkingId(playerId);
+    await delay(ms ?? 300 + Math.random() * 500);
+    setAiThinkingId(null);
+  }, [delay]);
 
   // 优化：限制日志数量，避免内存泄漏和性能问题
   const addLog = useCallback((text: string, type: LogEntry['type'] = 'info') => {
@@ -978,8 +987,8 @@ const App: React.FC = () => {
              }
            }
         } else {
-          // AI or Auto Discard
-          await delay(1000);
+          // AI or Auto Discard：弃牌前同样有思考光环
+          await aiThink(updatedPlayer.id, 1000);
           if (excess > 0) {
             // 更新ref中的最新状态
             playersRef.current = players;
@@ -3345,7 +3354,8 @@ const App: React.FC = () => {
   // --- AI Logic ---
   
   const cpuAI = async (aiPlayer: Player) => {
-    await delay(1000);
+    // 出牌前先「思考」：头像暖光 + 随机 300~800ms，AI 不再瞬发
+    await aiThink(aiPlayer.id);
 
     const alivePlayers = players.filter(p => !p.isDead && p.id !== aiPlayer.id);
     let targetId = -1;
@@ -5302,7 +5312,7 @@ const App: React.FC = () => {
                 <div className={`relative w-[74px] h-[92px] ${isCompact ? 'md:w-[64px] md:h-[76px]' : 'md:w-24 md:h-28'} mb-2 ${
                   healAnimTarget === p.id ? 'animate-heal-glow' :
                   damageAnimTarget === p.id ? 'animate-damage-glow' : ''
-                } ${skillGlowId === p.id ? 'skill-glow' : ''}`}>
+                } ${skillGlowId === p.id ? 'skill-glow' : ''} ${aiThinkingId === p.id ? 'ai-thinking' : ''}`}>
                   {/* 描金外框：统一色调，势力色只保留在小印章上，降低整屏配色噪音 */}
                   <div className="absolute -inset-1 rounded-lg bg-gradient-to-br from-[#c8a45c]/45 via-[#8b7355]/25 to-[#5a4a38]/15"></div>
                   
@@ -5732,7 +5742,7 @@ const App: React.FC = () => {
                 <div className={`relative w-20 h-24 ${isCompact ? 'md:w-[76px] md:h-[90px]' : 'md:w-24 md:h-28'} ${
                   healAnimTarget === 0 ? 'animate-heal-glow' :
                   damageAnimTarget === 0 ? 'animate-damage-glow' : ''
-                } ${skillGlowId === 0 ? 'skill-glow' : ''}`}>
+                } ${skillGlowId === 0 ? 'skill-glow' : ''} ${aiThinkingId === 0 ? 'ai-thinking' : ''}`}>
                   {/* 描金外框（统一色调） */}
                   <div className="absolute -inset-1 rounded-lg bg-gradient-to-br from-[#c8a45c]/45 via-[#8b7355]/25 to-[#5a4a38]/15"></div>
                   
