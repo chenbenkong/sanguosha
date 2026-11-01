@@ -4245,15 +4245,16 @@ const App: React.FC = () => {
            <h3 className="modal-title text-3xl font-ancient mb-1 text-center">玩家身份</h3>
            <div className="modal-divider mb-6" />
            <div className="flex flex-wrap justify-center gap-4">
-             {players.map(player => (
+             {players.map((player, idx) => (
                <div
                  key={player.id}
-                 className={`flex flex-col items-center p-4 rounded-xl border transition-all duration-300 w-[104px]
+                 className={`reveal-card flex flex-col items-center p-4 rounded-xl border transition-all duration-300 w-[104px]
                    ${player.isDead
                      ? 'bg-black/45 border-[#9e2b25]/60 opacity-70 grayscale'
                      : 'bg-black/25 border-[#8b7355]/35 hover:border-[#c8a45c]/70 hover:bg-black/35'
                    }
                  `}
+                 style={{ animationDelay: `${idx * 90}ms` }}
                >
                  <img src={player.hero.avatarUrl} alt={player.hero.name} loading="lazy" decoding="async" className={`w-16 h-16 rounded-full mb-3 border-2 object-cover ${player.isDead ? 'border-[#9e2b25]/60 grayscale' : 'border-[#c8a45c]/55'}`} />
                  <div className="text-lg modal-text font-bold mb-2">
@@ -4372,6 +4373,14 @@ const App: React.FC = () => {
       <div className="absolute top-16 left-1/2 -translate-x-1/2 w-1/3 h-px bg-gradient-to-r from-transparent via-[#d4af37]/50 to-transparent pointer-events-none z-10"></div>
       <div className="absolute bottom-20 left-1/2 -translate-x-1/2 w-1/3 h-px bg-gradient-to-r from-transparent via-[#d4af37]/50 to-transparent pointer-events-none z-10"></div>
       
+      {/* 命中 / 治疗全屏闪光：用 id 作为 key 保证每次伤害都能重新触发动画 */}
+      {damageNumber && (
+        <div key={`hit-${damageNumber.id}`} className="absolute inset-0 z-[70] pointer-events-none animate-hit-flash" />
+      )}
+      {healNumber && (
+        <div key={`heal-${healNumber.id}`} className="absolute inset-0 z-[70] pointer-events-none animate-heal-flash" />
+      )}
+
       {/* Visual Effect Overlay - 优化版卡牌动画 */}
       {visualCard && (
         <div className="absolute inset-0 z-50 flex items-center justify-center pointer-events-none overflow-hidden" style={{ contain: 'layout style paint' }}>
@@ -5161,7 +5170,7 @@ const App: React.FC = () => {
               <div
                 onClick={(isSelectingTarget || isLijianMode || isJieyinMode || (isRendeMode && rendeSelectedCardIds.length > 0) || (isJiedaoMode && !p.isDead)) ? () => handleTargetClick(p.id) : undefined}
                 className={`
-                relative p-1.5 md:p-2 rounded-lg border-2 ${KINGDOM_CLASS[p.hero.kingdom] ?? ''}
+                relative p-1.5 md:p-2 rounded-lg border-2 kingdom-frame ${KINGDOM_CLASS[p.hero.kingdom] ?? ''}
                 ${damageAnimTarget === p.id || healAnimTarget === p.id
                   ? '' // 动画期间禁用过渡效果
                   : 'transition-[transform,box-shadow,border-color] duration-300'
@@ -5295,6 +5304,8 @@ const App: React.FC = () => {
                 {/* 武将信息 */}
                 <div className="text-center">
                   <div className={`font-ancient text-base mb-1 truncate ${theme === 'dark' ? 'text-[#e8dcc8]' : 'text-[#3a332a]'}`}>{p.hero.name}</div>
+                  {/* 技能名牌：官方武将牌在姓名下方标注技能 */}
+                  <div className="kingdom-name text-[10px] tracking-[0.12em] leading-none mb-1 truncate opacity-85">【{p.hero.skillName}】</div>
                   
                   {/* 体力值 - 朱红勾玉 */}
                   <div className="flex justify-center gap-0.5 mb-1.5">
@@ -5615,7 +5626,7 @@ const App: React.FC = () => {
             <div className="relative">
               {/* 玩家头像卡片 */}
               <div className={`
-                relative p-2 rounded-xl border-2 ${KINGDOM_CLASS[me.hero.kingdom] ?? ''}
+                relative p-2 rounded-xl border-2 kingdom-frame ${KINGDOM_CLASS[me.hero.kingdom] ?? ''}
                 ${damageAnimTarget === 0 || healAnimTarget === 0
                   ? '' // 动画期间禁用过渡效果
                   : 'transition-[transform,box-shadow,border-color] duration-300'
@@ -5931,7 +5942,7 @@ const App: React.FC = () => {
                           setIsSelectingTarget(false);
                           addLog(`请选择要给出的牌（刘备「仁德」技能）...`, 'info');
                         }}
-                        className="bg-[#9e2b25] hover:bg-[#b0322b] text-[#f7e7cf] px-5 py-2 rounded-lg border border-[#c86b62] hover:border-[#e8a99f] transition-colors font-ancient text-base shadow-[0_4px_14px_rgba(158,43,37,0.35)]"
+                        className="skill-btn text-base"
                       >
                         仁德
                       </button>
@@ -5983,7 +5994,7 @@ const App: React.FC = () => {
                           setRendeSelectedTarget(null);
                           setSelectedCardIds([]);
                         }}
-                        className="bg-[#9e2b25] hover:bg-[#b0322b] text-[#f7e7cf] px-5 py-2 rounded-lg border border-[#c86b62] hover:border-[#e8a99f] transition-colors font-ancient text-base shadow-[0_4px_14px_rgba(158,43,37,0.35)]"
+                        className="skill-btn text-base"
                       >
                         确认给出
                       </button>
@@ -5999,7 +6010,7 @@ const App: React.FC = () => {
                           setSelectedCardIds([]);
                           addLog(`取消了「仁德」技能`, 'info');
                         }}
-                        className="bg-[#221b16] hover:bg-[#2e2520] text-[#c8bda8] px-4 py-2 rounded-lg border border-[#6a5642] hover:border-[#c8a45c] hover:text-[#e8cf94] transition-colors font-ancient text-base shadow-lg"
+                        className="btn-ink px-4 py-2 rounded-lg font-ancient text-base"
                       >
                         取消仁德
                       </button>
@@ -6014,7 +6025,7 @@ const App: React.FC = () => {
                           setIsSelectingTarget(false);
                           addLog(`请选择要弃置的牌（孙权「制衡」技能）...`, 'info');
                         }}
-                        className="bg-[#242a33] hover:bg-[#2f3844] text-[#cfe0ee] px-5 py-2 rounded-lg border border-[#6a8296]/70 hover:border-[#8fb4d9] hover:text-white transition-colors font-ancient text-base shadow-lg"
+                        className="skill-btn text-base"
                       >
                         制衡
                       </button>
@@ -6042,7 +6053,7 @@ const App: React.FC = () => {
                              setActiveSelectedId(null);
                              setIsSelectingTarget(false);
                            }}
-                           className="bg-[#9e2b25] hover:bg-[#b0322b] text-[#f7e7cf] px-5 py-2 rounded-lg border border-[#c86b62] hover:border-[#e8a99f] transition-colors font-ancient text-base shadow-[0_4px_14px_rgba(158,43,37,0.35)]"
+                           className="skill-btn text-base"
                          >
                            确认制衡
                          </button>
@@ -6058,7 +6069,7 @@ const App: React.FC = () => {
                              setIsSelectingTarget(false);
                              addLog(`取消了「制衡」技能`, 'info');
                            }}
-                           className="bg-[#221b16] hover:bg-[#2e2520] text-[#c8bda8] px-4 py-2 rounded-lg border border-[#6a5642] hover:border-[#c8a45c] hover:text-[#e8cf94] transition-colors font-ancient text-base shadow-lg"
+                           className="btn-ink px-4 py-2 rounded-lg font-ancient text-base"
                          >
                            取消制衡
                          </button>
@@ -6072,7 +6083,7 @@ const App: React.FC = () => {
                              setJieyinTarget(null);
                              addLog('请选择一名已受伤的男性角色（孙尚香「结姻」）...', 'info');
                            }}
-                           className="bg-[#2b3a33] hover:bg-[#37493f] text-[#cfe8dc] px-5 py-2 rounded-lg border border-[#6a9a80]/70 hover:border-[#8fc39a] hover:text-white transition-colors font-ancient text-base shadow-lg"
+                           className="skill-btn text-base"
                          >
                            结姻
                          </button>
@@ -6085,7 +6096,7 @@ const App: React.FC = () => {
                              setJieyinTarget(null);
                              addLog('取消了「结姻」技能', 'info');
                            }}
-                           className="bg-[#221b16] hover:bg-[#2e2520] text-[#c8bda8] px-4 py-2 rounded-lg border border-[#6a5642] hover:border-[#c8a45c] hover:text-[#e8cf94] transition-colors font-ancient text-base shadow-lg"
+                           className="btn-ink px-4 py-2 rounded-lg font-ancient text-base"
                          >
                            取消结姻
                          </button>
@@ -6101,7 +6112,7 @@ const App: React.FC = () => {
                              setIsSelectingTarget(false);
                              addLog('请选择一张黑色牌（甘宁「奇袭」）...', 'info');
                            }}
-                           className="bg-[#2b2f3a] hover:bg-[#373d4a] text-[#d6ddf0] px-5 py-2 rounded-lg border border-[#6a7690]/70 hover:border-[#93a2c4] hover:text-white transition-colors font-ancient text-base shadow-lg"
+                           className="skill-btn text-base"
                          >
                            奇袭
                          </button>
@@ -6116,7 +6127,7 @@ const App: React.FC = () => {
                              setIsSelectingTarget(false);
                              addLog('取消了「奇袭」技能', 'info');
                            }}
-                           className="bg-[#221b16] hover:bg-[#2e2520] text-[#c8bda8] px-4 py-2 rounded-lg border border-[#6a5642] hover:border-[#c8a45c] hover:text-[#e8cf94] transition-colors font-ancient text-base shadow-lg"
+                           className="btn-ink px-4 py-2 rounded-lg font-ancient text-base"
                          >
                            取消奇袭
                          </button>
@@ -6131,7 +6142,7 @@ const App: React.FC = () => {
                              setLijianSelectedTargets([]);
                              addLog(`请选择要弃置的牌（貂蝉「离间」技能）...`, 'info');
                            }}
-                           className="bg-[#33212a] hover:bg-[#402a34] text-[#f0d0e0] px-5 py-2 rounded-lg border border-[#a9737f]/70 hover:border-[#d98a8a] hover:text-white transition-colors font-ancient text-base shadow-lg"
+                           className="skill-btn text-base"
                          >
                            离间
                          </button>
@@ -6197,7 +6208,7 @@ const App: React.FC = () => {
                              setLijianSelectedTargets([]);
                              addLog(`取消了「离间」技能`, 'info');
                            }}
-                           className="bg-[#221b16] hover:bg-[#2e2520] text-[#c8bda8] px-4 py-2 rounded-lg border border-[#6a5642] hover:border-[#c8a45c] hover:text-[#e8cf94] transition-colors font-ancient text-base shadow-lg"
+                           className="btn-ink px-4 py-2 rounded-lg font-ancient text-base"
                          >
                            取消离间
                          </button>
