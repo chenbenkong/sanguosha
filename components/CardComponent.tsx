@@ -136,8 +136,8 @@ const CardComponent: React.FC<CardProps> = ({ card, onClick, disabled, selected,
         ${small ? 'w-16 h-24' : 'w-[76px] h-[114px] sm:w-24 sm:h-36 md:w-28 md:h-44'}
         mx-1 mb-2
         ${selected
-          ? 'ring-4 ring-yellow-500 -translate-y-6 z-30 shadow-[0_10px_30px_rgba(0,0,0,0.55),0_0_20px_rgba(234,179,8,0.45)]'
-          : `hover:-translate-y-3 card-shadow border ${isRed ? 'border-[#c98a7a]' : 'border-[#9a8a6a]'}`}
+          ? 'ring-4 ring-yellow-500 z-30 shadow-[0_10px_30px_rgba(0,0,0,0.55),0_0_20px_rgba(234,179,8,0.45)]'
+          : `card-shadow border ${isRed ? 'border-[#c98a7a]' : 'border-[#9a8a6a]'}`}
         ${disabled ? 'opacity-60 grayscale-[0.8]' : 'cursor-pointer'}
         ${canUseSkill && !disabled ? 'ring-2 ring-blue-500 animate-pulse' : ''}
       `}
@@ -153,7 +153,7 @@ const CardComponent: React.FC<CardProps> = ({ card, onClick, disabled, selected,
             className="w-full h-full object-cover select-none transition-transform duration-300 group-hover:scale-[1.06]"
           />
           {/* 上缘压暗，保证左上角点数可读 */}
-          <div className="absolute inset-0 bg-gradient-to-b from-black/28 via-transparent to-transparent pointer-events-none" />
+          <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-transparent to-transparent pointer-events-none" />
           {/* 下缘融入牌面 */}
           <div
             className="absolute inset-x-0 bottom-0 h-1/2 pointer-events-none"

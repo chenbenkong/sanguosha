@@ -559,9 +559,34 @@
       .light-bg {
         background: linear-gradient(180deg, #faf8f5 0%, #f5f0eb 100%);
       }
+
+      /* 首屏加载画面跟随主题：避免浅色用户先看到一块深色闪屏 */
+      .theme-light #boot-splash {
+        background:
+          radial-gradient(ellipse at 50% 38%, rgba(201, 168, 108, 0.16) 0%, transparent 55%),
+          radial-gradient(ellipse at 80% 90%, rgba(158, 43, 37, 0.06) 0%, transparent 50%),
+          #faf8f5;
+      }
+      .theme-light .boot-title { color: #8b6914; }
+      .theme-light .boot-sub { color: rgba(139, 105, 20, 0.55); }
+      .theme-light .boot-bar { background: rgba(139, 105, 20, 0.16); }
+      .theme-light .boot-bar::after {
+        background: linear-gradient(90deg, transparent, #a8842c, transparent);
+      }
     </style>
   </head>
   <body>
+    <script>
+      /* 在 React 挂载前同步已保存的主题，避免浅色用户看到深色闪屏或主题跳变 */
+      (function () {
+        try {
+          if (localStorage.getItem('sgs-theme') === 'light') {
+            document.documentElement.classList.add('theme-light');
+            document.documentElement.style.colorScheme = 'light';
+          }
+        } catch (e) { /* 忽略 */ }
+      })();
+    </script>
     <div id="root"></div>
 
     <!-- 首屏加载画面（React 挂载后移除） -->

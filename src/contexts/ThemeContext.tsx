@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useMemo, useCallback } from 'react';
 
 type Theme = 'dark' | 'light';
 
@@ -8,37 +8,51 @@ interface ThemeContextType {
   setTheme: (theme: Theme) => void;
 }
 
+const THEME_STORAGE_KEY = 'sgs-theme';
+
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
+const readSavedTheme = (): Theme => {
+  try {
+    const saved = localStorage.getItem(THEME_STORAGE_KEY);
+    if (saved === 'light' || saved === 'dark') return saved;
+  } catch {
+    /* 隐私模式下 localStorage 可能不可用，回退默认值 */
+  }
+  return 'dark';
+};
+
 export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [theme, setThemeState] = useState<Theme>('dark');
+  const [theme, setThemeState] = useState<Theme>(readSavedTheme);
 
   useEffect(() => {
-    // 应用主题到document
-    if (theme === 'light') {
-      document.documentElement.classList.add('theme-light');
-      document.body.style.backgroundColor = '#faf8f5';
-      document.body.style.color = '#2d2a26';
-    } else {
-      document.documentElement.classList.remove('theme-light');
-      document.body.style.backgroundColor = '#1a1512';
-      document.body.style.color = '#e5e5e5';
+    const isLight = theme === 'light';
+    document.documentElement.classList.toggle('theme-light', isLight);
+    // color-scheme 让滚动条、原生控件跟随主题，而不是始终按浅色渲染
+    document.documentElement.style.colorScheme = isLight ? 'light' : 'dark';
+    document.body.style.backgroundColor = isLight ? '#faf8f5' : '#1a1512';
+    document.body.style.color = isLight ? '#2d2a26' : '#e5e5e5';
+    try {
+      localStorage.setItem(THEME_STORAGE_KEY, theme);
+    } catch {
+      /* 忽略写入失败 */
     }
   }, [theme]);
 
-  const toggleTheme = () => {
-    setThemeState(prev => prev === 'dark' ? 'light' : 'dark');
-  };
+  const toggleTheme = useCallback(() => {
+    setThemeState(prev => (prev === 'dark' ? 'light' : 'dark'));
+  }, []);
 
-  const setTheme = (newTheme: Theme) => {
+  const setTheme = useCallback((newTheme: Theme) => {
     setThemeState(newTheme);
-  };
+  }, []);
 
-  return (
-    <ThemeContext.Provider value={{ theme, toggleTheme, setTheme }}>
-      {children}
-    </ThemeContext.Provider>
+  const value = useMemo(
+    () => ({ theme, toggleTheme, setTheme }),
+    [theme, toggleTheme, setTheme]
   );
+
+  return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
 };
 
 export const useTheme = () => {

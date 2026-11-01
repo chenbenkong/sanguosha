@@ -113,12 +113,23 @@ const BackgroundCarouselBase: React.FC<BackgroundCarouselProps> = ({
         decoding="async"
         loading={current === 0 ? 'eager' : 'lazy'}
       />
-      {/* 压暗遮罩：统一对比度，避免背景抢戏（暗色更重） */}
-      <div className="absolute inset-0 bg-black/55" />
+      {/* 宣纸蒙版：白天模式把背景图压成淡墨氤氲的水印，
+          使「浅底 + 深字」的浅色主题配色真正成立（此前误压深色纱幕，深字读不出来） */}
+      <div className="absolute inset-0 bg-[#f7f2e8]/80" />
       <div
         className="absolute inset-0"
         style={{
-          background: 'radial-gradient(ellipse 80% 70% at 50% 45%, transparent 40%, rgba(0,0,0,0.6) 100%)'
+          background:
+            'radial-gradient(ellipse 78% 68% at 50% 45%, rgba(255,253,248,0.62) 0%, rgba(214,199,172,0.28) 62%, rgba(150,128,96,0.34) 100%)'
+        }}
+      />
+      {/* 纸纹：极淡的纤维噪点，增加宣纸质感（静态，无滤镜开销） */}
+      <div
+        className="absolute inset-0 opacity-[0.35] mix-blend-multiply"
+        style={{
+          backgroundImage:
+            'url("data:image/svg+xml,%3Csvg width=\'200\' height=\'200\' viewBox=\'0 0 200 200\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cfilter id=\'p\'%3E%3CfeTurbulence type=\'fractalNoise\' baseFrequency=\'0.9\' numOctaves=\'3\' stitchTiles=\'stitch\'/%3E%3C/filter%3E%3Crect width=\'100%25\' height=\'100%25\' filter=\'url(%23p)\' opacity=\'0.10\'/%3E%3C/svg%3E")',
+          backgroundSize: '200px 200px'
         }}
       />
     </div>

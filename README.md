@@ -1,6 +1,14 @@
 # 三国杀：五人军争（sanguosha）
 
-> 基于 React 19 + TypeScript + Vite 构建的网页版《三国杀》五人身份局，内置 AI 对手与「军师」战术顾问。
+> 基于 React 19 + TypeScript + Vite 构建的网页版《三国杀》五人身份局，内置 AI 对手。
+
+**v3.9 更新（界面统一 · 布局自适应 · 浅色主题重做）**
+- **浅色主题重做**：轮播背景改为「宣纸淡墨」蒙版，浅底深字真正可读；主题选择持久化到 localStorage，刷新后保持，首屏加载画面也跟随主题，不再闪黑
+- **弹窗体系统一**：新增暗金古风弹窗基座（描金双层内框 + 四角金线 + 金色渐变标题），杀机已至 / 濒死求桃 / 五谷丰登 / 技能说明 / 玩法说明 / 弃牌堆 / 孔明锦囊全部统一，浅色主题下不再突然跳出纯黑块
+- **对局界面自适应**：牌桌按 900px 设计高度排布，窗口变矮时整体等比缩放，底部手牌不再被挤出屏幕；手牌改为横向排列（可横滑），小屏 4-6 名敌将不再互相重叠
+- **选中卡牌不再被裁**：手牌区是横向滚动容器，原竖向溢出被算成 `auto` 导致上浮的选中牌顶部被切；现收敛上浮量并预留顶部留白
+- **修复**：五谷丰登卡牌入场动画因关键帧名拼错（`fadeInUp` vs `fade-in-up`）从未生效；`bg-black/28`、`/92` 等非法 Tailwind 透明度被静默丢弃
+- **清理**：移除未被引用的 `Avatar.tsx` / `geminiService.ts` / `test_skills.js` 与根目录重复的 3.5MB 背景音乐，卸载未使用的 `@google/genai`（少装 66 个包）；修正 `terserOptions` 在 esbuild 压缩下无效的配置，生产构建真正剔除 console / debugger
 
 **v3.8 更新（新武将包 · 24 将可选）**
 - **新增 4 名武将**：甘宁「奇袭」（黑色牌当【过河拆桥】，专属按钮选牌 + 点目标）、吕蒙「克己」（回合内未出【杀】自动跳过弃牌阶段）、王异「秘计」（回合开始已受伤则摸等同已损失体力的牌）、步练师「追忆」（阵亡时令己方体力最低者摸三张牌）
@@ -62,7 +70,7 @@
 
 本项目是一个可直接在浏览器中运行的《三国杀》单机对局实现，规则参考经典的**五人身份局**（主公 / 忠臣 / 反贼 / 内奸）。你操作 1 号位人类玩家，其余 4 名角色由内置 AI 托管，完整走完「回合开始 → 摸牌 → 出牌 → 弃牌 → 回合结束」的回合流程。
 
-页面采用竖排毛笔字体（Ma Shan Zheng）、木纹底纹与水墨配色，配合背景音乐、卡牌音效和多张国风背景图轮播，尽量还原桌游的对局氛围。项目另接入了 Google Gemini，可在对局中向「诸葛亮」请求一段针对当前局势的战术建议。
+页面采用竖排毛笔字体（Ma Shan Zheng）、木纹底纹与水墨配色，配合背景音乐、卡牌音效和多张国风背景图轮播，尽量还原桌游的对局氛围。
 
 ## 功能特性
 
@@ -83,7 +91,7 @@
 
 **武将**
 
-内置 20 名武将（含 9 名女将），各带专属立绘（`public/images/heroes/`）：
+内置 24 名武将（含 11 名女将），各带专属立绘（`public/images/heroes/`）：
 
 | 武将 | 势力 | 体力 | 技能 |
 | --- | --- | --- | --- |
@@ -121,11 +129,7 @@
 - **卡面视觉（v2.0 重绘）**：每张牌名专属配色主题、基础/锦囊/装备朱印角章、竖排点数花色铭牌、黑漆描金牌背
 - **对局界面（v2.0）**：五阶段进度轨高亮当前阶段、手牌扇形排布（hover 摆正上浮）、弃牌堆点击可查看全部弃牌、牌堆低于 10 张红色告警、开局标题朱印装饰、结算界面「大获全胜 / 败走麦城」胜负横幅、首屏水墨加载动画与站内 favicon
 - **对局体验（v3.0 新增）**：⚡ 全局变速按钮（1x/2x/3x，localStorage 记忆）、技能发动金色横幅动画、判定牌全屏展示、桌面端键盘快捷键（1-9 选牌 / Enter 出牌 / E 结束回合 / Esc 取消）、首页「玩法说明」图文弹窗、卡牌悬停 tooltip
-
-**AI 军师（可选）**
-
-- `services/geminiService.ts` 调用 `@google/genai`，把「我方情报 / 局势概览 / 近期战况」组装成提示词，让 Gemini 扮演诸葛亮给出战术建议
-- 未配置 API Key 时会返回「天机不可泄露 (API Key 缺失)」，不影响正常对局
+- **界面一致性（v3.9）**：统一暗金弹窗体系、明暗主题选择持久化、牌桌随窗口高度等比缩放（矮窗口也能完整看到手牌）
 
 ## 技术栈
 
@@ -135,7 +139,6 @@
 | 语言 | TypeScript 5.8 |
 | 构建 | Vite 6 + `@vitejs/plugin-react` |
 | 样式 | Tailwind CSS 3.4（构建期编译，PostCSS + Autoprefixer）+ 自定义 CSS 变量主题 |
-| AI | `@google/genai`（Google Gemini） |
 | 部署 | GitHub Actions → GitHub Pages |
 
 ## 目录结构
@@ -150,23 +153,22 @@ sanguosha/
 ├── constants.ts             # 武将表 HEROES、牌堆生成、音效与 BGM 配置
 ├── types.ts                 # Card / Hero / Player / Identity / GamePhase 等类型定义
 ├── components/
-│   ├── Avatar.tsx           # 武将头像
-│   └── CardComponent.tsx    # 卡牌渲染
-├── services/
-│   └── geminiService.ts     # Gemini 战术建议接口
+│   └── CardComponent.tsx    # 卡牌渲染（memo 化）
 ├── src/
 │   ├── components/
 │   │   ├── BackgroundCarousel.tsx
 │   │   └── ThemeToggle.tsx
+│   ├── audio/               # WebAudio 技能音效 / 角色语音调度
 │   ├── config/backgrounds.ts
 │   ├── contexts/ThemeContext.tsx
-│   └── styles/theme.css
+│   └── styles/theme.css     # 主题变量、弹窗体系、手牌扇形、座位布局
 ├── public/
 │   ├── backgrounds/         # 20 张国风背景图
-│   ├── images/heroes/       # 8 张武将立绘
-│   ├── 背景音乐.mp3          # 本地 BGM（置于 public/ 确保打包部署）
+│   ├── images/heroes/       # 24 张武将立绘
+│   ├── images/cards/        # 29 张卡面插画 + 牌背
+│   ├── audio/               # 技能 / 卡牌 / 阵亡语音与分段 BGM
+│   ├── 背景音乐.mp3          # 首页 BGM（置于 public/ 确保打包部署）
 │   └── favicon.svg          # 「殺」字印章站标
-├── test_skills.js           # 技能相关脚本
 ├── vite.config.ts           # 构建优化：代码分割、资源分目录、esbuild 压缩
 └── .github/workflows/deploy.yml   # Pages 自动部署
 ```
@@ -179,22 +181,17 @@ sanguosha/
 # 1. 安装依赖
 npm install
 
-# 2.（可选）配置 Gemini API Key，用于「军师建议」功能
-#    在项目根目录新建 .env.local
-echo "GEMINI_API_KEY=你的_API_KEY" > .env.local
-
-# 3. 启动开发服务器（默认 http://localhost:3000，已开放 0.0.0.0）
+# 2. 启动开发服务器（默认 http://localhost:3000，已开放 0.0.0.0）
 npm run dev
 
-# 4. 生产构建
+# 3. 生产构建
 npm run build
 
-# 5. 本地预览构建产物
+# 4. 本地预览构建产物
 npm run preview
 ```
 
-> 不配置 `GEMINI_API_KEY` 也可以正常游玩，只是 AI 军师建议不可用。
-> `vite.config.ts` 会把 `GEMINI_API_KEY` 注入为 `process.env.API_KEY` / `process.env.GEMINI_API_KEY`。
+纯前端项目，无需任何环境变量或后端服务。
 
 ## 在线演示
 
@@ -205,7 +202,7 @@ https://chenbenkong.github.io/sanguosha/
 ## 说明 / 备注
 
 - **纯前端单机项目**：没有服务端，也没有联机对战，所有对局逻辑与 AI 决策都在浏览器里完成。
-- **API Key 会打进产物**：Vite 的 `define` 是编译期替换，构建后 Key 会出现在前端 JS 中。因此线上演示不带 Key，请勿把个人 Key 提交或部署到公开站点。
-- **音效全部本地化（v3.0）**：技能音效改由 `src/audio/sfx.ts` 用 WebAudio 实时合成，不再依赖任何外部 CDN，国内网络下即时出声、离线可用、无版权顾虑；背景音乐为仓库内本地文件（`public/背景音乐.mp3`），随构建打包。
+- **零外部依赖的发声链路（v3.0）**：技能音效改由 `src/audio/sfx.ts` 用 WebAudio 实时合成，不再依赖任何外部 CDN，国内网络下即时出声、离线可用、无版权顾虑；背景音乐与角色语音均为仓库内本地文件，随构建打包。
+- **界面自适应（v3.9）**：牌桌以 900px 设计高度排布，窗口更矮时整体等比缩放，保证单页完整可见；移动端敌将改为可横滑的紧凑横排。
 - **规则为简化实现**：装备牌已实装武器 / 防具 / 坐骑四类槽位与距离体系，但部分特殊武器（青龙偃月刀、方天画戟）仅提供攻击范围，未实现完整武器特效；判定类延时锦囊按回合开始时统一结算。
 - 仓库根目录的 `.trae/`、`metadata.json` 等为开发工具与元数据，与运行无关。
