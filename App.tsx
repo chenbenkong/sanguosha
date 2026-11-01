@@ -94,6 +94,32 @@ const App: React.FC = () => {
   const deckRef = useRef<Card[]>([]); // 用于获取最新的牌堆状态
   const [discardPile, setDiscardPile] = useState<Card[]>([]);
   const discardPileRef = useRef<Card[]>([]); // 用于获取最新的弃牌堆状态
+
+  // 牌堆动作提示：摸牌时牌堆「弹一下」，洗切时整堆抖动
+  const [deckFx, setDeckFx] = useState<{ kind: 'tap' | 'shuffle', id: number } | null>(null);
+  const prevDeckLenRef = useRef<number>(0);
+  const deckFxInitRef = useRef<boolean>(false);
+  useEffect(() => {
+    const prev = prevDeckLenRef.current;
+    const cur = deck.length;
+    prevDeckLenRef.current = cur;
+    // 开局发牌不算「洗切」：第一次「由空变满」只记录长度
+    if (!deckFxInitRef.current) {
+      if (cur > 0) deckFxInitRef.current = true;
+      return;
+    }
+    if (prev === 0 && cur > 0) {
+      // 弃牌堆洗回牌堆
+      setDeckFx({ kind: 'shuffle', id: Date.now() });
+      const t = setTimeout(() => setDeckFx(null), 950);
+      return () => clearTimeout(t);
+    }
+    if (cur < prev) {
+      setDeckFx({ kind: 'tap', id: Date.now() });
+      const t = setTimeout(() => setDeckFx(null), 420);
+      return () => clearTimeout(t);
+    }
+  }, [deck.length]);
   
   // 同步 refs
   useEffect(() => {
@@ -604,6 +630,10 @@ const App: React.FC = () => {
     });
 
     setDeck(shuffledDeck);
+    // 重置牌堆动画基线，避免开局满堆被当成「洗切」
+    prevDeckLenRef.current = shuffledDeck.length;
+    deckFxInitRef.current = true;
+    setDeckFx(null);
     setPlayers(newPlayers);
     playersRef.current = newPlayers;
     setDiscardPile([]);
@@ -4324,6 +4354,21 @@ const App: React.FC = () => {
                </div>
              ))}
            </div>
+
+           {/* 结算收尾：牌堆与弃牌堆余量，用牌背小方块延续牌堆视觉 */}
+           <div className="mt-6 pt-4 border-t border-[#8b7355]/30 flex flex-wrap items-center justify-center gap-x-10 gap-y-3 text-sm">
+             <span className="flex items-center gap-2">
+               <span
+                 className="w-4 h-6 rounded-[2px] border border-[#8b7355]/60 shadow-[0_2px_6px_rgba(0,0,0,0.5)]"
+                 style={{ background: 'linear-gradient(155deg,#2b2320 0%,#221b18 55%,#151110 100%)' }}
+               />
+               <span className="modal-text-dim">牌堆剩余 <b className="font-ancient text-[#e8cf94] text-base">{deck.length}</b> 张</span>
+             </span>
+             <span className="flex items-center gap-2">
+               <span className="w-4 h-6 rounded-[2px] border border-[#6a5642]/60 bg-[#221b16] shadow-[0_2px_6px_rgba(0,0,0,0.4)]" />
+               <span className="modal-text-dim">弃牌堆 <b className="font-ancient text-[#e8cf94] text-base">{discardPile.length}</b> 张</span>
+             </span>
+           </div>
          </div>
 
          <div className="z-10 flex gap-4">
@@ -5622,10 +5667,23 @@ const App: React.FC = () => {
               <div className={`text-sm text-center mb-2 font-ancient tracking-wider transition-colors ${theme === 'dark' ? 'text-stone-400 group-hover:text-yellow-500' : 'text-[#5c5854] group-hover:text-[#8b6914]'}`}>弃牌堆</div>
               {discardPile.length > 0 ? (
                  <div className="relative">
-                   <div className="transform transition-transform group-hover:scale-105">
-                     <CardComponent card={discardPile[discardPile.length - 1]} disabled />
+                   {/* 压在下层的旧牌：给弃牌堆一点厚度 */}
+                   {discardPile.length > 1 && (
+                     <>
+                       <div className="absolute top-[7px] left-[7px] w-full h-full rounded-lg bg-[#191410] border border-[#5a4a38]/40 rotate-2" />
+                       <div className="absolute top-[3px] left-[3px] w-full h-full rounded-lg bg-[#221b16] border border-[#6a5642]/45 -rotate-1" />
+                     </>
+                   )}
+                   <div className="relative transition-transform duration-200 group-hover:scale-105">
+                     {/* 新牌入堆：从上方按下落定 */}
+                     <div key={discardPile[discardPile.length - 1].id} className="discard-arrive">
+                       <CardComponent card={discardPile[discardPile.length - 1]} disabled />
+                     </div>
                    </div>
-                   <div className="absolute -bottom-3 -right-3 bg-gradient-to-br from-stone-600 to-stone-800 text-white text-sm font-bold w-8 h-8 rounded-full flex items-center justify-center border-2 border-stone-500 shadow-lg">
+                   <div
+                     key={`dc-${discardPile.length}`}
+                     className="discard-count absolute -bottom-3 -right-3 bg-gradient-to-br from-stone-600 to-stone-800 text-white text-sm font-bold w-8 h-8 rounded-full flex items-center justify-center border-2 border-stone-500 shadow-lg"
+                   >
                      {discardPile.length}
                    </div>
                    {/* 查看提示 */}
@@ -5644,10 +5702,25 @@ const App: React.FC = () => {
            {/* 牌堆 - 与卡牌牌背统一的黑漆描金风格 */}
            <div className="relative">
               <div className={`text-sm text-center mb-2 font-ancient tracking-wider ${theme === 'dark' ? 'text-stone-400' : 'text-[#5c5854]'}`}>牌堆</div>
-              <div className="relative">
-                {/* 堆叠厚度（纯色，无纹理请求） */}
-                <div className="absolute top-2 left-2 w-24 h-36 rounded-lg bg-[#191410] border border-[#5a4a38]/40 rotate-2"></div>
-                <div className="absolute top-1 left-1 w-24 h-36 rounded-lg bg-[#221b16] border border-[#6a5642]/50 -rotate-1"></div>
+              <div
+                key={deckFx ? `${deckFx.kind}-${deckFx.id}` : 'deck'}
+                className={`relative ${deckFx?.kind === 'tap' ? 'deck-tap' : ''} ${deckFx?.kind === 'shuffle' ? 'deck-shuffle' : ''}`}
+              >
+                {/* 堆叠厚度：随牌堆数量变化，抽得越少牌堆越薄 */}
+                {Array.from({ length: deck.length > 80 ? 3 : deck.length > 40 ? 2 : deck.length > 8 ? 1 : 0 }).map((_, i) => (
+                  <div
+                    key={i}
+                    className="absolute w-24 h-36 rounded-lg"
+                    style={{
+                      top: `${(i + 1) * 3}px`,
+                      left: `${(i + 1) * 2}px`,
+                      background: i % 2 === 0 ? '#221b16' : '#191410',
+                      border: '1px solid rgba(106, 86, 66, 0.45)',
+                      transform: `rotate(${i % 2 === 0 ? 1.4 : -0.9}deg)`,
+                      boxShadow: '0 4px 12px rgba(0,0,0,0.35)',
+                    }}
+                  />
+                ))}
 
                 {/* 主牌堆 */}
                 <div
@@ -5688,6 +5761,13 @@ const App: React.FC = () => {
                   {deck.length}
                 </div>
               </div>
+
+              {/* 洗切提示：弃牌堆洗回牌堆时的短暂说明 */}
+              {deckFx?.kind === 'shuffle' && (
+                <div className="absolute -bottom-10 left-1/2 -translate-x-1/2 whitespace-nowrap font-ancient text-[11px] tracking-[0.18em] text-[#f2dca5] bg-black/75 border border-[#c8a45c]/40 px-2 py-0.5 rounded deck-fade">
+                  洗切中…
+                </div>
+              )}
            </div>
         </div>
 

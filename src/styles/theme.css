@@ -663,6 +663,49 @@
   .turn-pass-band::after { animation: none; opacity: 0; }
 }
 
+/* ===== 牌堆 / 弃牌堆动作 ===== */
+/* 弃牌入堆：从上方按下落定 */
+@keyframes discardArrive {
+  0% { opacity: 0.35; transform: translateY(-18px) rotate(-7deg) scale(1.08); }
+  62% { opacity: 1; transform: translateY(2px) rotate(-1deg) scale(1.01); }
+  100% { opacity: 1; transform: translateY(0) rotate(0) scale(1); }
+}
+.discard-arrive { animation: discardArrive 0.4s cubic-bezier(0.2, 0.9, 0.3, 1) both; }
+/* 弃牌堆计数弹一下 */
+@keyframes discardCountPop {
+  0% { transform: scale(1.32); }
+  100% { transform: scale(1); }
+}
+.discard-count { animation: discardCountPop 0.34s ease-out both; }
+/* 摸牌时牌堆轻轻弹起 */
+@keyframes deckTap {
+  0% { transform: translateY(0) scale(1); }
+  38% { transform: translateY(-7px) scale(1.03); }
+  100% { transform: translateY(0) scale(1); }
+}
+.deck-tap { animation: deckTap 0.38s ease-out; }
+/* 洗切：整堆左右抖动 */
+@keyframes deckShuffle {
+  0%, 100% { transform: translateX(0) rotate(0deg); }
+  16% { transform: translateX(-5px) rotate(-1.4deg); }
+  32% { transform: translateX(5px) rotate(1.4deg); }
+  48% { transform: translateX(-4px) rotate(-1deg); }
+  66% { transform: translateX(4px) rotate(0.9deg); }
+  84% { transform: translateX(-2px) rotate(-0.4deg); }
+}
+.deck-shuffle {
+  animation: deckShuffle 0.8s ease-in-out;
+  filter: drop-shadow(0 0 14px rgba(232, 207, 148, 0.35));
+}
+@keyframes deckFade {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
+}
+.deck-fade { animation: deckFade 0.9s ease-in-out both; }
+@media (prefers-reduced-motion: reduce) {
+  .discard-arrive, .discard-count, .deck-tap, .deck-shuffle, .deck-fade { animation: none; }
+}
+
 /* ===== 出牌聚光：中心微亮 / 四周压暗，视线聚焦到牌面 ===== */
 .card-spotlight {
   background:
