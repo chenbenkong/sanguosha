@@ -1,6 +1,6 @@
 ﻿import { Hero, Card, CardName, CardType, Suit, EquipmentSlot } from './types';
 
-export const BGM_URL = "./背景音乐.mp3"; // 本地背景音乐文件
+// 背景音乐见 App.tsx 的 BGM_TRACKS（Opus 优先 + MP3 回退），此处不再维护路径
 
 // 音效已在 src/audio/sfx.ts 中改为本地 WebAudio 合成，不再依赖外部 CDN
 

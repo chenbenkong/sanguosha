@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Hero, Player, Card, GamePhase, CardName, LogEntry, Identity, Suit, CardType } from './types';
-import { HEROES, INITIAL_DECK, BGM_URL, EQUIP_META } from './constants';
+import { HEROES, INITIAL_DECK, EQUIP_META } from './constants';
 import { playSfx, SFX_FOR_NAME } from './src/audio/sfx';
 import { playCardVoice, playSkillVoice, playDeathVoice, hasCardVoice } from './src/audio/voice';
 import CardComponent from './components/CardComponent';
@@ -9,11 +9,19 @@ import { BackgroundCarousel } from './src/components/BackgroundCarousel';
 import { BACKGROUND_IMAGES, CAROUSEL_CONFIG } from './src/config/backgrounds';
 
 // 分段背景音乐：首页 / 对局 / 决战
-const BGM_TRACKS = {
-  start: BGM_URL,
-  battle: 'audio/bgm/battle.mp3',
-  climax: 'audio/bgm/climax.mp3',
-} as const;
+// 优先用 Opus（体积约为 MP3 的一半），浏览器不支持时回退 MP3
+const OPUS_OK = (() => {
+  try {
+    return !!new Audio().canPlayType('audio/ogg; codecs="opus"');
+  } catch {
+    return false;
+  }
+})();
+const BGM_TRACKS: Record<'start' | 'battle' | 'climax', string> = {
+  start: OPUS_OK ? 'audio/bgm/home.ogg' : 'audio/bgm/home.mp3',
+  battle: OPUS_OK ? 'audio/bgm/battle.ogg' : 'audio/bgm/battle.mp3',
+  climax: OPUS_OK ? 'audio/bgm/climax.ogg' : 'audio/bgm/climax.mp3',
+};
 
 // 胜利阵营：以阵营枚举为唯一判定依据，显示文案单独映射
 // （此前直接用 '反贼 (起义军)' 字符串与 Identity.FANZEI='反贼' 全等比较，永远不成立）
@@ -413,13 +421,27 @@ const App: React.FC = () => {
   };
 
   // --- 分段背景音乐：首页 / 对局 / 决战 ---
+  // 关键点：只保留一个 audio 元素；切曲时旧曲「淡出 → 断开 src」以中止下载，
+  // 静音时完全不创建音频，避免为听不到的声音白下 1~2MB
+  const releaseAudio = (el: HTMLAudioElement | null) => {
+    if (!el) return;
+    try {
+      el.pause();
+      el.removeAttribute('src');
+      el.load(); // 中止剩余下载，释放网络与解码资源
+    } catch { /* ignore */ }
+  };
+
   const playBgm = useCallback((mode: 'start' | 'battle' | 'climax') => {
+    if (isMutedRef.current) return;
     if (bgmModeRef.current === mode && audioRef.current) return;
     bgmModeRef.current = mode;
     const prev = audioRef.current;
-    const next = new Audio(BGM_TRACKS[mode]);
+    const next = new Audio();
+    next.preload = 'metadata'; // 先只取头部，播放时按需缓冲
+    next.src = BGM_TRACKS[mode];
     next.loop = true;
-    next.volume = isMutedRef.current ? 0 : 0.3;
+    next.volume = 0.3;
     next.play().catch(() => { /* 等待用户交互 */ });
     audioRef.current = next;
     if (prev) {
@@ -428,7 +450,7 @@ const App: React.FC = () => {
         v -= 0.05;
         if (v <= 0) {
           clearInterval(timer);
-          prev.pause();
+          releaseAudio(prev);
         } else {
           prev.volume = v;
         }
@@ -614,14 +636,9 @@ const App: React.FC = () => {
   // --- Initialization ---
 
   const initAudio = () => {
-    if (!audioRef.current) {
-      audioRef.current = new Audio(BGM_TRACKS[bgmModeRef.current]);
-      audioRef.current.loop = true;
-      audioRef.current.volume = isMuted ? 0 : 0.3;
-    }
-    // 浏览器自动播放策略会拦截无交互的播放请求（控制台出现 ERR_ABORTED），静默忽略即可
+    // 只负责「解锁」自动播放限制；要不要加载音乐交给 playBgm（静音时不加载）
     audioReadyRef.current = true;
-    audioRef.current.play().catch(() => {});
+    playBgm(bgmModeRef.current);
   };
 
   // 随界面 / 存活人数切换 BGM（需在首次用户交互后才能切换，避免自动播放被拦截）
@@ -640,8 +657,14 @@ const App: React.FC = () => {
   const toggleMute = () => {
     const newMuted = !isMuted;
     setIsMuted(newMuted);
-    if (audioRef.current) {
-      audioRef.current.volume = newMuted ? 0 : 0.3;
+    isMutedRef.current = newMuted; // 立即同步，playBgm 需要立刻读到
+    if (newMuted) {
+      // 静音即断开音频：不要让 BGM 在后台继续下载
+      releaseAudio(audioRef.current);
+      audioRef.current = null;
+    } else {
+      audioReadyRef.current = true;
+      playBgm(bgmModeRef.current);
     }
   };
 
