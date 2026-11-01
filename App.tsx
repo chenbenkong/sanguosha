@@ -32,6 +32,51 @@ const KINGDOM_CLASS: Record<string, string> = {
   群: 'kingdom-qun',
 };
 
+// ===== 对局存档 =====
+// 只在「回合开始」这类安全节点落盘：恢复时从该回合开头重放，
+// 不会重复摸牌、重复发动回合开始技能
+const SAVE_KEY = 'sgs-save-v1';
+const SAVE_VERSION = 1;
+
+interface GameSave {
+  v: number;
+  ts: number;
+  playerCount: 5 | 7;
+  players: Player[];
+  deck: Card[];
+  discardPile: Card[];
+  turnIndex: number;
+  logs: LogEntry[];
+}
+
+const readSave = (): GameSave | null => {
+  try {
+    const raw = localStorage.getItem(SAVE_KEY);
+    if (!raw) return null;
+    const s = JSON.parse(raw) as GameSave;
+    if (s?.v !== SAVE_VERSION) return null;
+    if (!Array.isArray(s.players) || s.players.length < 5) return null;
+    if (!s.players.some(p => p?.isHuman) || !Array.isArray(s.deck)) return null;
+    if (typeof s.turnIndex !== 'number' || s.turnIndex < 0 || s.turnIndex >= s.players.length) return null;
+    return s;
+  } catch {
+    return null;
+  }
+};
+
+const writeSave = (s: GameSave) => {
+  try {
+    localStorage.setItem(SAVE_KEY, JSON.stringify(s));
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+const clearSave = () => {
+  try { localStorage.removeItem(SAVE_KEY); } catch { /* ignore */ }
+};
+
 // 五谷丰登取牌优先级（数值越小越优先）
 const wuguKeepPriority = (c: Card): number => {
   switch (c.name) {
@@ -163,6 +208,29 @@ const App: React.FC = () => {
 
   // --- UI/Interaction State ---
   const [logs, setLogs] = useState<LogEntry[]>([]);
+
+  // --- 对局存档 ---
+  // savedGame：首页「继续上一局」用的存档摘要
+  // checkpoint：回合切换时置位，effect 里用当前渲染状态落盘（避免 ref 滞后）
+  const [savedGame, setSavedGame] = useState<GameSave | null>(() => readSave());
+  const [checkpoint, setCheckpoint] = useState<{ turnIndex: number, id: number } | null>(null);
+  useEffect(() => {
+    if (!checkpoint) return;
+    const snap: GameSave = {
+      v: SAVE_VERSION,
+      ts: Date.now(),
+      playerCount: (players.length === 7 ? 7 : 5),
+      players,
+      deck,
+      discardPile,
+      turnIndex: checkpoint.turnIndex,
+      logs,
+    };
+    if (writeSave(snap)) setSavedGame(snap);
+    // 只在下一位回合开始时落盘一次，不随每次状态变化重写
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [checkpoint]);
+
   
   // Selection: Now supports multiple IDs for discard phase
   const [selectedCardIds, setSelectedCardIds] = useState<string[]>([]);
@@ -643,7 +711,99 @@ const App: React.FC = () => {
     const lordIndex = newPlayers.findIndex(p => p.identity === Identity.ZHUGONG);
     setTurnIndex(lordIndex);
     
-    setLogs([{ id: 'init', text: `${playerCount}人军争模式启动！主公已现身，请各方势力准备。`, type: 'info' }]);
+    const initLogs: LogEntry[] = [{ id: 'init', text: `${playerCount}人军争模式启动！主公已现身，请各方势力准备。`, type: 'info' }];
+    setLogs(initLogs);
+    setPhase(GamePhase.START);
+    setScreen('game');
+
+    // 开局即落一次存档：中途刷新也能从本回合开头恢复
+    const snap: GameSave = {
+      v: SAVE_VERSION,
+      ts: Date.now(),
+      playerCount,
+      players: newPlayers,
+      deck: shuffledDeck,
+      discardPile: [],
+      turnIndex: lordIndex,
+      logs: initLogs,
+    };
+    if (writeSave(snap)) setSavedGame(snap);
+  };
+
+  // 继续上一局：从存档的「回合开始」重放，先清掉所有挂起的交互与演出状态
+  const resumeGame = () => {
+    if (!savedGame) return;
+    const s = savedGame;
+    initAudio();
+    isGameOverRef.current = false;
+
+    // 1. 结束可能挂起的人类决策，避免恢复后卡在旧 Promise 上
+    if (humanReactionResolver.current) {
+      humanReactionResolver.current({ played: false, isWuxie: false });
+      humanReactionResolver.current = null;
+    }
+    if (dyingResolver.current) {
+      dyingResolver.current(false);
+      dyingResolver.current = null;
+    }
+    setPendingReaction(null);
+    setDyingState(null);
+    setWuguSelection(null);
+    setWuguSelectedCard(null);
+    setDecisionLeft(null);
+    setReactionLeft(null);
+    setWuguLeft(null);
+    setDyingLeft(null);
+
+    // 2. 清空选择 / 技能模式
+    setSelectedCardIds([]);
+    setActiveSelectedId(null);
+    setIsSelectingTarget(false);
+    setHasUsedZhiheng(false);
+    setIsZhihengMode(false);
+    setHasUsedLijian(false);
+    setIsLijianMode(false);
+    setLijianSelectedCardId(null);
+    setLijianSelectedTargets([]);
+    setHasUsedFumo(false);
+    setIsRendeMode(false);
+    setRendeSelectedCardIds([]);
+    setRendeSelectedTarget(null);
+    setIsJieyinMode(false);
+    setJieyinTarget(null);
+    setHasUsedJieyin(false);
+    setIsQixiMode(false);
+    setIsJiedaoMode(false);
+    setJiedaoWeaponTarget(null);
+    setJiedaoVictimTarget(null);
+    setTiesuoSelectedTargets([]);
+
+    // 3. 清掉残留演出
+    setVisualCard(null);
+    setJudgmentVisual(null);
+    setDrawPulse(null);
+    setAiThinkingId(null);
+    setSkillBanner(null);
+    setSkillGlowId(null);
+    setTurnPass(null);
+    setAdvice(null);
+    setShowSkillModal(false);
+
+    // 4. 还原牌桌
+    setPlayers(s.players);
+    playersRef.current = s.players;
+    setDeck(s.deck);
+    deckRef.current = s.deck;
+    setDiscardPile(s.discardPile);
+    discardPileRef.current = s.discardPile;
+    // 恢复不算「摸牌/洗切」，重置牌堆动画基线
+    prevDeckLenRef.current = s.deck.length;
+    deckFxInitRef.current = true;
+    setDeckFx(null);
+    setTurnIndex(s.turnIndex);
+    setLogs(s.logs);
+    setPlayerCount(s.playerCount);
+    setIsAiTakeover(false);
     setPhase(GamePhase.START);
     setScreen('game');
   };
@@ -693,6 +853,9 @@ const App: React.FC = () => {
   const handleGameOver = (side: WinnerSide) => {
     if (isGameOverRef.current) return; // 防止重复触发
     isGameOverRef.current = true;
+    // 对局已分胜负，清掉存档，避免首页继续一个已经结束的局
+    clearSave();
+    setSavedGame(null);
     setWinnerSide(side);
     // 记录战绩
     const myIdentity = playersRef.current.find(p => p.isHuman)?.identity;
@@ -1096,6 +1259,9 @@ const App: React.FC = () => {
           safety++;
         }
         
+        // 存档点：本回合结算完毕、下一位尚未开始时落盘
+        setCheckpoint({ turnIndex: nextIndex, id: Date.now() });
+
         // 回合过场：墨金横带提示「上一位结束 → 轮到下一位」，让换手有节奏
         setTurnPass({
           from: endingPlayer?.hero.name ?? currentPlayer.hero.name,
@@ -3887,6 +4053,31 @@ const App: React.FC = () => {
                   <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000"></div>
                 </div>
               </button>
+
+              {/* 继续上一局：读取本地存档，从该回合开头重放 */}
+              {savedGame && (() => {
+                const myHeroName = savedGame.players.find(p => p.isHuman)?.hero.name ?? '';
+                const d = new Date(savedGame.ts);
+                const pad = (n: number) => String(n).padStart(2, '0');
+                const savedAt = `${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+                return (
+                  <button
+                    onClick={resumeGame}
+                    className={`group flex flex-col items-center gap-0.5 px-8 py-2.5 rounded-xl border-2 transition-all hover:scale-[1.04] shadow-lg ${
+                      theme === 'dark'
+                        ? 'border-[#c8a45c]/45 bg-gradient-to-b from-[#2a2118]/90 to-[#171310]/90 hover:border-[#e8cf94]'
+                        : 'border-[#c4a77d]/60 bg-gradient-to-b from-white/95 to-[#f2ebe0]/95 hover:border-[#8b6914]'
+                    }`}
+                  >
+                    <span className={`font-ancient text-lg tracking-widest ${theme === 'dark' ? 'text-[#e8cf94]' : 'text-[#8b6914]'}`}>
+                      ↺ 继续上一局
+                    </span>
+                    <span className={`text-[11px] tracking-wide ${theme === 'dark' ? 'text-stone-400' : 'text-[#6b6459]'}`}>
+                      {myHeroName} · {savedGame.playerCount}人局 · 存于 {savedAt}
+                    </span>
+                  </button>
+                );
+              })()}
               
               {/* 玩法说明入口 */}
               <button
@@ -4011,7 +4202,7 @@ const App: React.FC = () => {
             )}
           </div>
           <div>
-            <span className={theme === 'dark' ? 'text-amber-700/50' : 'text-[#8b6f4a]/70'}>◆</span> 三国杀 · {playerCount}人军争篇 v3.8 <span className={theme === 'dark' ? 'text-amber-700/50' : 'text-[#8b6f4a]/70'}>◆</span>
+            <span className={theme === 'dark' ? 'text-amber-700/50' : 'text-[#8b6f4a]/70'}>◆</span> 三国杀 · {playerCount}人军争篇 v3.20 <span className={theme === 'dark' ? 'text-amber-700/50' : 'text-[#8b6f4a]/70'}>◆</span>
           </div>
         </div>
       </div>
