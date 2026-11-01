@@ -15,6 +15,27 @@ const BGM_TRACKS = {
   climax: 'audio/bgm/climax.mp3',
 } as const;
 
+// 胜利阵营：以阵营枚举为唯一判定依据，显示文案单独映射
+// （此前直接用 '反贼 (起义军)' 字符串与 Identity.FANZEI='反贼' 全等比较，永远不成立）
+type WinnerSide = 'lord' | 'rebel' | 'spy';
+const WINNER_LABEL: Record<WinnerSide, string> = {
+  lord: '主公 & 忠臣 (朝廷)',
+  rebel: '反贼 (起义军)',
+  spy: '内奸 (野心家)',
+};
+
+// 五谷丰登取牌优先级（数值越小越优先）
+const wuguKeepPriority = (c: Card): number => {
+  switch (c.name) {
+    case CardName.TAO: return 0;
+    case CardName.WUZHONG: return 1;
+    case CardName.SHAN: return 2;
+    case CardName.SHA: return 3;
+    case CardName.JIU: return 4;
+    default: return c.type === CardType.EQUIPMENT ? 6 : 5;
+  }
+};
+
 // 全局类型声明
 declare global {
   interface Window {
@@ -78,7 +99,7 @@ const App: React.FC = () => {
   const [players, setPlayers] = useState<Player[]>([]);
   const [turnIndex, setTurnIndex] = useState<number>(0); 
   const [phase, setPhase] = useState<GamePhase>(GamePhase.START);
-  const [winnerIdentity, setWinnerIdentity] = useState<string>('');
+  const [winnerSide, setWinnerSide] = useState<WinnerSide | null>(null);
   const [isProcessing, setIsProcessing] = useState(0); // 全局状态锁计数，防止结算期间进行其他操作
   const isGameOverRef = useRef<boolean>(false); // 游戏结束标志，防止重复触发
 
@@ -88,6 +109,7 @@ const App: React.FC = () => {
   const [decisionLeft, setDecisionLeft] = useState<number | null>(null);
   const [reactionLeft, setReactionLeft] = useState<number | null>(null);
   const [wuguLeft, setWuguLeft] = useState<number | null>(null);
+  const [dyingLeft, setDyingLeft] = useState<number | null>(null);
   const onDecisionTimeoutRef = useRef<() => void>(() => {});
   const reactionTickRef = useRef<number | null>(null);
   
@@ -195,6 +217,7 @@ const App: React.FC = () => {
   // Dying resolver for async/await
   const dyingResolver = useRef<((result: boolean) => void) | null>(null);
   const dyingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const dyingTickRef = useRef<number | null>(null);
 
   // Skill Info Modal State
   const [showSkillModal, setShowSkillModal] = useState<boolean>(false);
@@ -604,16 +627,16 @@ const App: React.FC = () => {
   };
 
   // 游戏结束处理（带身份亮明延迟）
-  const handleGameOver = (winner: string) => {
+  const handleGameOver = (side: WinnerSide) => {
     if (isGameOverRef.current) return; // 防止重复触发
     isGameOverRef.current = true;
-    setWinnerIdentity(winner);
+    setWinnerSide(side);
     // 记录战绩
     const myIdentity = playersRef.current.find(p => p.isHuman)?.identity;
     const isVictory = myIdentity !== undefined && (
-      (winner === Identity.FANZEI && myIdentity === Identity.FANZEI) ||
-      ((winner === Identity.ZHUGONG || winner === Identity.ZHONGCHEN) && (myIdentity === Identity.ZHUGONG || myIdentity === Identity.ZHONGCHEN)) ||
-      (winner === Identity.NEIJIAN && myIdentity === Identity.NEIJIAN)
+      (side === 'rebel' && myIdentity === Identity.FANZEI) ||
+      (side === 'lord' && (myIdentity === Identity.ZHUGONG || myIdentity === Identity.ZHONGCHEN)) ||
+      (side === 'spy' && myIdentity === Identity.NEIJIAN)
     );
     setStats(prev => {
       const next = {
@@ -693,11 +716,15 @@ const App: React.FC = () => {
 
       // 检查主公是否阵亡
       if (lord.isDead) {
-        const alivePlayers = updatedPlayers.filter(p => !p.isDead);
-        if (alivePlayers.length === 1 && alivePlayers[0].identity === Identity.NEIJIAN) {
-          handleGameOver('内奸 (野心家)');
+        // 官方规则：主公阵亡时，若反贼已全部阵亡则内奸获胜，否则反贼获胜。
+        // （此前要求「场上只剩内奸一人」，会漏掉忠臣仍存活的情形，误判成反贼胜）
+        const aliveRebels = updatedPlayers.filter(p => p.identity === Identity.FANZEI && !p.isDead);
+        const aliveSpy = updatedPlayers.find(p => p.identity === Identity.NEIJIAN && !p.isDead);
+        if (aliveRebels.length === 0) {
+          // 反贼已清空：内奸存活则内奸胜，内奸也已阵亡则视为朝廷方获胜（主公死于意外）
+          handleGameOver(aliveSpy ? 'spy' : 'lord');
         } else {
-          handleGameOver('反贼 (起义军)');
+          handleGameOver('rebel');
         }
         return;
       }
@@ -706,7 +733,7 @@ const App: React.FC = () => {
       const rebels = updatedPlayers.filter(p => p.identity === Identity.FANZEI && !p.isDead);
       const spy = updatedPlayers.find(p => p.identity === Identity.NEIJIAN);
       if (rebels.length === 0 && (!spy || spy.isDead)) {
-        handleGameOver('主公 & 忠臣 (朝廷)');
+        handleGameOver('lord');
         return;
       }
     }, 100);
@@ -1082,6 +1109,94 @@ const App: React.FC = () => {
       window.clearTimeout(timer);
     };
   }, [wuguSelection, addLog]);
+
+  // 开启托管：立即接管此刻仍挂起的人类决策（响应 / 五谷丰登 / 濒死求桃）
+  // 这样无论什么时候点托管（包括「南蛮入侵」求杀、「万箭齐发」求闪、五谷丰登选牌时）都立刻生效
+  const resolveReactionLikeAI = () => {
+    const resolver = humanReactionResolver.current;
+    if (!resolver || !pendingReaction) return;
+    const responder = playersRef.current.find(p => p.id === pendingReaction.targetId);
+    if (!responder) {
+      resolver({ played: false, isWuxie: false });
+      return;
+    }
+    const needed = pendingReaction.cardName;
+
+    // 无懈可击判定阶段：有则打出
+    if (needed === CardName.WUXIE) {
+      const wuxie = responder.hand.find(c => c.name === CardName.WUXIE);
+      if (wuxie) {
+        playCard(responder.id, wuxie);
+        addLog(`托管接管，${responder.hero.name} 使用【无懈可击】`, 'info');
+        resolver({ played: true, isWuxie: true });
+      } else {
+        resolver({ played: false, isWuxie: false });
+      }
+      return;
+    }
+
+    // 普通响应：优先同名牌，其次技能转化（龙胆 / 武圣 / 倾国）
+    let card = responder.hand.find(c => c.name === needed);
+    if (!card && responder.hero.name === '赵云') {
+      card = responder.hand.find(c => c.name === (needed === CardName.SHAN ? CardName.SHA : CardName.SHAN));
+    }
+    if (!card && responder.hero.name === '关羽' && needed === CardName.SHA) {
+      card = responder.hand.find(c => c.suit === Suit.HEART || c.suit === Suit.DIAMOND);
+    }
+    if (!card && responder.hero.name === '甄姬' && needed === CardName.SHAN) {
+      card = responder.hand.find(c => c.suit === Suit.SPADE || c.suit === Suit.CLUB);
+    }
+
+    if (card) {
+      playCard(responder.id, card);
+      addLog(`托管接管，${responder.hero.name} 打出【${card.name}】响应【${needed}】`, 'info');
+      resolver({ played: true, isWuxie: false });
+    } else {
+      addLog(`托管接管，${responder.hero.name} 无牌可出，选择承受`, 'info');
+      resolver({ played: false, isWuxie: false });
+    }
+  };
+
+  useEffect(() => {
+    if (!isAiTakeover) return;
+
+    // 退出所有技能选牌模式，清空手动选择
+    setIsRendeMode(false);
+    setIsZhihengMode(false);
+    setIsLijianMode(false);
+    setIsJieyinMode(false);
+    setIsQixiMode(false);
+    setIsJiedaoMode(false);
+    setSelectedCardIds([]);
+    setActiveSelectedId(null);
+    setIsSelectingTarget(false);
+
+    // 五谷丰登：立刻按价值选取
+    if (wuguSelection) {
+      const best = [...wuguSelection.cards].sort((a, b) => wuguKeepPriority(a) - wuguKeepPriority(b))[0] ?? null;
+      setWuguSelection(null);
+      wuguSelection.onSelect(best);
+      setWuguSelectedCard(null);
+      addLog(best ? `托管接管，自动选取【${best.name}】` : '托管接管，无可选牌', 'info');
+    }
+
+    // 杀机已至 / 无懈可击：按 AI 逻辑立即响应
+    if (pendingReaction) {
+      resolveReactionLikeAI();
+    }
+
+    // 濒死求桃：有桃/酒且值得救就立即出手
+    if (dyingState && dyingResolver.current) {
+      const rescuer = playersRef.current.find(p => p.id === dyingState.rescuerId);
+      const victim = playersRef.current.find(p => p.id === dyingState.victimId);
+      const canSave = !!rescuer?.hand.some(c => c.name === CardName.TAO || c.name === CardName.JIU);
+      const worthSaving = !!rescuer && !!victim && (rescuer.isHuman || rescuer.id === victim.id || isAlly(rescuer, victim));
+      const shouldSave = canSave && worthSaving;
+      addLog(shouldSave ? '托管接管，自动使用【桃】/【酒】救援' : '托管接管，放弃救援', 'info');
+      dyingResolver.current(shouldSave);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAiTakeover]);
 
 
   // --- Interactions ---
@@ -2972,13 +3087,19 @@ const App: React.FC = () => {
                   }
                 });
 
-                // 15秒超时（给玩家足够时间考虑）
+                // 与出牌阶段一致的 20 秒读秒
+                setDyingLeft(DECISION_SECONDS);
+                const tickId = window.setInterval(() => {
+                  setDyingLeft(v => (v === null ? null : Math.max(0, v - 1)));
+                }, 1000);
+                dyingTickRef.current = tickId;
+
                 const timeoutId = setTimeout(() => {
                   if (dyingResolver.current) {
                     addLog(`${player.hero.name} 超时未响应，放弃救援`, 'warning');
                     dyingResolver.current(false);
                   }
-                }, 15000);
+                }, DECISION_SECONDS * 1000);
 
                 dyingTimeoutRef.current = timeoutId;
               });
@@ -2986,6 +3107,11 @@ const App: React.FC = () => {
               // 清理
               clearTimeout(dyingTimeoutRef.current);
               dyingTimeoutRef.current = null;
+              if (dyingTickRef.current) {
+                window.clearInterval(dyingTickRef.current);
+                dyingTickRef.current = null;
+              }
+              setDyingLeft(null);
               dyingResolver.current = null;
               setDyingState(null);
 
@@ -4083,11 +4209,10 @@ const App: React.FC = () => {
          {/* 胜负判定横幅 */}
          {(() => {
            const myIdentity = players.find(p => p.isHuman)?.identity;
-           const winner = winnerIdentity;
-           const isVictory = myIdentity !== undefined && (
-             (winner === Identity.FANZEI && myIdentity === Identity.FANZEI) ||
-             ((winner === Identity.ZHUGONG || winner === Identity.ZHONGCHEN) && (myIdentity === Identity.ZHUGONG || myIdentity === Identity.ZHONGCHEN)) ||
-             (winner === Identity.NEIJIAN && myIdentity === Identity.NEIJIAN)
+           const isVictory = winnerSide !== null && myIdentity !== undefined && (
+             (winnerSide === 'rebel' && myIdentity === Identity.FANZEI) ||
+             (winnerSide === 'lord' && (myIdentity === Identity.ZHUGONG || myIdentity === Identity.ZHONGCHEN)) ||
+             (winnerSide === 'spy' && myIdentity === Identity.NEIJIAN)
            );
            return (
              <div className={`z-20 mb-6 px-10 py-3 rounded-lg border-2 font-ancient text-3xl md:text-4xl tracking-[0.3em] shadow-[0_10px_40px_rgba(0,0,0,0.5)] animate-fade-in-scale ${
@@ -4105,7 +4230,7 @@ const App: React.FC = () => {
            <span className="absolute -inset-4 bg-yellow-600/10 blur-xl rounded-lg"></span>
          </h1>
          <h2 className={`text-4xl md:text-5xl font-ancient mb-12 z-10 border-b-2 pb-4 ${theme === 'dark' ? 'text-stone-200 border-stone-600' : 'text-[#2d2a26] border-[#c4a77d]'}`}>
-           获胜方：<span className="text-red-500">{winnerIdentity}</span>
+           获胜方：<span className="text-red-500">{winnerSide ? WINNER_LABEL[winnerSide] : ''}</span>
          </h2>
          
          <div className="z-10 modal-shell rounded-2xl p-8 mb-8 max-w-4xl w-full">
@@ -4730,7 +4855,15 @@ const App: React.FC = () => {
          <div className="absolute inset-0 z-[200] modal-mask flex items-center justify-center p-4">
             <div className="modal-frame modal-frame-danger w-full max-w-lg p-6 text-center">
                <h3 className="modal-title text-3xl font-ancient mb-1">💀 濒死求桃</h3>
-               <div className="modal-divider mb-4" />
+               <div className="modal-divider mb-3" />
+               {dyingState.rescuerId === me.id && (
+                 <div className="flex items-center justify-center gap-2 mb-2">
+                   <span className={`text-xl font-bold tabular-nums ${(dyingLeft ?? 0) <= 5 ? 'text-[#e0705f] animate-pulse' : 'text-[#e8cf94]'}`}>
+                     {dyingLeft ?? DECISION_SECONDS}
+                   </span>
+                   <span className="modal-text-dim text-xs">秒内请选择，超时自动放弃</span>
+                 </div>
+               )}
                <div className="modal-text-dim text-xs mb-4">
                  目标: {getPlayer(dyingState.victimId)?.hero.name} | 当前体力: {getPlayer(dyingState.victimId)?.hp}/{getPlayer(dyingState.victimId)?.maxHp}
                </div>
@@ -4912,6 +5045,24 @@ const App: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* 常驻托管开关：z-index 高于所有弹窗，响应求闪 / 五谷丰登等弹窗期间也能直接点 */}
+      <div className="absolute top-2 left-2 z-[230]">
+        <button
+          onClick={() => setIsAiTakeover(!isAiTakeover)}
+          title={isAiTakeover ? '关闭托管，亲自操作' : '开启托管，由 AI 代打（弹窗期间点击也会立即接管）'}
+          className={`h-10 px-3 rounded-full border-2 flex items-center gap-1.5 shadow-lg transition-all hover:scale-105 text-sm font-bold tracking-wider ${
+            isAiTakeover
+              ? 'bg-[#9e2b25] border-[#c86b62] text-[#f7e7cf] shadow-[0_0_16px_rgba(158,43,37,0.5)]'
+              : theme === 'dark'
+                ? 'bg-gradient-to-b from-[#2a2018] to-[#1a1410] border-[#d4af37]/50 text-[#e8cf94] hover:border-[#d4af37]'
+                : 'bg-gradient-to-b from-[#faf8f5] to-[#f5f0eb] border-[#c4a77d]/60 text-[#8b6914] hover:border-[#c4a77d]'
+          }`}
+        >
+          <span>{isAiTakeover ? '🤖' : '🎮'}</span>
+          <span>{isAiTakeover ? '托管中' : '托管'}</span>
+        </button>
+      </div>
 
       {/* Top Area: Enemies - 原版三国杀环形布局 */}
       <div className="flex-none pt-3 pb-2 z-10 relative">
@@ -5663,20 +5814,7 @@ const App: React.FC = () => {
               <div className={`flex flex-wrap items-center gap-2 rounded-xl p-2 border ${theme === 'dark' ? 'bg-[#14100d]/85 border-[#8b7355]/40' : 'bg-[#fbf8f2]/90 border-[#c4a77d]/50'}`}>
                 {/* AI Takeover Toggle */}
                 <button 
-                  onClick={() => {
-                    const next = !isAiTakeover;
-                    setIsAiTakeover(next);
-                    if (next) {
-                      // 开启托管时立刻结束挂起的人工响应 / 选择，避免傻等读秒
-                      if (humanReactionResolver.current) {
-                        addLog('已开启托管，自动放弃响应，交由 AI 接管', 'info');
-                        humanReactionResolver.current({ played: false, isWuxie: false });
-                      }
-                      setSelectedCardIds([]);
-                      setActiveSelectedId(null);
-                      setIsSelectingTarget(false);
-                    }
-                  }}
+                  onClick={() => setIsAiTakeover(!isAiTakeover)}
                   className={`
                     px-4 py-2 rounded-lg border text-sm font-bold transition-colors
                     ${isAiTakeover 
