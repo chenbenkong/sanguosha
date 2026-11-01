@@ -1312,6 +1312,8 @@ const App: React.FC = () => {
       phase === GamePhase.ACTION &&
       !!human && !human.isDead && turnIndex === human.id &&
       !dyingState && !pendingReaction && !showSkillModal && !wuguSelection &&
+      // 看说明 / 查弃牌堆时暂停读秒，避免玩家在读规则时被自动出牌
+      !showRules && !showDiscardViewer &&
       isProcessing === 0;
     const shouldCountDiscard =
       screen === 'game' &&
@@ -1319,6 +1321,7 @@ const App: React.FC = () => {
       phase === GamePhase.DISCARD &&
       !!human && !human.isDead && turnIndex === human.id &&
       !dyingState && !pendingReaction && !wuguSelection &&
+      !showRules && !showDiscardViewer &&
       isProcessing === 0;
 
     if (!shouldCount && !shouldCountDiscard) {
@@ -1343,7 +1346,7 @@ const App: React.FC = () => {
       window.clearInterval(tick);
       setDecisionLeft(null);
     };
-  }, [screen, isAiTakeover, phase, turnIndex, players, dyingState, pendingReaction, showSkillModal, wuguSelection, isProcessing]);
+  }, [screen, isAiTakeover, phase, turnIndex, players, dyingState, pendingReaction, showSkillModal, wuguSelection, isProcessing, showRules, showDiscardViewer]);
 
   // 五谷丰登选牌同样读秒：超时自动取第一张，避免对局停在此处
   useEffect(() => {
@@ -1462,20 +1465,44 @@ const App: React.FC = () => {
 
   // --- Interactions ---
 
-  // Global cancel: ESC to clear selection/targeting
+  // Global cancel: ESC 统一「退出」——先关弹窗，再退出技能选牌模式，最后清空选择
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        setSelectedCardIds([]);
-        setIsSelectingTarget(false);
-        setIsJiedaoMode(false);
-        setJiedaoWeaponTarget(null);
-        setJiedaoVictimTarget(null);
+      if (e.key !== 'Escape') return;
+      // 1. 弹窗优先关闭
+      if (showRules) { setShowRules(false); return; }
+      if (showSkillModal) { setShowSkillModal(false); return; }
+      if (showDiscardViewer) { setShowDiscardViewer(false); return; }
+      if (advice) { setAdvice(null); return; }
+      // 2. 退出各技能选牌模式（此前 ESC 只会清空已选牌，模式仍挂着）
+      if (isZhihengMode) setIsZhihengMode(false);
+      if (isLijianMode) {
+        setIsLijianMode(false);
+        setLijianSelectedCardId(null);
+        setLijianSelectedTargets([]);
       }
+      if (isRendeMode) {
+        setIsRendeMode(false);
+        setRendeSelectedCardIds([]);
+        setRendeSelectedTarget(null);
+      }
+      if (isJieyinMode) {
+        setIsJieyinMode(false);
+        setJieyinTarget(null);
+      }
+      if (isQixiMode) setIsQixiMode(false);
+      setIsJiedaoMode(false);
+      setJiedaoWeaponTarget(null);
+      setJiedaoVictimTarget(null);
+      setTiesuoSelectedTargets([]);
+      // 3. 清空当前选择
+      setSelectedCardIds([]);
+      setActiveSelectedId(null);
+      setIsSelectingTarget(false);
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, []);
+  }, [showRules, showSkillModal, showDiscardViewer, advice, isZhihengMode, isLijianMode, isRendeMode, isJieyinMode, isQixiMode]);
 
   // Clear any selection when entering reaction mode
   useEffect(() => {
@@ -1493,6 +1520,8 @@ const App: React.FC = () => {
     const onHotkey = (e: KeyboardEvent) => {
       if (screen !== 'game') return;
       if (dyingState || pendingReaction || showSkillModal || wuguSelection || isAiTakeover) return;
+      // 弹窗打开时不响应快捷键，避免关着说明弹窗也能出牌
+      if (showRules || showDiscardViewer || advice) return;
       if (!players.length) return;
       const meNow = players.find(p => p.isHuman) || players[0];
       if (!meNow || meNow.isDead || turnIndex !== meNow.id) return;
@@ -1529,7 +1558,7 @@ const App: React.FC = () => {
     window.addEventListener('keydown', onHotkey);
     return () => window.removeEventListener('keydown', onHotkey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [screen, phase, turnIndex, players, selectedCardIds, dyingState, pendingReaction, showSkillModal, wuguSelection, isAiTakeover, isProcessing]);
+  }, [screen, phase, turnIndex, players, selectedCardIds, dyingState, pendingReaction, showSkillModal, wuguSelection, isAiTakeover, isProcessing, showRules, showDiscardViewer, advice]);
 
   const clickGuard = useRef(false);
   const handleCardClick = (card: Card, e?: React.MouseEvent) => {
@@ -6614,21 +6643,32 @@ const App: React.FC = () => {
                   )}
                 </div>
 
-                {/* Discard Button - 弃牌阶段 */}
-                {isMyTurn && phase === GamePhase.DISCARD && !isAiTakeover && (
-                  <button 
-                    onClick={handleDiscardConfirm}
-                    disabled={!!dyingState || isProcessing || !((me.hand.length - me.hp) === selectedCardIds.length && (me.hand.length - me.hp) > 0)}
-                    className={`
-                      px-8 py-3 rounded-lg text-xl font-bold font-ancient shadow-lg transition-[transform,background-color] border-2
-                      ${(me.hand.length - me.hp) === selectedCardIds.length && (me.hand.length - me.hp) > 0 && !dyingState && !isProcessing
-                        ? 'bg-[#9e2b25] text-[#f7e7cf] border-[#c86b62] hover:bg-[#b0322b] hover:scale-105 cursor-pointer shadow-[0_4px_18px_rgba(158,43,37,0.4)]' 
-                        : 'bg-[#1a1512] text-[#5a5248] border-[#3a3229] cursor-not-allowed'}
-                    `}
-                  >
-                    弃 牌
-                  </button>
-                )}
+                {/* Discard Button - 弃牌阶段（附「需弃置 N 张」提示，避免不知道点几张） */}
+                {isMyTurn && phase === GamePhase.DISCARD && !isAiTakeover && (() => {
+                  const excess = me.hand.length - me.hp;
+                  const picked = selectedCardIds.length;
+                  const exact = excess === picked && excess > 0;
+                  const over = picked > excess;
+                  return (
+                    <div className="flex items-center gap-3">
+                      <span className={`text-xs font-bold tabular-nums tracking-wide ${over ? 'text-[#e0705f]' : exact ? 'text-[#e8cf94]' : theme === 'dark' ? 'text-stone-400' : 'text-[#6b6459]'}`}>
+                        需弃置 {Math.max(0, excess)} 张 · 已选 {picked} 张
+                      </span>
+                      <button
+                        onClick={handleDiscardConfirm}
+                        disabled={!!dyingState || isProcessing || !exact}
+                        className={`
+                          px-8 py-3 rounded-lg text-xl font-bold font-ancient shadow-lg transition-[transform,background-color] border-2
+                          ${exact && !dyingState && !isProcessing
+                            ? 'bg-[#9e2b25] text-[#f7e7cf] border-[#c86b62] hover:bg-[#b0322b] hover:scale-105 cursor-pointer shadow-[0_4px_18px_rgba(158,43,37,0.4)]'
+                            : 'bg-[#1a1512] text-[#5a5248] border-[#3a3229] cursor-not-allowed'}
+                        `}
+                      >
+                        弃 牌
+                      </button>
+                    </div>
+                  );
+                })()}
                 
                 {/* Cancel Selection - 取消选择按钮 */}
                 {(isSelectingTarget || (isMyTurn && phase === GamePhase.ACTION && selectedCardIds.length > 0)) && (
