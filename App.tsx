@@ -4413,15 +4413,24 @@ const App: React.FC = () => {
         </div>
       )}
 
-      {/* 技能发动横幅 - 金色大字短暂展示 */}
-      {skillBanner && (
-        <div key={skillBanner.id} className="absolute inset-x-0 top-[20%] z-[80] flex justify-center pointer-events-none">
-          <div className="skill-banner text-center">
-            <div className="skill-banner-skill font-ancient">{skillBanner.skill}</div>
-            <div className="skill-banner-hero font-ancient">{skillBanner.hero} · 发动技能</div>
+      {/* 技能发动特写：武将头像 + 技能名一起出场（不再是纯文字横幅） */}
+      {skillBanner && (() => {
+        const caster = players.find(p => p.hero.name === skillBanner.hero)?.hero;
+        return (
+          <div key={skillBanner.id} className="absolute inset-0 z-[80] flex items-center justify-center pointer-events-none">
+            <div className="skill-cast text-center">
+              {caster && (
+                <div className="skill-cast-portrait">
+                  <span className="skill-cast-ring" />
+                  <img src={caster.avatarUrl} alt={caster.name} draggable={false} />
+                </div>
+              )}
+              <div className="skill-banner-skill font-ancient">{skillBanner.skill}</div>
+              <div className="skill-banner-hero font-ancient">{skillBanner.hero} · 发动技能</div>
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* 弃牌堆查看器 */}
       {showDiscardViewer && (
@@ -5170,7 +5179,7 @@ const App: React.FC = () => {
               <div
                 onClick={(isSelectingTarget || isLijianMode || isJieyinMode || (isRendeMode && rendeSelectedCardIds.length > 0) || (isJiedaoMode && !p.isDead)) ? () => handleTargetClick(p.id) : undefined}
                 className={`
-                relative p-1.5 md:p-2 rounded-lg border-2 kingdom-frame ${KINGDOM_CLASS[p.hero.kingdom] ?? ''}
+                relative p-1.5 md:p-2 rounded-lg border-2 kingdom-frame hero-card ${KINGDOM_CLASS[p.hero.kingdom] ?? ''}
                 ${damageAnimTarget === p.id || healAnimTarget === p.id
                   ? '' // 动画期间禁用过渡效果
                   : 'transition-[transform,box-shadow,border-color] duration-300'
@@ -5249,7 +5258,7 @@ const App: React.FC = () => {
                   <div className="absolute -inset-1 rounded-lg bg-gradient-to-br from-[#c8a45c]/45 via-[#8b7355]/25 to-[#5a4a38]/15"></div>
                   
                   {/* 头像 */}
-                  <div className="relative w-full h-full rounded-lg overflow-hidden border border-[#c8a45c]/55">
+                  <div className="relative w-full h-full rounded-lg overflow-hidden border border-[#c8a45c]/55 hero-portrait">
                     <img 
                       src={p.hero.avatarUrl} 
                       alt={p.hero.name} 
@@ -5626,7 +5635,7 @@ const App: React.FC = () => {
             <div className="relative">
               {/* 玩家头像卡片 */}
               <div className={`
-                relative p-2 rounded-xl border-2 kingdom-frame ${KINGDOM_CLASS[me.hero.kingdom] ?? ''}
+                relative p-2 rounded-xl border-2 kingdom-frame hero-card ${KINGDOM_CLASS[me.hero.kingdom] ?? ''}
                 ${damageAnimTarget === 0 || healAnimTarget === 0
                   ? '' // 动画期间禁用过渡效果
                   : 'transition-[transform,box-shadow,border-color] duration-300'
@@ -5679,7 +5688,7 @@ const App: React.FC = () => {
                   <div className="absolute -inset-1 rounded-lg bg-gradient-to-br from-[#c8a45c]/45 via-[#8b7355]/25 to-[#5a4a38]/15"></div>
                   
                   {/* 头像 */}
-                  <div className="relative w-full h-full rounded-lg overflow-hidden border border-[#c8a45c]/55">
+                  <div className="relative w-full h-full rounded-lg overflow-hidden border border-[#c8a45c]/55 hero-portrait">
                     <img 
                       src={me.hero.avatarUrl} 
                       alt={me.hero.name} 
