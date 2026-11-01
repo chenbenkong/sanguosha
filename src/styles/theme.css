@@ -242,6 +242,62 @@
   }
 }
 
+/* ===== 体力阴阳鱼（对齐官方三国杀的勾玉体力） =====
+   圆点很难读出「三国杀」的味道，这里用勾玉轮廓 + 内侧阴阳暗面还原 */
+.hp-fish {
+  position: relative;
+  border-radius: 50% 50% 50% 50% / 62% 62% 38% 38%;
+  background:
+    radial-gradient(circle at 34% 24%, rgba(255, 248, 244, 0.65) 0%, rgba(255, 248, 244, 0) 58%),
+    linear-gradient(165deg, #d9483b 0%, #a8261f 45%, #7d1712 100%);
+  border: 1px solid rgba(244, 196, 180, 0.42);
+  box-shadow:
+    inset 0 -1px 3px rgba(0, 0, 0, 0.55),
+    0 1px 3px rgba(0, 0, 0, 0.5);
+}
+/* 内侧暗面：让平面圆形变成有体积的鱼形 */
+.hp-fish::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 6%;
+  width: 58%;
+  height: 88%;
+  transform: translateX(-50%);
+  border-radius: 50%;
+  background: radial-gradient(ellipse at 50% 28%, rgba(0, 0, 0, 0.34), rgba(0, 0, 0, 0.04) 72%);
+  pointer-events: none;
+}
+.hp-fish-empty {
+  background: #221a15;
+  border-color: rgba(116, 96, 74, 0.55);
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.75);
+}
+.hp-fish-empty::after {
+  background: radial-gradient(ellipse at 50% 28%, rgba(255, 255, 255, 0.06), rgba(0, 0, 0, 0) 72%);
+}
+/* 残血：朱红呼吸警示 */
+.hp-fish-low {
+  animation: hpFishPulse 1.15s ease-in-out infinite;
+}
+@keyframes hpFishPulse {
+  0%, 100% { box-shadow: inset 0 -1px 3px rgba(0, 0, 0, 0.55), 0 0 6px 1px rgba(200, 45, 35, 0.55); }
+  50% { box-shadow: inset 0 -1px 3px rgba(0, 0, 0, 0.55), 0 0 12px 3px rgba(228, 70, 55, 0.85); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .hp-fish-low { animation: none; box-shadow: inset 0 -1px 3px rgba(0, 0, 0, 0.55), 0 0 10px 2px rgba(228, 70, 55, 0.8); }
+}
+
+/* ===== 势力色（魏蓝 / 蜀红 / 吴绿 / 群金）===== */
+.kingdom-wei { --k-main: #6d9fd0; --k-soft: rgba(109, 159, 208, 0.32); }
+.kingdom-shu { --k-main: #d97a72; --k-soft: rgba(217, 122, 114, 0.32); }
+.kingdom-wu  { --k-main: #74bb8e; --k-soft: rgba(116, 187, 142, 0.32); }
+.kingdom-qun { --k-main: #d4b062; --k-soft: rgba(212, 176, 98, 0.32); }
+/* 势力描边：顶边高光 + 四角点缀，替代整块彩色底（避免整屏配色噪音） */
+.kingdom-frame {
+  box-shadow: inset 0 2px 0 -1px var(--k-main), inset 0 0 22px -14px var(--k-soft);
+}
+
 /* ===== 背景图叠化（替代原 3s 水波动画，降低合成开销） ===== */
 @keyframes bg-crossfade {
   from { opacity: 0; }

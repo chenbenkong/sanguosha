@@ -24,6 +24,14 @@ const WINNER_LABEL: Record<WinnerSide, string> = {
   spy: '内奸 (野心家)',
 };
 
+// 势力色：魏蓝 / 蜀红 / 吴绿 / 群金（对应 theme.css 中的 --k-main）
+const KINGDOM_CLASS: Record<string, string> = {
+  魏: 'kingdom-wei',
+  蜀: 'kingdom-shu',
+  吴: 'kingdom-wu',
+  群: 'kingdom-qun',
+};
+
 // 五谷丰登取牌优先级（数值越小越优先）
 const wuguKeepPriority = (c: Card): number => {
   switch (c.name) {
@@ -5153,7 +5161,7 @@ const App: React.FC = () => {
               <div
                 onClick={(isSelectingTarget || isLijianMode || isJieyinMode || (isRendeMode && rendeSelectedCardIds.length > 0) || (isJiedaoMode && !p.isDead)) ? () => handleTargetClick(p.id) : undefined}
                 className={`
-                relative p-1.5 md:p-2 rounded-lg border-2
+                relative p-1.5 md:p-2 rounded-lg border-2 ${KINGDOM_CLASS[p.hero.kingdom] ?? ''}
                 ${damageAnimTarget === p.id || healAnimTarget === p.id
                   ? '' // 动画期间禁用过渡效果
                   : 'transition-[transform,box-shadow,border-color] duration-300'
@@ -5199,6 +5207,12 @@ const App: React.FC = () => {
                 ${healAnimTarget === p.id ? 'animate-heal-pulse' : ''}
                 ${outOfRange ? 'opacity-40 saturate-[0.6]' : ''}
               `}>
+                {/* 势力色顶条：魏蓝 / 蜀红 / 吴绿 / 群金 */}
+                <span
+                  className="absolute top-0 left-2 right-2 h-[2px] rounded-full opacity-80"
+                  style={{ background: 'var(--k-main)' }}
+                />
+
                 {/* 伤害数字显示 */}
                 {damageNumber && damageNumber.targetId === p.id && (
                   <div className="absolute -top-8 left-1/2 -translate-x-1/2 z-50 pointer-events-none">
@@ -5288,12 +5302,10 @@ const App: React.FC = () => {
                       <div 
                         key={i}
                         className={`
-                          w-3 h-3 md:w-3.5 md:h-3.5 rounded-full border
+                          w-3 h-3 md:w-3.5 md:h-3.5 hp-fish
                           ${i < p.hp 
-                            ? p.hp === 1 
-                              ? 'bg-[#a8261f] border-[#e0705f] animate-pulse shadow-[0_0_6px_rgba(200,60,45,0.7)]' 
-                              : 'bg-[#9e2b25] border-[#c86b62]'
-                            : 'bg-[#241b16] border-[#5a4a38]'
+                            ? (p.hp === 1 ? 'hp-fish-low' : '')
+                            : 'hp-fish-empty'
                           }
                         `}
                       />
@@ -5603,7 +5615,7 @@ const App: React.FC = () => {
             <div className="relative">
               {/* 玩家头像卡片 */}
               <div className={`
-                relative p-2 rounded-xl border-2
+                relative p-2 rounded-xl border-2 ${KINGDOM_CLASS[me.hero.kingdom] ?? ''}
                 ${damageAnimTarget === 0 || healAnimTarget === 0
                   ? '' // 动画期间禁用过渡效果
                   : 'transition-[transform,box-shadow,border-color] duration-300'
@@ -5623,6 +5635,12 @@ const App: React.FC = () => {
                 ${damageAnimTarget === 0 ? 'animate-damage-shake' : ''}
                 ${healAnimTarget === 0 ? 'animate-heal-pulse' : ''}
               `}>
+                {/* 势力色顶条 */}
+                <span
+                  className="absolute top-0 left-2 right-2 h-[2px] rounded-full opacity-80"
+                  style={{ background: 'var(--k-main)' }}
+                />
+
                 {/* 伤害数字显示 */}
                 {damageNumber && damageNumber.targetId === 0 && (
                   <div className="absolute -top-12 left-1/2 -translate-x-1/2 z-50 pointer-events-none">
@@ -5723,12 +5741,10 @@ const App: React.FC = () => {
                     <div 
                       key={i}
                       className={`
-                        w-4 h-4 rounded-full border
+                        w-4 h-4 hp-fish
                         ${i < me.hp 
-                          ? me.hp === 1 
-                            ? 'bg-[#a8261f] border-[#e0705f] animate-pulse shadow-[0_0_8px_rgba(200,60,45,0.75)]' 
-                            : 'bg-[#9e2b25] border-[#c86b62]'
-                          : 'bg-[#241b16] border-[#5a4a38]'
+                          ? (me.hp === 1 ? 'hp-fish-low' : '')
+                          : 'hp-fish-empty'
                         }
                       `}
                     />
