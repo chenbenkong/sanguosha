@@ -596,7 +596,74 @@
   .judge-flip, .judge-seal, .draw-in { animation: none; }
 }
 
-/* 出牌聚光：中心微亮 + 四周压暗，把注意力压到牌上 */
+/* ===== 回合过场：墨金横带提示换手 ===== */
+@keyframes turnPassIn {
+  0% { opacity: 0; transform: translateX(-12%) scaleX(0.92); }
+  20% { opacity: 1; transform: translateX(0) scaleX(1); }
+  76% { opacity: 1; transform: translateX(0) scaleX(1); }
+  100% { opacity: 0; transform: translateX(5%) scaleX(1); }
+}
+@keyframes turnPassSweep {
+  0% { transform: translateX(-110%); }
+  55%, 100% { transform: translateX(110%); }
+}
+.turn-pass-band {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  width: min(620px, 88%);
+  padding: 13px 26px;
+  overflow: hidden;
+  background:
+    linear-gradient(90deg, rgba(10, 7, 4, 0) 0%, rgba(18, 13, 9, 0.9) 10%, rgba(28, 20, 13, 0.95) 50%, rgba(18, 13, 9, 0.9) 90%, rgba(10, 7, 4, 0) 100%);
+  border-top: 1px solid rgba(200, 164, 92, 0.42);
+  border-bottom: 1px solid rgba(200, 164, 92, 0.42);
+  animation: turnPassIn 1s ease-in-out both;
+}
+/* 一道金色扫光横向掠过，强化「换手」的方向感 */
+.turn-pass-band::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, rgba(255, 226, 168, 0) 0%, rgba(255, 226, 168, 0.16) 45%, rgba(255, 236, 190, 0.26) 50%, rgba(255, 226, 168, 0) 100%);
+  animation: turnPassSweep 1s ease-out both;
+  animation-duration: inherit;
+  pointer-events: none;
+}
+.turn-pass-from {
+  color: #bfae94;
+  font-size: 15px;
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+}
+.turn-pass-arrow {
+  width: 0;
+  height: 0;
+  border-left: 11px solid rgba(232, 207, 148, 0.85);
+  border-top: 6px solid transparent;
+  border-bottom: 6px solid transparent;
+  filter: drop-shadow(0 0 6px rgba(232, 207, 148, 0.5));
+}
+.turn-pass-to {
+  color: #f2dca5;
+  font-size: 21px;
+  letter-spacing: 0.1em;
+  text-shadow: 0 0 14px rgba(232, 207, 148, 0.45);
+  white-space: nowrap;
+}
+@media (max-width: 640px) {
+  .turn-pass-band { gap: 10px; padding: 10px 16px; }
+  .turn-pass-from { font-size: 12px; }
+  .turn-pass-to { font-size: 16px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .turn-pass-band { animation: none; }
+  .turn-pass-band::after { animation: none; opacity: 0; }
+}
+
+/* ===== 出牌聚光：中心微亮 / 四周压暗，视线聚焦到牌面 ===== */
 .card-spotlight {
   background:
     radial-gradient(ellipse 40% 50% at 50% 50%, rgba(255, 214, 120, 0.12) 0%, rgba(0, 0, 0, 0) 62%),

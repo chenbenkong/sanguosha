@@ -263,6 +263,8 @@ const App: React.FC = () => {
   const skillGlowTimerRef = useRef<NodeJS.Timeout | null>(null);
   // AI 思考中：头像暖光呼吸，避免 AI 秒出牌
   const [aiThinkingId, setAiThinkingId] = useState<number | null>(null);
+  // 回合过场：上一位回合结束 → 轮到下一位（换手节奏）
+  const [turnPass, setTurnPass] = useState<{ from: string, to: string, id: number } | null>(null);
 
   // 弃牌堆查看器
   const [showDiscardViewer, setShowDiscardViewer] = useState<boolean>(false);
@@ -1064,6 +1066,15 @@ const App: React.FC = () => {
           safety++;
         }
         
+        // 回合过场：墨金横带提示「上一位结束 → 轮到下一位」，让换手有节奏
+        setTurnPass({
+          from: endingPlayer?.hero.name ?? currentPlayer.hero.name,
+          to: getPlayer(nextIndex)?.hero.name ?? '',
+          id: Date.now(),
+        });
+        await delay(1000);
+        setTurnPass(null);
+
         setTurnIndex(nextIndex);
         setPhase(GamePhase.START);
       }
@@ -4468,6 +4479,17 @@ const App: React.FC = () => {
                 {judgmentVisual.playerName} · {judgmentVisual.reason} 判定
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* 回合过场：墨金横带「X 回合结束 → 轮到 Y」，让换手不再突兀 */}
+      {turnPass && (
+        <div key={turnPass.id} className="absolute inset-0 z-[55] flex items-center justify-center pointer-events-none overflow-hidden">
+          <div className="turn-pass-band" style={{ animationDuration: `${Math.round(1000 / speedLevel)}ms` }}>
+            <span className="turn-pass-from font-ancient">{turnPass.from} · 回合结束</span>
+            <span className="turn-pass-arrow" />
+            <span className="turn-pass-to font-ancient">轮到 {turnPass.to}</span>
           </div>
         </div>
       )}
