@@ -505,6 +505,77 @@
   .skill-cast::before { opacity: 0.5; }
 }
 
+/* ===== 判定演出：牌翻面 + 朱印「判」 ===== */
+@keyframes judgeFlip {
+  0% { opacity: 0; transform: perspective(900px) rotateY(-96deg) scale(0.92); }
+  58% { opacity: 1; transform: perspective(900px) rotateY(7deg) scale(1.02); }
+  100% { opacity: 1; transform: perspective(900px) rotateY(0deg) scale(1); }
+}
+.judge-flip {
+  animation: judgeFlip 0.62s cubic-bezier(0.22, 1, 0.36, 1) both;
+  transform-style: preserve-3d;
+}
+@keyframes sealStamp {
+  0% { opacity: 0; transform: rotate(-8deg) scale(2.3); }
+  62% { opacity: 1; transform: rotate(-8deg) scale(0.94); }
+  100% { opacity: 1; transform: rotate(-8deg) scale(1); }
+}
+/* 判定牌底光：把翻出的判定牌从暗底里托出来 */
+.judge-halo {
+  position: absolute;
+  inset: -34px -26px;
+  border-radius: 24px;
+  background: radial-gradient(circle at 50% 50%, rgba(255, 206, 120, 0.26) 0%, rgba(255, 186, 92, 0.10) 46%, rgba(255, 186, 92, 0) 72%);
+  pointer-events: none;
+}
+.judge-seal {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 96px;
+  height: 96px;
+  border-radius: 10px;
+  border: 3px double rgba(255, 138, 118, 0.92);
+  background: linear-gradient(158deg, rgba(178, 36, 26, 0.92) 0%, rgba(104, 18, 14, 0.84) 100%);
+  color: #ffe6da;
+  font-size: 38px;
+  letter-spacing: 0.06em;
+  text-shadow: 0 2px 10px rgba(70, 8, 4, 0.95), 0 0 20px rgba(255, 172, 150, 0.55);
+  box-shadow: 0 0 46px rgba(228, 80, 62, 0.6), inset 0 0 22px rgba(255, 122, 100, 0.34);
+  animation: sealStamp 0.5s cubic-bezier(0.2, 1.5, 0.4, 1) 0.32s both;
+}
+.judge-seal::after {
+  content: '';
+  position: absolute;
+  inset: 7px;
+  border-radius: 5px;
+  border: 1px solid rgba(255, 176, 156, 0.48);
+}
+/* 判定暗底：更暗 + 毛玻璃虚化桌面，避免弃牌堆的牌透过遮罩叠在判定牌后面 */
+.judge-backdrop {
+  background:
+    radial-gradient(ellipse 56% 58% at 50% 48%, rgba(10, 7, 4, 0.9) 0%, rgba(10, 7, 4, 0.74) 58%, rgba(10, 7, 4, 0.44) 100%);
+  -webkit-backdrop-filter: blur(4px) brightness(0.78);
+  backdrop-filter: blur(4px) brightness(0.78);
+}
+@media (max-width: 640px) {
+  .judge-seal { width: 66px; height: 66px; font-size: 26px; }
+}
+
+/* ===== 摸牌飞入：新牌从牌堆方向落到手牌区 ===== */
+@keyframes drawIn {
+  0% { opacity: 0; transform: translate(30vw, -190%) rotate(18deg) scale(0.66); }
+  62% { opacity: 1; }
+  100% { opacity: 1; transform: translate(0, 0) rotate(0deg) scale(1); }
+}
+.draw-in {
+  animation: drawIn 0.6s cubic-bezier(0.2, 0.9, 0.3, 1) both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .judge-flip, .judge-seal, .draw-in { animation: none; }
+}
+
 /* 出牌聚光：中心微亮 + 四周压暗，把注意力压到牌上 */
 .card-spotlight {
   background:

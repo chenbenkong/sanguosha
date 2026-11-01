@@ -248,6 +248,13 @@ const App: React.FC = () => {
   const [healNumber, setHealNumber] = useState<{ targetId: number, amount: number, id: string } | null>(null);
   const [visualCard, setVisualCard] = useState<{ card: Card, playerName: string } | null>(null);
 
+  // 判定演出：判定牌翻面 + 判定原因（区别于普通出牌）
+  const [judgmentVisual, setJudgmentVisual] = useState<{ card: Card, playerName: string, reason: string, id: number } | null>(null);
+  const judgmentTimerRef = useRef<NodeJS.Timeout | null>(null);
+  // 摸牌提示：让新摸的牌从牌堆方向飞入手牌
+  const [drawPulse, setDrawPulse] = useState<{ count: number, id: number } | null>(null);
+  const drawPulseTimerRef = useRef<NodeJS.Timeout | null>(null);
+
   // 技能发动横幅（全屏金色大字，短暂展示）
   const [skillBanner, setSkillBanner] = useState<{ hero: string, skill: string, id: string } | null>(null);
   const skillBannerTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -423,6 +430,13 @@ const App: React.FC = () => {
       playersRef.current = updated;
       return updated;
     });
+
+    // 玩家自己摸牌时，让新牌从牌堆方向飞入手牌
+    if (playerId === 0 && drawn.length > 0) {
+      if (drawPulseTimerRef.current) clearTimeout(drawPulseTimerRef.current);
+      setDrawPulse({ count: drawn.length, id: Date.now() });
+      drawPulseTimerRef.current = setTimeout(() => setDrawPulse(null), 1100);
+    }
 
     return drawn;
   }, []);
@@ -2078,6 +2092,18 @@ const App: React.FC = () => {
     setTimeout(() => setVisualCard(null), duration / speedRef.current);
   };
 
+  // 判定演出：判定牌翻面展示（与普通出牌区分开）
+  // 演出时长不跟随倍速压缩过多，否则翻牌 + 盖章会被截断
+  const showJudgmentVisual = (card: Card, playerName: string, reason: string, duration: number = 1600) => {
+    if (judgmentTimerRef.current) clearTimeout(judgmentTimerRef.current);
+    // 洛神 / 八卦阵这类「技能带判定」会同时出技能特写，会把判定牌压住
+    // 判定演出优先，收起技能横幅（技能名已写在判定名牌里）
+    if (skillBannerTimerRef.current) clearTimeout(skillBannerTimerRef.current);
+    setSkillBanner(null);
+    setJudgmentVisual({ card, playerName, reason, id: Date.now() });
+    judgmentTimerRef.current = setTimeout(() => setJudgmentVisual(null), Math.max(950, duration / speedRef.current));
+  };
+
   // 技能发动横幅：武将名 + 技能名 金色大字短暂展示
   const showSkillBanner = useCallback((hero: string, skill: string) => {
     if (!isMutedRef.current) playSkillVoice(skill);
@@ -2118,7 +2144,7 @@ const App: React.FC = () => {
       : judgmentCard;
     const rankDisplay = judgmentCard.rank.replace(/\d+$/, '');
     addLog(`⚖️ ${playerName} 的【${reason}】判定：${judgmentCard.suit} ${rankDisplay}（判定牌：【${judgmentCard.name}】）${isXiaoqiao && finalCard.suit !== judgmentCard.suit ? '，触发「红颜」视为红桃' : ''}`, 'warning');
-    showCardVisual(finalCard, `${playerName} 判定`, 1500, getPlayer(playerId)?.hero.gender);
+    showJudgmentVisual(finalCard, playerName, reason);
     await delay(1600);
     return finalCard;
   };
@@ -4381,8 +4407,8 @@ const App: React.FC = () => {
         <div key={`heal-${healNumber.id}`} className="absolute inset-0 z-[70] pointer-events-none animate-heal-flash" />
       )}
 
-      {/* Visual Effect Overlay - 优化版卡牌动画 */}
-      {visualCard && (
+      {/* Visual Effect Overlay - 优化版卡牌动画（判定演出期间让位，避免两层卡牌叠影） */}
+      {visualCard && !judgmentVisual && (
         <div className="absolute inset-0 z-50 flex items-center justify-center pointer-events-none overflow-hidden" style={{ contain: 'layout style paint' }}>
           {/* 出牌聚光：中心微亮 / 四周压暗，视线聚焦到牌面 */}
           <div className="absolute inset-0 card-spotlight"></div>
@@ -4413,6 +4439,25 @@ const App: React.FC = () => {
             <div className="absolute top-0 right-0 w-1.5 h-1.5 bg-amber-400 rounded-full animate-particle-2"></div>
             <div className="absolute bottom-0 left-0 w-1.5 h-1.5 bg-orange-400 rounded-full animate-particle-3"></div>
             <div className="absolute bottom-0 right-0 w-1.5 h-1.5 bg-yellow-300 rounded-full animate-particle-4"></div>
+          </div>
+        </div>
+      )}
+
+      {/* 判定演出：判定牌翻面 + 朱印「判」 */}
+      {judgmentVisual && (
+        <div key={judgmentVisual.id} className="absolute inset-0 z-[60] flex items-center justify-center pointer-events-none overflow-hidden">
+          <div className="absolute inset-0 judge-backdrop" />
+          <div className="relative flex items-center gap-5 md:gap-9">
+            <div className="judge-seal font-ancient">判</div>
+            <div className="relative judge-flip">
+              <div className="judge-halo" />
+              <div className="scale-105 md:scale-125">
+                <CardComponent card={judgmentVisual.card} />
+              </div>
+              <div className="absolute -bottom-9 left-1/2 -translate-x-1/2 whitespace-nowrap card-plate px-4 py-1 rounded-md font-ancient text-base">
+                {judgmentVisual.playerName} · {judgmentVisual.reason} 判定
+              </div>
+            </div>
           </div>
         </div>
       )}
@@ -6341,6 +6386,9 @@ const App: React.FC = () => {
                const fanRot = Math.max(-24, Math.min(24, offset * 3.2));
                const fanY = Math.abs(offset) * Math.abs(offset) * 1.6;
 
+               // 新摸到的牌：从牌堆方向飞入手牌区
+               const drawStartIndex = drawPulse ? me.hand.length - drawPulse.count : me.hand.length;
+               const isNewDrawn = index >= drawStartIndex;
                return (
                 <div
                   key={card.id}
@@ -6354,6 +6402,10 @@ const App: React.FC = () => {
                     '--fan-y': `${fanY}px`,
                   } as React.CSSProperties}
                 >
+                  <div
+                    className={isNewDrawn ? 'draw-in' : undefined}
+                    style={isNewDrawn ? { animationDelay: `${(index - drawStartIndex) * 70}ms` } : undefined}
+                  >
                     <CardComponent
                       card={card}
                       selected={isSelected}
@@ -6363,6 +6415,7 @@ const App: React.FC = () => {
                       skillName="龙胆"
                       small={isCompact}
                     />
+                  </div>
                 </div>
                );
              })}
