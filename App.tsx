@@ -23,8 +23,6 @@ declare global {
   }
 }
 
-// 牌桌设计高度：对局界面按此高度排布，视口更矮时整体等比缩放
-const BOARD_DESIGN_HEIGHT = 900;
 
 // Fisher-Yates shuffle
 function shuffle<T>(array: T[]): T[] {
@@ -83,6 +81,15 @@ const App: React.FC = () => {
   const [winnerIdentity, setWinnerIdentity] = useState<string>('');
   const [isProcessing, setIsProcessing] = useState(0); // 全局状态锁计数，防止结算期间进行其他操作
   const isGameOverRef = useRef<boolean>(false); // 游戏结束标志，防止重复触发
+
+  // --- 人类决策读秒 ---
+  // 出牌 / 弃牌阶段超时未操作：已选牌则自动出牌，未选牌则自动跳过
+  const DECISION_SECONDS = 20;
+  const [decisionLeft, setDecisionLeft] = useState<number | null>(null);
+  const [reactionLeft, setReactionLeft] = useState<number | null>(null);
+  const [wuguLeft, setWuguLeft] = useState<number | null>(null);
+  const onDecisionTimeoutRef = useRef<() => void>(() => {});
+  const reactionTickRef = useRef<number | null>(null);
   
   // Feature State
   const [isAiTakeover, setIsAiTakeover] = useState<boolean>(false);
@@ -1006,7 +1013,75 @@ const App: React.FC = () => {
 
     runTurn();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phase, turnIndex, screen, isAiTakeover]); 
+  }, [phase, turnIndex, screen, isAiTakeover, isProcessing]); 
+
+  // 人类决策读秒：出牌 / 弃牌阶段 20 秒未操作则自动处理，避免对局永久卡住
+  useEffect(() => {
+    const human = players.find(p => p.isHuman);
+    const shouldCount =
+      screen === 'game' &&
+      !isAiTakeover &&
+      phase === GamePhase.ACTION &&
+      !!human && !human.isDead && turnIndex === human.id &&
+      !dyingState && !pendingReaction && !showSkillModal && !wuguSelection &&
+      isProcessing === 0;
+    const shouldCountDiscard =
+      screen === 'game' &&
+      !isAiTakeover &&
+      phase === GamePhase.DISCARD &&
+      !!human && !human.isDead && turnIndex === human.id &&
+      !dyingState && !pendingReaction && !wuguSelection &&
+      isProcessing === 0;
+
+    if (!shouldCount && !shouldCountDiscard) {
+      setDecisionLeft(null);
+      return;
+    }
+
+    const startedAt = Date.now();
+    setDecisionLeft(DECISION_SECONDS);
+    const tick = window.setInterval(() => {
+      const left = DECISION_SECONDS - Math.floor((Date.now() - startedAt) / 1000);
+      if (left <= 0) {
+        window.clearInterval(tick);
+        setDecisionLeft(0);
+        onDecisionTimeoutRef.current();
+      } else {
+        setDecisionLeft(left);
+      }
+    }, 250);
+
+    return () => {
+      window.clearInterval(tick);
+      setDecisionLeft(null);
+    };
+  }, [screen, isAiTakeover, phase, turnIndex, players, dyingState, pendingReaction, showSkillModal, wuguSelection, isProcessing]);
+
+  // 五谷丰登选牌同样读秒：超时自动取第一张，避免对局停在此处
+  useEffect(() => {
+    if (!wuguSelection) {
+      setWuguLeft(null);
+      return;
+    }
+    const startedAt = Date.now();
+    setWuguLeft(DECISION_SECONDS);
+    const tick = window.setInterval(() => {
+      const left = DECISION_SECONDS - Math.floor((Date.now() - startedAt) / 1000);
+      setWuguLeft(left > 0 ? left : 0);
+    }, 250);
+    const timer = window.setTimeout(() => {
+      const pick = wuguSelection.cards[0] ?? null;
+      setWuguSelection(null);
+      wuguSelection.onSelect(pick);
+      setWuguSelectedCard(null);
+      addLog(pick ? `时间到！自动选择【${pick.name}】` : '时间到！无可选牌', 'warning');
+    }, DECISION_SECONDS * 1000);
+
+    return () => {
+      window.clearInterval(tick);
+      window.clearTimeout(timer);
+    };
+  }, [wuguSelection, addLog]);
 
 
   // --- Interactions ---
@@ -2602,26 +2677,34 @@ const App: React.FC = () => {
           canUseWuxie: hasWuxie
         });
         
-        // Wait for user input via Promise with timeout (30 seconds)
+        // Wait for user input via Promise with timeout（与出牌阶段一致的读秒）
+        setReactionLeft(DECISION_SECONDS);
         const result = await new Promise<{ played: boolean, isWuxie: boolean }>((resolve) => {
            humanReactionResolver.current = resolve;
-           
-           // Add timeout mechanism - automatically resolve to false after 30 seconds
-           const timeoutId = setTimeout(() => {
-              // Only trigger timeout if pendingReaction still exists
+
+           const tickId = window.setInterval(() => {
+             setReactionLeft(v => (v === null ? null : Math.max(0, v - 1)));
+           }, 1000);
+           reactionTickRef.current = tickId;
+
+           const timeoutId = window.setTimeout(() => {
               if (humanReactionResolver.current) {
                 addLog('时间到！自动放弃防御', 'danger');
                 humanReactionResolver.current({ played: false, isWuxie: false });
               }
-            }, 10000); // 10 seconds timeout
-           
-           // Store timeoutId for cleanup
+            }, DECISION_SECONDS * 1000);
+
            timeoutIdRef.current = timeoutId;
         });
-        
+
         // Cleanup
         clearTimeout(timeoutIdRef.current); // Clear timeout to prevent memory leak
         timeoutIdRef.current = null;
+        if (reactionTickRef.current) {
+          window.clearInterval(reactionTickRef.current);
+          reactionTickRef.current = null;
+        }
+        setReactionLeft(null);
         setPendingReaction(null);
         humanReactionResolver.current = null;
 
@@ -3375,6 +3458,55 @@ const App: React.FC = () => {
     }
   };
 
+  // 超时自动弃牌：保留关键牌，优先弃置低价值牌（与 AI 弃牌策略一致）
+  const autoDiscardLowestCards = () => {
+    const self = playersRef.current.find(p => p.isHuman) || players[0];
+    if (!self) return;
+    const excess = self.hand.length - self.hp;
+    if (excess <= 0) {
+      setPhase(GamePhase.END);
+      return;
+    }
+    const keepValue = (c: Card) => {
+      switch (c.name) {
+        case CardName.TAO: return 0;
+        case CardName.SHAN: return 1;
+        case CardName.SHA: return 2;
+        case CardName.WUZHONG: return 3;
+        case CardName.WUXIE: return 3;
+        case CardName.JIU: return 4;
+        default: return 6;
+      }
+    };
+    const toDiscard = [...self.hand].sort((a, b) => keepValue(b) - keepValue(a)).slice(0, excess);
+    discardCards(self.id, toDiscard);
+    addLog(`时间到！${self.hero.name} 自动弃置 ${toDiscard.length} 张牌`, 'warning');
+    setSelectedCardIds([]);
+    setActiveSelectedId(null);
+    setPhase(GamePhase.END);
+  };
+
+  // 读秒归零后的自动决策：已选牌就出牌，没选牌就跳过出牌阶段
+  onDecisionTimeoutRef.current = () => {
+    if (dyingState || isProcessing) return;
+    if (phase === GamePhase.DISCARD) {
+      autoDiscardLowestCards();
+      return;
+    }
+    if (phase === GamePhase.ACTION) {
+      if (selectedCardIds.length > 0) {
+        addLog('时间到！自动出牌', 'warning');
+        handleConfirmPlay();
+      } else {
+        addLog('时间到！未出牌，自动结束出牌阶段', 'warning');
+        setSelectedCardIds([]);
+        setActiveSelectedId(null);
+        setIsSelectingTarget(false);
+        endTurn();
+      }
+    }
+  };
+
   // --- Render ---
 
   if (screen === 'start') {
@@ -4047,27 +4179,11 @@ const App: React.FC = () => {
     (me.hero.name === '关羽' && [Suit.HEART, Suit.DIAMOND].includes(activeCard.suit))
   );
 
-  // --- 对局面板自适应：仅桌面端按视口高度等比缩放（见下方 boardStyle） ---
-  const boardScale =
-    viewport.w >= 768 && viewport.h > 0 && viewport.h < BOARD_DESIGN_HEIGHT
-      ? Math.max(0.55, viewport.h / BOARD_DESIGN_HEIGHT)
-      : 1;
-  const boardStyle: React.CSSProperties =
-    boardScale !== 1
-      ? {
-          transform: `scale(${boardScale})`,
-          transformOrigin: 'top left',
-          width: `calc(100% / ${boardScale})`,
-          height: `${BOARD_DESIGN_HEIGHT}px`,
-        }
-      : {};
+  // --- 对局面板自适应 ---
+  const isCompact = viewport.h > 0 && viewport.h < 780;
 
   return (
-    <div className="h-screen w-full overflow-hidden">
-      <div
-        className={`w-full h-full flex flex-col overflow-hidden relative font-serif ${theme === 'light' ? 'parchment-bg' : 'bg-[#1c1c1c]'}`}
-        style={boardStyle}
-      >
+    <div className={`h-screen w-full flex flex-col overflow-hidden relative font-serif ${theme === 'light' ? 'parchment-bg' : 'bg-[#1c1c1c]'}`}>
       {/* 背景轮播 - 白天模式显示 - 放在最底层 */}
       {theme === 'light' && (
         <div className="absolute inset-0" style={{ zIndex: -10 }}>
@@ -4199,12 +4315,21 @@ const App: React.FC = () => {
       {/* Manual Reaction Modal */}
       {pendingReaction && !isAiTakeover && (
          <div className="absolute inset-0 z-40 modal-mask flex items-center justify-center p-4">
-            <div className="modal-frame modal-frame-danger w-full max-w-lg p-6 text-center">
+            <div className="modal-frame modal-frame-danger w-full max-w-xl p-6 text-center">
                <h3 className="modal-title text-3xl font-ancient mb-1">杀机已至</h3>
-               <div className="modal-divider mb-5" />
-               <p className="modal-text mb-6 text-base leading-relaxed">
+               <div className="modal-divider mb-3" />
+               <div className="flex items-center justify-center gap-2 mb-3">
+                 <span className={`text-xl font-bold tabular-nums ${(reactionLeft ?? 0) <= 5 ? 'text-[#e0705f] animate-pulse' : 'text-[#e8cf94]'}`}>
+                   {reactionLeft ?? DECISION_SECONDS}
+                 </span>
+                 <span className="modal-text-dim text-xs">秒内请选择，超时自动放弃</span>
+               </div>
+               <p className="modal-text mb-2 text-base leading-relaxed">
                  <span className="font-bold text-[#f0dcae]">{getPlayer(pendingReaction.sourceId)?.hero.name}</span> 对你使用了 
                  <span className="font-bold text-[#e8a99f] mx-1">【{pendingReaction.originalCard.name}】</span>
+               </p>
+               <p className="modal-text-dim text-sm mb-5">
+                 需要打出【{pendingReaction.cardName}】来抵消
                </p>
                <div className="mb-6 flex justify-center gap-2 flex-wrap">
                  {/* Filter Hand for needed card, skill cards, and Wuxie */}
@@ -4712,6 +4837,9 @@ const App: React.FC = () => {
             <div className="text-center mb-6">
               <h3 className="modal-title text-4xl font-ancient mb-3">🌾 五谷丰登</h3>
               <p className="modal-text text-lg">{wuguSelection.playerName}，请选择一张牌</p>
+              <p className={`mt-1 text-sm ${(wuguLeft ?? 0) <= 5 ? 'text-[#e0705f] animate-pulse' : 'text-[#e8cf94]'}`}>
+                <span className="text-lg font-bold tabular-nums">{wuguLeft ?? DECISION_SECONDS}</span> 秒内请选择，超时自动选取
+              </p>
               <div className="w-40 modal-divider mx-auto mt-3"></div>
             </div>
 
@@ -4836,7 +4964,7 @@ const App: React.FC = () => {
         </div>
 
         {/* 环形座位布局 */}
-        <div className="relative w-full flex items-start justify-center gap-1 overflow-x-auto md:block md:h-[288px] md:gap-0 md:overflow-visible py-1 md:py-0 px-1 md:px-0 scrollbar-hide">
+        <div className={`relative w-full flex items-start justify-center gap-1 overflow-x-auto md:block ${isCompact ? 'md:h-[152px]' : 'md:h-[288px]'} md:gap-0 md:overflow-visible py-1 md:py-0 px-1 md:px-0 scrollbar-hide`}>
           {enemies.map((p, index) => {
             // 计算环形位置
             const totalEnemies = enemies.length;
@@ -4939,7 +5067,7 @@ const App: React.FC = () => {
                 )}
 
                 {/* 武将头像区域 */}
-                <div className={`relative w-[74px] h-[92px] md:w-24 md:h-28 mb-2 ${
+                <div className={`relative w-[74px] h-[92px] ${isCompact ? 'md:w-[64px] md:h-[76px]' : 'md:w-24 md:h-28'} mb-2 ${
                   healAnimTarget === p.id ? 'animate-heal-glow' :
                   damageAnimTarget === p.id ? 'animate-damage-glow' : ''
                 } ${skillGlowId === p.id ? 'skill-glow' : ''}`}>
@@ -5206,6 +5334,21 @@ const App: React.FC = () => {
               );
             })}
           </div>
+
+          {/* 决策读秒：只在轮到自己出牌/弃牌且未托管时出现 */}
+          {decisionLeft !== null && (
+            <div className="mt-2 flex items-center gap-2">
+              <div className={`flex-1 h-1 rounded-full overflow-hidden ${theme === 'dark' ? 'bg-white/10' : 'bg-black/10'}`}>
+                <div
+                  className={`h-full rounded-full transition-[width] duration-200 ease-linear ${decisionLeft <= 5 ? 'bg-[#e0705f]' : theme === 'dark' ? 'bg-[#d4af37]' : 'bg-[#a8842c]'}`}
+                  style={{ width: `${Math.max(0, Math.min(100, (decisionLeft / DECISION_SECONDS) * 100))}%` }}
+                />
+              </div>
+              <span className={`text-[11px] font-bold tabular-nums tracking-wider ${decisionLeft <= 5 ? 'text-[#e0705f] animate-pulse' : theme === 'dark' ? 'text-[#e8cf94]' : 'text-[#8b6914]'}`}>
+                {decisionLeft}s
+              </span>
+            </div>
+          )}
         </div>
 
         {/* Center Decks - 牌堆和弃牌堆 - 原版三国杀风格 */}
@@ -5348,7 +5491,7 @@ const App: React.FC = () => {
                 )}
 
                 {/* 武将头像区域 */}
-                <div className={`relative w-20 h-24 md:w-24 md:h-28 ${
+                <div className={`relative w-20 h-24 ${isCompact ? 'md:w-[76px] md:h-[90px]' : 'md:w-24 md:h-28'} ${
                   healAnimTarget === 0 ? 'animate-heal-glow' :
                   damageAnimTarget === 0 ? 'animate-damage-glow' : ''
                 } ${skillGlowId === 0 ? 'skill-glow' : ''}`}>
@@ -5520,7 +5663,20 @@ const App: React.FC = () => {
               <div className={`flex flex-wrap items-center gap-2 rounded-xl p-2 border ${theme === 'dark' ? 'bg-[#14100d]/85 border-[#8b7355]/40' : 'bg-[#fbf8f2]/90 border-[#c4a77d]/50'}`}>
                 {/* AI Takeover Toggle */}
                 <button 
-                  onClick={() => setIsAiTakeover(!isAiTakeover)}
+                  onClick={() => {
+                    const next = !isAiTakeover;
+                    setIsAiTakeover(next);
+                    if (next) {
+                      // 开启托管时立刻结束挂起的人工响应 / 选择，避免傻等读秒
+                      if (humanReactionResolver.current) {
+                        addLog('已开启托管，自动放弃响应，交由 AI 接管', 'info');
+                        humanReactionResolver.current({ played: false, isWuxie: false });
+                      }
+                      setSelectedCardIds([]);
+                      setActiveSelectedId(null);
+                      setIsSelectingTarget(false);
+                    }
+                  }}
                   className={`
                     px-4 py-2 rounded-lg border text-sm font-bold transition-colors
                     ${isAiTakeover 
@@ -5956,7 +6112,7 @@ const App: React.FC = () => {
          </div>
 
          {/* Hand Cards Area - 手牌区域 */}
-         <div className="w-full overflow-x-auto overflow-y-visible px-2 sm:px-4 pt-5 pb-1 min-h-[132px] sm:min-h-[158px] scrollbar-hide flex justify-center relative" style={{ zIndex: 10 }}>
+         <div className={`w-full overflow-x-auto overflow-y-visible px-2 sm:px-4 pb-1 scrollbar-hide flex justify-center relative ${isCompact ? 'pt-3 min-h-0' : 'pt-5 min-h-[132px] sm:min-h-[158px]'}`} style={{ zIndex: 10 }}>
            {/* 手牌背景 - 白天模式移除遮罩 */}
            {theme === 'dark' && (
              <div className="absolute inset-x-4 bottom-0 h-32 rounded-t-2xl pointer-events-none bg-gradient-to-t from-[#0c0906]/85 to-transparent"></div>
@@ -6027,13 +6183,13 @@ const App: React.FC = () => {
                       onClick={dispatchCardClick}
                       canUseSkill={canUseLongdan}
                       skillName="龙胆"
+                      small={isCompact}
                     />
                 </div>
                );
              })}
            </div>
          </div>
-      </div>
       </div>
     </div>
   );
