@@ -4384,21 +4384,25 @@ const App: React.FC = () => {
       {/* Visual Effect Overlay - 优化版卡牌动画 */}
       {visualCard && (
         <div className="absolute inset-0 z-50 flex items-center justify-center pointer-events-none overflow-hidden" style={{ contain: 'layout style paint' }}>
-          {/* 背景闪光效果 - 简化 */}
-          <div className="absolute inset-0 bg-gradient-radial from-yellow-500/15 via-transparent to-transparent"></div>
+          {/* 出牌聚光：中心微亮 / 四周压暗，视线聚焦到牌面 */}
+          <div className="absolute inset-0 card-spotlight"></div>
 
           {/* 卡牌飞入动画容器 */}
           <div className="relative animate-card-fly-in" style={{ willChange: 'transform' }}>
+            {/* 金色冲击环：牌落桌时向外扩散一次 */}
+            <div className="card-burst" />
             {/* 卡牌光晕 - 简化 */}
             <div className="absolute -inset-6 bg-yellow-400/20 blur-xl rounded-full"></div>
 
             {/* 卡牌主体 */}
             <div className="relative scale-110 md:scale-125 animate-card-bounce">
-              <CardComponent card={visualCard.card} />
+              <div className="card-settle">
+                <CardComponent card={visualCard.card} />
+              </div>
 
               {/* 卡牌名称标签 */}
               <div className="absolute -bottom-10 left-1/2 -translate-x-1/2 whitespace-nowrap">
-                <div className="bg-gradient-to-b from-yellow-600 to-yellow-800 text-yellow-100 px-5 py-1.5 rounded-lg border-2 border-yellow-400 shadow-lg font-ancient text-lg">
+                <div className="card-plate px-5 py-1.5 rounded-lg font-ancient text-lg">
                   {visualCard.playerName} 打出
                 </div>
               </div>

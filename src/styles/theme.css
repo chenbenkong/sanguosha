@@ -505,6 +505,53 @@
   .skill-cast::before { opacity: 0.5; }
 }
 
+/* 出牌聚光：中心微亮 + 四周压暗，把注意力压到牌上 */
+.card-spotlight {
+  background:
+    radial-gradient(ellipse 40% 50% at 50% 50%, rgba(255, 214, 120, 0.12) 0%, rgba(0, 0, 0, 0) 62%),
+    radial-gradient(ellipse 96% 96% at 50% 50%, rgba(0, 0, 0, 0) 40%, rgba(0, 0, 0, 0.55) 100%);
+}
+
+/* ===== 出牌演出：金色冲击环 + 落桌倾斜 ===== */
+@keyframes cardBurst {
+  0% { opacity: 0.95; transform: scale(0.52); }
+  55% { opacity: 0.55; }
+  100% { opacity: 0; transform: scale(2.15); }
+}
+.card-burst {
+  position: absolute;
+  inset: -16px;
+  border-radius: 50%;
+  border: 2px solid rgba(240, 216, 148, 0.8);
+  box-shadow:
+    0 0 38px rgba(212, 175, 55, 0.55),
+    inset 0 0 26px rgba(212, 175, 55, 0.35);
+  animation: cardBurst 0.85s ease-out both;
+  pointer-events: none;
+}
+@keyframes cardSettle {
+  0% { transform: scale(1.12) rotate(-4deg); }
+  62% { transform: scale(0.98) rotate(1deg); }
+  100% { transform: scale(1) rotate(0deg); }
+}
+.card-settle {
+  animation: cardSettle 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+/* 出牌者名牌：墨底描金，与全局弹窗语言统一（原来是高饱和黄底） */
+.card-plate {
+  background: linear-gradient(180deg, #2b2118 0%, #16110c 100%);
+  border: 1px solid rgba(212, 175, 55, 0.65);
+  color: #f0dcae;
+  box-shadow:
+    0 6px 22px rgba(0, 0, 0, 0.6),
+    inset 0 0 20px rgba(212, 175, 55, 0.10);
+  letter-spacing: 0.08em;
+}
+@media (prefers-reduced-motion: reduce) {
+  .card-burst { animation: none; opacity: 0; }
+  .card-settle { animation: none; }
+}
+
 /* ===== 背景图叠化（替代原 3s 水波动画，降低合成开销） ===== */
 @keyframes bg-crossfade {
   from { opacity: 0; }
