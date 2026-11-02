@@ -223,6 +223,18 @@ const App: React.FC = () => {
     localStorage.setItem('sgs-speed', String(speedLevel));
   }, [speedLevel]);
 
+  // AI 难度：简单 / 普通 / 困难（持久化；只影响 AI，不影响玩家）
+  type AiDifficulty = 'easy' | 'normal' | 'hard';
+  const [aiDifficulty, setAiDifficulty] = useState<AiDifficulty>(() => {
+    const saved = localStorage.getItem('sgs-ai-diff');
+    return saved === 'easy' || saved === 'hard' ? saved : 'normal';
+  });
+  const aiDifficultyRef = useRef<AiDifficulty>(aiDifficulty);
+  useEffect(() => {
+    aiDifficultyRef.current = aiDifficulty;
+    localStorage.setItem('sgs-ai-diff', aiDifficulty);
+  }, [aiDifficulty]);
+
   // --- UI/Interaction State ---
   const [logs, setLogs] = useState<LogEntry[]>([]);
 
@@ -553,23 +565,49 @@ const App: React.FC = () => {
     if (others.length === 0) return null;
     const lord = others.find(p => p.identity === Identity.ZHUGONG);
     const rebels = others.filter(p => guessIdentity(p) === Identity.FANZEI);
+    const difficulty = aiDifficultyRef.current;
+
+    const threatScore = (p: Player) => {
+      const equipCount = p.equipment
+        ? [p.equipment.weapon, p.equipment.armor, p.equipment.horsePlus, p.equipment.horseMinus].filter(Boolean).length
+        : 0;
+      const heroThreat = ['黄月英', '周瑜', '甄姬', '孙权', '诸葛亮', '华佗', '蔡文姬'].includes(p.hero.name) ? 2 : 0;
+      return (p.maxHp - p.hp) * 3 + p.hand.length + equipCount * 2
+        + (p.identity === Identity.ZHUGONG ? 4 : 0) + (p.isRevealed ? 2 : 0) + heroThreat;
+    };
+    const hardPick = (pool: Player[]) => pool.length
+      ? [...pool].sort((a, b) => threatScore(b) - threatScore(a))[0]
+      : null;
+    const easyRandom = (pool: Player[]) => (difficulty === 'easy' && pool.length && Math.random() < 0.3)
+      ? pool[Math.floor(Math.random() * pool.length)]
+      : null;
 
     if (ai.identity === Identity.FANZEI) {
       // 反贼：优先集火主公（主公身份始终公开）
       if (lord && lord.id !== ai.id) return lord;
-      return pickWeakest(others.filter(p => guessIdentity(p) !== Identity.FANZEI)) ?? pickWeakest(others);
+      const pool = others.filter(p => guessIdentity(p) !== Identity.FANZEI);
+      return easyRandom(pool)
+        ?? (difficulty === 'hard' ? hardPick(pool) : null)
+        ?? pickWeakest(pool)
+        ?? pickWeakest(others);
     }
 
     if (ai.identity === Identity.ZHONGCHEN || ai.identity === Identity.ZHUGONG) {
-      if (rebels.length) return pickWeakest(rebels);
-      const suspects = others.filter(p => guessIdentity(p) !== Identity.ZHONGCHEN && guessIdentity(p) !== Identity.ZHUGONG);
-      return pickWeakest(suspects) ?? pickWeakest(others.filter(p => guessIdentity(p) !== Identity.ZHUGONG));
+      const pool = rebels.length
+        ? rebels
+        : others.filter(p => guessIdentity(p) !== Identity.ZHONGCHEN && guessIdentity(p) !== Identity.ZHUGONG);
+      return easyRandom(pool)
+        ?? (difficulty === 'hard' ? hardPick(pool) : null)
+        ?? pickWeakest(pool)
+        ?? pickWeakest(others.filter(p => guessIdentity(p) !== Identity.ZHUGONG));
     }
 
     // 内奸：先帮主公清反贼，最后才动主公
-    if (rebels.length) return pickWeakest(rebels);
+    if (rebels.length) return easyRandom(rebels) ?? (difficulty === 'hard' ? hardPick(rebels) : null) ?? pickWeakest(rebels);
     const nonLord = others.filter(p => p.identity !== Identity.ZHUGONG);
-    return pickWeakest(nonLord) ?? (lord && others.length === 1 ? lord : null);
+    return (difficulty === 'hard' ? hardPick(nonLord) : null)
+      ?? pickWeakest(nonLord)
+      ?? (lord && others.length === 1 ? lord : null);
   };
 
   // --- 摸牌 ---
@@ -1379,20 +1417,22 @@ const App: React.FC = () => {
               const finalExcess = finalPlayer.hand.length - finalPlayer.hp;
               if (finalExcess > 0) {
                 // AI 智能弃牌：优先弃置低价值牌，保留桃/闪/杀等关键牌
+                // AI 弃牌：困难保留桃/闪/无懈/酒等关键牌；简单有概率乱弃
+                const difficulty = aiDifficultyRef.current;
                 const keepValue = (c: Card) => {
                   switch (c.name) {
                     case CardName.TAO: return 0;   // 桃必留
-                    case CardName.SHAN: return 1;  // 闪
-                    case CardName.SHA: return 2;   // 杀
+                    case CardName.SHAN: return difficulty === 'hard' ? 0.5 : 1;
+                    case CardName.WUXIE: return difficulty === 'hard' ? 0.8 : 3;
+                    case CardName.SHA: return 2;
                     case CardName.WUZHONG: return 3;
-                    case CardName.WUXIE: return 3;
-                    case CardName.JIU: return 4;
-                    default: return 6;             // 其余锦囊优先弃置
+                    case CardName.JIU: return difficulty === 'hard' ? 2.5 : 4;
+                    default: return 6;
                   }
                 };
-                const discarded = [...finalPlayer.hand]
-                  .sort((a, b) => keepValue(b) - keepValue(a))
-                  .slice(0, finalExcess);
+                const discarded = (difficulty === 'easy' && Math.random() < 0.35)
+                  ? [...finalPlayer.hand].sort(() => Math.random() - 0.5).slice(0, finalExcess)
+                  : [...finalPlayer.hand].sort((a, b) => keepValue(b) - keepValue(a)).slice(0, finalExcess);
                 discardCards(finalPlayer.id, discarded);
                 addLog(`${finalPlayer.hero.name} 弃置了 ${finalExcess} 张牌。`, 'info');
               }
@@ -3701,18 +3741,37 @@ const App: React.FC = () => {
         // 检查是否为无懈可击判定
         const isWuxieCheck = neededCard === CardName.WUXIE;
         
-        // 如果是无懈可击判定，AI会优先使用无懈可击
+        // 无懈可击决策：简单随机、普通必用、困难只留给高价值锦囊
         if (isWuxieCheck) {
           const hasWuxie = responder.hand.some(c => c.name === CardName.WUXIE);
-          if (hasWuxie) {
+          const difficulty = aiDifficultyRef.current;
+          const highValue = [CardName.JUEDOU, CardName.NANMAN, CardName.WANJIAN,
+            CardName.LESI, CardName.BINGLIANG, CardName.HUOGONG].includes(triggerCard.name);
+          const useWuxie = !hasWuxie ? false
+            : difficulty === 'easy' ? Math.random() < 0.5
+            : difficulty === 'hard'
+              ? (highValue || responder.identity === Identity.ZHUGONG || responder.hp <= 1 || Math.random() < 0.45)
+              : true;
+          if (hasWuxie && useWuxie) {
             const wuxieCard = responder.hand.find(c => c.name === CardName.WUXIE)!;
             playCard(responder.id, wuxieCard);
             addLog(`${responder.hero.name} 使用了【无懈可击】`, 'info');
-            
             return true;
+          } else if (hasWuxie) {
+            addLog(`${responder.hero.name} 保留了【无懈可击】`, 'info');
+            return false;
           } else {
             return false;
           }
+        }
+
+        // 简单 AI 有概率反应慢半拍，不出【闪】
+        if (neededCard === CardName.SHAN && aiDifficultyRef.current === 'easy'
+            && responder.hp > 1 && Math.random() < 0.22) {
+          addLog(`${responder.hero.name} 反应慢了半拍，没有打出【闪】`, 'info');
+          await delay(300);
+          await takeDamage(responderId, sourceId, 1, triggerCard);
+          return false;
         }
         
         // 检查赵云的技能
@@ -4035,7 +4094,27 @@ const App: React.FC = () => {
   const shouldAiSavePlayer = (rescuer: Player, victim: Player): boolean => {
     const ri = rescuer.identity;
     const vi = victim.identity;
-    
+    const difficulty = aiDifficultyRef.current;
+
+    if (difficulty === 'easy') {
+      if (rescuer.id === victim.id) return Math.random() < 0.7;
+      if (vi === Identity.ZHUGONG) return Math.random() < 0.5;
+      return Math.random() < 0.35;
+    }
+
+    if (difficulty === 'hard') {
+      if (rescuer.id === victim.id) return true;
+      if (ri === Identity.ZHONGCHEN) return vi === Identity.ZHUGONG || vi === Identity.ZHONGCHEN;
+      if (ri === Identity.ZHUGONG) return vi === Identity.ZHONGCHEN;
+      if (ri === Identity.FANZEI) return vi === Identity.FANZEI;
+      if (ri === Identity.NEIJIAN) {
+        // 内奸：反贼未清时保主公，残局保自己
+        const rebelsAlive = playersRef.current.some(p => !p.isDead && p.identity === Identity.FANZEI);
+        return (vi === Identity.ZHUGONG && rebelsAlive) || vi === Identity.NEIJIAN;
+      }
+      return false;
+    }
+
     if (ri === Identity.FANZEI) {
       // 反贼：救反贼，不救主公，其他看情况
       if (vi === Identity.ZHUGONG) return false;
@@ -4578,8 +4657,11 @@ const App: React.FC = () => {
       .filter(p => !p.isDead && p.id !== aiPlayer.id && isEnemy(aiPlayer, p) && canReach(aiPlayer, p))
       .sort((a, b) => a.hp - b.hp)[0];
 
-    // 2. Play Tao
-    if (aiPlayer.hp < aiPlayer.maxHp) {
+    // 2. Play Tao（困难 AI 不在小伤时浪费桃，留作濒死救援）
+    const taoThreshold = aiDifficultyRef.current === 'hard'
+      ? (aiPlayer.hp <= 1 || aiPlayer.maxHp - aiPlayer.hp >= 2)
+      : true;
+    if (aiPlayer.hp < aiPlayer.maxHp && taoThreshold) {
       const peach = aiPlayer.hand.find(c => c.name === CardName.TAO);
       if (peach) {
         await useCardEffect(aiPlayer, [aiPlayer], peach);
@@ -4600,7 +4682,10 @@ const App: React.FC = () => {
       const targets = players.filter(p => p.id !== aiPlayer.id && !p.isDead);
       const enemyCount = targets.filter(t => isEnemy(aiPlayer, t)).length;
       const allyCount = targets.filter(t => isAlly(aiPlayer, t)).length;
-      if (enemyCount >= allyCount) {
+      const hard = aiDifficultyRef.current === 'hard';
+      const riskyAlly = hard && targets.some(t => isAlly(aiPlayer, t) && t.hp <= 1
+        && t.equipment?.armor?.name !== CardName.TENGJIA);
+      if (hard ? (enemyCount > allyCount && !riskyAlly) : enemyCount >= allyCount) {
         await useCardEffect(aiPlayer, targets, wanjian);
         await delay(1500);
       }
@@ -4764,7 +4849,10 @@ const App: React.FC = () => {
       const targets = players.filter(p => p.id !== aiPlayer.id && !p.isDead);
       const enemyCount = targets.filter(t => isEnemy(aiPlayer, t)).length;
       const allyCount = targets.filter(t => isAlly(aiPlayer, t)).length;
-      if (enemyCount >= allyCount) {
+      const hard = aiDifficultyRef.current === 'hard';
+      const riskyAlly = hard && targets.some(t => isAlly(aiPlayer, t) && t.hp <= 1
+        && t.equipment?.armor?.name !== CardName.TENGJIA && t.hero.name !== '祝融');
+      if (hard ? (enemyCount > allyCount && !riskyAlly) : enemyCount >= allyCount) {
         await useCardEffect(aiPlayer, targets, nanman);
         await delay(1500);
       }
@@ -4985,6 +5073,40 @@ const App: React.FC = () => {
                 </div>
               </div>
               
+              {/* AI 难度选择 */}
+              <div className="flex flex-col items-center gap-3 -mt-2">
+                <div className={`text-sm tracking-widest font-ancient font-bold ${theme === 'dark' ? 'text-amber-400/80' : 'text-[#3d2914]'}`} style={theme === 'light' ? { textShadow: '0 1px 2px rgba(255,255,255,0.8)' } : {}}>
+                  AI 难度
+                </div>
+                <div className="flex gap-3">
+                  {([
+                    { key: 'easy', label: '简单', hint: 'AI 会偶尔失误，可能乱弃关键牌' },
+                    { key: 'normal', label: '普通', hint: '按身份与血量进行常规决策' },
+                    { key: 'hard', label: '困难', hint: '威胁评估、保留无懈/桃、协同保主公' },
+                  ] as const).map(item => (
+                    <button
+                      key={item.key}
+                      onClick={() => setAiDifficulty(item.key)}
+                      title={item.hint}
+                      className={`px-5 py-1.5 rounded-lg border-2 font-ancient text-sm transition-all shadow-md ${
+                        aiDifficulty === item.key
+                          ? theme === 'dark'
+                            ? 'bg-gradient-to-b from-amber-600 to-amber-800 text-amber-50 border-amber-400 shadow-[0_0_16px_rgba(245,158,11,0.35)]'
+                            : 'bg-gradient-to-b from-[#b8956a] to-[#a08050] text-white border-[#8b6f4a]'
+                          : theme === 'dark'
+                            ? 'bg-stone-800/90 text-stone-400 border-stone-600 hover:border-amber-500 hover:text-amber-300'
+                            : 'bg-white/90 text-[#5d4037] border-[#c4b8a8] hover:border-[#b8956a]'
+                      }`}
+                    >
+                      {item.label}
+                    </button>
+                  ))}
+                </div>
+                <div className={`text-[11px] tracking-wide ${theme === 'dark' ? 'text-stone-500' : 'text-[#7b6a58]'}`}>
+                  {aiDifficulty === 'easy' ? 'AI 会偶尔失误，适合熟悉规则' : aiDifficulty === 'hard' ? 'AI 会评估威胁、保留关键牌并协同队友' : '标准 AI 强度'}
+                </div>
+              </div>
+
               {/* 点兵出征按钮 */}
               <button 
                 onClick={() => { initAudio(); setScreen('select'); }}
