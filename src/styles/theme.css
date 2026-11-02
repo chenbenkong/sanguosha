@@ -923,3 +923,314 @@
 .theme-light ::-webkit-scrollbar-thumb:hover {
   background: #c8c3be;
 }
+
+/* ===== 统一界面元件（v3.30 视觉收敛） =====
+   首页 / 选将 / 对局共用同一套描金按钮、选项牌与面板，
+   避免每个界面各自拼一套渐变，造成色调与圆角漂移。 */
+
+/* 图标按钮：静音 / 主题 / 速度 */
+.ui-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 40px;
+  min-width: 40px;
+  padding: 0 10px;
+  border-radius: 9999px;
+  border: 1px solid rgba(200, 164, 92, 0.42);
+  background: linear-gradient(160deg, #2a2118 0%, #171310 100%);
+  color: #d9c49a;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 236, 190, 0.06);
+  transition: color 0.18s ease, border-color 0.18s ease, transform 0.18s ease, box-shadow 0.18s ease;
+}
+.ui-icon-btn:hover {
+  color: #f0dcae;
+  border-color: rgba(232, 207, 148, 0.85);
+  transform: translateY(-1px);
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.45), 0 0 18px rgba(200, 164, 92, 0.16);
+}
+.ui-icon-btn:active { transform: translateY(0); }
+.ui-icon-btn:focus-visible,
+.ui-tile:focus-visible,
+.ui-cta:focus-visible,
+.ui-text-btn:focus-visible {
+  outline: 2px solid rgba(232, 207, 148, 0.8);
+  outline-offset: 2px;
+}
+.theme-light .ui-icon-btn {
+  background: linear-gradient(160deg, #fbf8f2 0%, #efe7da 100%);
+  border-color: rgba(140, 105, 60, 0.45);
+  color: #7a5a2a;
+  box-shadow: 0 4px 14px rgba(90, 70, 40, 0.12);
+}
+.theme-light .ui-icon-btn:hover {
+  color: #4a3416;
+  border-color: #8b6914;
+}
+
+/* 选项卡：人数 / 难度 */
+.ui-tile {
+  min-width: 76px;
+  padding: 8px 18px;
+  border-radius: 6px;
+  border: 1px solid rgba(200, 164, 92, 0.32);
+  background: rgba(24, 18, 13, 0.72);
+  color: #b9ac96;
+  font-family: 'Ma Shan Zheng', 'Kaiti SC', 'STKaiti', 'KaiTi', cursive;
+  font-size: 18px;
+  letter-spacing: 0.12em;
+  line-height: 1.4;
+  transition: color 0.16s ease, border-color 0.16s ease, background-color 0.16s ease, box-shadow 0.16s ease;
+}
+.ui-tile:hover {
+  color: #efe2c4;
+  border-color: rgba(200, 164, 92, 0.75);
+  background: rgba(54, 41, 29, 0.82);
+}
+.ui-tile[aria-pressed="true"] {
+  color: #2a1c0c;
+  border-color: #e6cd92;
+  background: linear-gradient(180deg, #dcc07a 0%, #b9934a 100%);
+  box-shadow: 0 3px 14px rgba(200, 164, 92, 0.3), inset 0 1px 0 rgba(255, 250, 230, 0.5);
+}
+.theme-light .ui-tile {
+  background: rgba(255, 252, 246, 0.9);
+  border-color: rgba(140, 105, 60, 0.3);
+  color: #6b5638;
+}
+.theme-light .ui-tile:hover {
+  color: #3a2a12;
+  border-color: #a8842c;
+  background: #fffdf8;
+}
+.theme-light .ui-tile[aria-pressed="true"] {
+  color: #2a1c0c;
+  border-color: #8b6914;
+  background: linear-gradient(180deg, #d9bd80 0%, #b08c44 100%);
+}
+
+/* 主行动按钮：朱漆底 + 双道描金，克制发光 */
+.ui-cta {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 13px 60px;
+  border-radius: 8px;
+  border: 1px solid rgba(232, 207, 148, 0.75);
+  background: linear-gradient(180deg, #8f2c24 0%, #6c1c17 55%, #541411 100%);
+  color: #f4e3bd;
+  font-family: 'Ma Shan Zheng', 'Kaiti SC', 'STKaiti', 'KaiTi', cursive;
+  font-size: 26px;
+  letter-spacing: 0.28em;
+  padding-left: calc(60px + 0.28em);
+  box-shadow:
+    0 10px 30px rgba(0, 0, 0, 0.55),
+    0 0 0 1px rgba(0, 0, 0, 0.35),
+    inset 0 0 0 1px rgba(232, 207, 148, 0.16),
+    inset 0 1px 0 rgba(255, 238, 200, 0.16);
+  text-shadow: 0 1px 3px rgba(40, 6, 3, 0.7);
+  transition: transform 0.18s ease, filter 0.18s ease, box-shadow 0.18s ease;
+}
+.ui-cta::before,
+.ui-cta::after {
+  content: '';
+  position: absolute;
+  top: 5px;
+  bottom: 5px;
+  width: 1px;
+  background: linear-gradient(180deg, transparent, rgba(232, 207, 148, 0.45), transparent);
+  pointer-events: none;
+}
+.ui-cta::before { left: 8px; }
+.ui-cta::after { right: 8px; }
+.ui-cta:hover {
+  filter: brightness(1.07);
+  transform: translateY(-1px);
+  box-shadow:
+    0 14px 36px rgba(0, 0, 0, 0.6),
+    0 0 0 1px rgba(0, 0, 0, 0.35),
+    inset 0 0 0 1px rgba(232, 207, 148, 0.24),
+    0 0 26px rgba(158, 43, 37, 0.35);
+}
+.theme-light .ui-cta {
+  border-color: #8b6914;
+  background: linear-gradient(180deg, #a13a30 0%, #7d2620 100%);
+  color: #fff3d8;
+}
+
+/* 次级文字按钮：无底框，靠字距与金色区分层级 */
+.ui-text-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 10px;
+  border-radius: 4px;
+  color: #b7a68a;
+  font-size: 13px;
+  letter-spacing: 0.16em;
+  transition: color 0.16s ease, background-color 0.16s ease;
+}
+.ui-text-btn:hover {
+  color: #f0dcae;
+  background: rgba(200, 164, 92, 0.08);
+}
+.theme-light .ui-text-btn { color: #6b5a3e; }
+.theme-light .ui-text-btn:hover { color: #3a2a12; background: rgba(140, 105, 60, 0.08); }
+
+/* 通用墨底金边面板 */
+.ui-panel {
+  border: 1px solid rgba(200, 164, 92, 0.30);
+  border-radius: 10px;
+  background:
+    linear-gradient(168deg, rgba(36, 27, 19, 0.94) 0%, rgba(20, 15, 11, 0.96) 100%);
+  box-shadow:
+    0 18px 48px rgba(0, 0, 0, 0.42),
+    inset 0 0 0 1px rgba(232, 207, 148, 0.06);
+}
+.theme-light .ui-panel {
+  border-color: rgba(140, 105, 60, 0.30);
+  background: linear-gradient(168deg, rgba(255, 252, 246, 0.95) 0%, rgba(244, 237, 225, 0.95) 100%);
+  box-shadow: 0 12px 34px rgba(80, 60, 30, 0.12);
+}
+
+/* 战况记录：两套主题下都保持墨底浅字（战报像一块黑漆记事牌，与弹窗同语汇） */
+.log-panel {
+  border: 1px solid rgba(200, 164, 92, 0.28);
+  border-radius: 10px;
+  background: linear-gradient(168deg, rgba(34, 25, 18, 0.94) 0%, rgba(16, 12, 8, 0.96) 100%);
+  box-shadow: 0 14px 38px rgba(0, 0, 0, 0.38), inset 0 0 0 1px rgba(232, 207, 148, 0.05);
+}
+
+/* 小标题：金色字距标签（替换原朱红小字，保证暗底可读） */
+.section-caption {
+  color: rgba(217, 192, 142, 0.85);
+  font-size: 12px;
+  letter-spacing: 0.32em;
+  padding-left: 0.32em;
+}
+.theme-light .section-caption { color: rgba(107, 82, 42, 0.9); }
+
+/* 中央牌桌：椭圆绒面 + 内圈金线，给牌堆一个「桌面」 */
+.table-felt {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: min(620px, 54vw);
+  height: min(250px, 30vh);
+  border-radius: 50%;
+  pointer-events: none;
+  border: 1px solid rgba(200, 164, 92, 0.16);
+  background:
+    radial-gradient(ellipse 68% 62% at 50% 44%, rgba(200, 164, 92, 0.09) 0%, rgba(200, 164, 92, 0.03) 46%, rgba(0, 0, 0, 0) 72%),
+    repeating-linear-gradient(45deg, rgba(255, 255, 255, 0.008) 0 2px, rgba(0, 0, 0, 0) 2px 4px);
+  box-shadow:
+    inset 0 0 70px rgba(0, 0, 0, 0.45),
+    0 0 90px rgba(200, 164, 92, 0.05);
+}
+.table-felt::before {
+  content: '';
+  position: absolute;
+  inset: 10px;
+  border-radius: 50%;
+  border: 1px solid rgba(200, 164, 92, 0.12);
+}
+.theme-light .table-felt {
+  border-color: rgba(140, 105, 60, 0.18);
+  background: radial-gradient(ellipse 68% 62% at 50% 44%, rgba(176, 140, 68, 0.10) 0%, rgba(176, 140, 68, 0.03) 48%, rgba(0, 0, 0, 0) 74%);
+  box-shadow: inset 0 0 60px rgba(120, 95, 55, 0.08);
+}
+
+/* 手牌托盘：一条极淡的暖光横带，托住扇形手牌 */
+.hand-tray {
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  transform: translateX(-50%);
+  width: min(880px, 82%);
+  height: 84px;
+  pointer-events: none;
+  background: radial-gradient(ellipse 62% 100% at 50% 100%, rgba(200, 164, 92, 0.12) 0%, rgba(0, 0, 0, 0) 72%);
+}
+.hand-tray::after {
+  content: '';
+  position: absolute;
+  left: 12%;
+  right: 12%;
+  bottom: 6px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(200, 164, 92, 0.34), transparent);
+}
+
+/* 统一的页脚信息行 */
+.footer-line {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  color: rgba(170, 154, 130, 0.75);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+}
+.footer-line .sep { color: rgba(200, 164, 92, 0.30); }
+.footer-line b { color: #d9c49a; font-weight: 600; }
+.theme-light .footer-line { color: rgba(90, 78, 60, 0.72); }
+.theme-light .footer-line b { color: #8b6914; }
+
+/* 选将卡：整张牌面裁切，文字压在下缘的墨色渐层里 */
+.hero-pick {
+  position: relative;
+  aspect-ratio: 3 / 4;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid rgba(200, 164, 92, 0.35);
+  background: #1a1410;
+  transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+}
+.hero-pick:hover {
+  transform: translateY(-2px);
+  border-color: rgba(232, 207, 148, 0.75);
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.5);
+}
+.hero-pick[aria-pressed="true"] {
+  border-color: #f0d894;
+  box-shadow:
+    0 0 0 2px rgba(240, 216, 148, 0.4),
+    0 12px 30px rgba(0, 0, 0, 0.55),
+    0 0 28px rgba(200, 164, 92, 0.25);
+}
+.hero-pick:focus-visible {
+  outline: 2px solid rgba(240, 216, 148, 0.9);
+  outline-offset: 2px;
+}
+.hero-pick-shade {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(180deg, rgba(10, 7, 4, 0.10) 0%, rgba(10, 7, 4, 0) 32%, rgba(10, 7, 4, 0.55) 72%, rgba(10, 7, 4, 0.92) 100%);
+}
+.theme-light .hero-pick-shade {
+  background:
+    linear-gradient(180deg, rgba(30, 22, 12, 0.04) 0%, rgba(30, 22, 12, 0) 30%, rgba(28, 20, 10, 0.45) 72%, rgba(24, 17, 8, 0.88) 100%);
+}
+
+/* 选将详情条 */
+.pick-detail {
+  border-top: 1px solid rgba(200, 164, 92, 0.30);
+  background: linear-gradient(180deg, rgba(20, 15, 11, 0.92) 0%, rgba(12, 9, 6, 0.96) 100%);
+  box-shadow: 0 -12px 34px rgba(0, 0, 0, 0.35);
+}
+.theme-light .pick-detail {
+  border-top-color: rgba(140, 105, 60, 0.35);
+  background: linear-gradient(180deg, rgba(250, 246, 238, 0.97) 0%, rgba(240, 232, 219, 0.98) 100%);
+  box-shadow: 0 -10px 26px rgba(90, 70, 40, 0.10);
+}
+
+@media (max-width: 640px) {
+  .ui-cta { padding: 11px 36px; font-size: 22px; padding-left: calc(36px + 0.28em); }
+  .table-felt { width: 94vw; height: 34vh; }
+}

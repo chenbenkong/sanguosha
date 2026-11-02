@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+﻿import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Hero, Player, Card, GamePhase, CardName, LogEntry, Identity, Suit, CardType } from './types';
 import { HEROES, INITIAL_DECK, EQUIP_META } from './constants';
 import { playSfx, SFX_FOR_NAME } from './src/audio/sfx';
@@ -32,6 +32,9 @@ const WINNER_LABEL: Record<WinnerSide, string> = {
   spy: '内奸 (野心家)',
 };
 
+// 版本号统一维护：首页页脚、README 与发布记录都以此为准
+const APP_VERSION = 'v3.30';
+
 // 势力色：魏蓝 / 蜀红 / 吴绿 / 群金（对应 theme.css 中的 --k-main）
 const KINGDOM_CLASS: Record<string, string> = {
   魏: 'kingdom-wei',
@@ -39,6 +42,61 @@ const KINGDOM_CLASS: Record<string, string> = {
   吴: 'kingdom-wu',
   群: 'kingdom-qun',
 };
+
+// ===== 界面图标：内联 SVG，避免各屏使用风格不一的 emoji =====
+const IconSpeaker: React.FC<{ muted?: boolean }> = ({ muted }) => (
+  <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M4 9.5h3.2L12 5.5v13l-4.8-4H4z" />
+    {muted
+      ? <><path d="M16.5 9.5l4.5 5" /><path d="M21 9.5l-4.5 5" /></>
+      : <><path d="M15.5 8.6a5.2 5.2 0 0 1 0 6.8" /><path d="M18.5 6a9 9 0 0 1 0 12" /></>}
+  </svg>
+);
+
+const IconSun: React.FC = () => (
+  <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" aria-hidden="true">
+    <circle cx="12" cy="12" r="4.2" />
+    <path d="M12 2.6v2.2M12 19.2v2.2M2.6 12h2.2M19.2 12h2.2M5.4 5.4l1.6 1.6M17 17l1.6 1.6M18.6 5.4L17 7M7 17L5.4 18.6" />
+  </svg>
+);
+
+const IconMoon: React.FC = () => (
+  <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M20.4 14.2A8.6 8.6 0 0 1 9.8 3.6 8.6 8.6 0 1 0 20.4 14.2z" />
+  </svg>
+);
+
+const IconBolt: React.FC = () => (
+  <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M13.5 2.5L5 14h6.2L10 21.5 19 10h-6.2z" />
+  </svg>
+);
+
+const IconBook: React.FC = () => (
+  <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M4.5 4.5h9a3 3 0 0 1 3 3v12a2.5 2.5 0 0 0-2.5-2.5h-9.5z" />
+    <path d="M19 19.5a2.5 2.5 0 0 0-2.5-2.5H4.5V4.5" />
+  </svg>
+);
+
+const IconDice: React.FC = () => (
+  <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" aria-hidden="true">
+    <rect x="3.5" y="3.5" width="17" height="17" rx="3" />
+    <circle cx="8.4" cy="8.4" r="1.15" fill="currentColor" stroke="none" />
+    <circle cx="15.6" cy="8.4" r="1.15" fill="currentColor" stroke="none" />
+    <circle cx="12" cy="12" r="1.15" fill="currentColor" stroke="none" />
+    <circle cx="8.4" cy="15.6" r="1.15" fill="currentColor" stroke="none" />
+    <circle cx="15.6" cy="15.6" r="1.15" fill="currentColor" stroke="none" />
+  </svg>
+);
+
+const IconArrowLeft: React.FC = () => (
+  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M19 12H5M11 6l-6 6 6 6" />
+  </svg>
+);
+
+const ThemeIcon: React.FC<{ theme: 'dark' | 'light' }> = ({ theme }) => theme === 'dark' ? <IconSun /> : <IconMoon />;
 
 // ===== 对局存档 =====
 // 只在「回合开始」这类安全节点落盘：恢复时从该回合开头重放，
@@ -1774,8 +1832,8 @@ const App: React.FC = () => {
       const meNow = players.find(p => p.isHuman) || players[0];
       if (!meNow || meNow.isDead || turnIndex !== meNow.id) return;
 
-      // 数字键 1-9：选择第 N 张手牌
-      if (/^[1-9]$/.test(e.key) && phase === GamePhase.ACTION) {
+      // 数字键 1-9：选择第 N 张手牌（出牌与弃牌阶段都可用，规则说明中已承诺）
+      if (/^[1-9]$/.test(e.key) && (phase === GamePhase.ACTION || phase === GamePhase.DISCARD)) {
         const idx = Number(e.key) - 1;
         const card = meNow.hand[idx];
         if (card) {
@@ -2180,7 +2238,7 @@ const App: React.FC = () => {
       showSkillBanner(meZ.hero.name, '丈八蛇矛');
       setIsProcessing(p => p + 1);
       try {
-        await useCardEffect(meZ, [target], virtualSlash);
+        await resolveCardEffect(meZ, [target], virtualSlash);
       } finally {
         setIsProcessing(p => Math.max(0, p - 1));
         setTimeout(() => { clickGuard.current = false; }, 200);
@@ -2248,7 +2306,7 @@ const App: React.FC = () => {
       const lesiCard: Card = { ...card, name: CardName.LESI, type: CardType.SCROLL, description: '国色：方块牌当【乐不思蜀】使用。' };
       showSkillBanner(meG.hero.name, '国色');
       setIsProcessing(p => p + 1);
-      try { await useCardEffect(meG, [target], lesiCard); } finally { setIsProcessing(p => Math.max(0, p - 1)); }
+      try { await resolveCardEffect(meG, [target], lesiCard); } finally { setIsProcessing(p => Math.max(0, p - 1)); }
       setTimeout(() => { clickGuard.current = false; }, 200);
       return;
     }
@@ -2334,7 +2392,7 @@ const App: React.FC = () => {
       setIsProcessing(p => p + 1);
       try {
         const tempGuohe = { ...card, name: CardName.GUOHE };
-        await useCardEffect(meQ, [target], tempGuohe);
+        await resolveCardEffect(meQ, [target], tempGuohe);
       } finally {
         setIsProcessing(p => Math.max(0, p - 1));
         setTimeout(() => { clickGuard.current = false; }, 200);
@@ -2579,7 +2637,7 @@ const App: React.FC = () => {
         // 桃和酒可以对自己使用
         setSelectedCardIds([]);
         setIsSelectingTarget(false);
-        await useCardEffect(me, [target], card);
+        await resolveCardEffect(me, [target], card);
         return;
       }
       
@@ -2600,17 +2658,17 @@ const App: React.FC = () => {
         showSkillBanner(me.hero.name, '龙胆');
         // 创建一个临时的杀卡牌对象用于效果处理
         const tempShaCard = { ...card, name: CardName.SHA };
-        await useCardEffect(me, [target], tempShaCard);
+        await resolveCardEffect(me, [target], tempShaCard);
       } else if (isUsingWusheng) {
         // 关羽将红色牌当杀使用
         addLog(`${me.hero.name} 使用技能「武圣」，将【${card.name}】当【杀】使用`, 'skill');
         showSkillBanner(me.hero.name, '武圣');
         // 创建一个临时的杀卡牌对象用于效果处理
         const tempShaCard = { ...card, name: CardName.SHA };
-        await useCardEffect(me, [target], tempShaCard);
+        await resolveCardEffect(me, [target], tempShaCard);
       } else {
         // 执行普通卡牌效果
-        await useCardEffect(me, [target], card);
+        await resolveCardEffect(me, [target], card);
       }
     } finally {
       setIsProcessing(p => Math.max(0, p - 1));
@@ -2643,7 +2701,7 @@ const App: React.FC = () => {
       if (card.name === CardName.WUZHONG) {
         setSelectedCardIds([]);
         setIsSelectingTarget(false);
-        await useCardEffect(me, [me], card);
+        await resolveCardEffect(me, [me], card);
       } else if (card.name === CardName.TAO) {
         // 如果已经选择了目标，直接使用桃
         if (isSelectingTarget) {
@@ -2652,13 +2710,13 @@ const App: React.FC = () => {
           const target = players.find(p => p.isSelected) || me;
           setSelectedCardIds([]);
           setIsSelectingTarget(false);
-          await useCardEffect(me, [target], card);
+          await resolveCardEffect(me, [target], card);
         } else {
           // 没有选择目标，默认对自己使用
           if (me.hp < me.maxHp) {
             setSelectedCardIds([]);
             setIsSelectingTarget(false);
-            await useCardEffect(me, [me], card);
+            await resolveCardEffect(me, [me], card);
           } else {
             addLog("体力已满，无需吃桃", 'warning');
             // 保持选择状态，不要清除选择
@@ -2669,12 +2727,12 @@ const App: React.FC = () => {
         const targets = players.filter(p => p.id !== me.id && !p.isDead);
         setSelectedCardIds([]);
         setIsSelectingTarget(false);
-        await useCardEffect(me, targets, card);
+        await resolveCardEffect(me, targets, card);
       } else if (card.name === CardName.JIU) {
         // 酒可以对自己使用
         setSelectedCardIds([]);
         setIsSelectingTarget(false);
-        await useCardEffect(me, [me], card);
+        await resolveCardEffect(me, [me], card);
       } else if (card.name === CardName.TIESUO) {
         // 铁索连环：使用玩家选择的目标
         if (tiesuoSelectedTargets.length > 0) {
@@ -2682,7 +2740,7 @@ const App: React.FC = () => {
           setSelectedCardIds([]);
           setIsSelectingTarget(false);
           setTiesuoSelectedTargets([]);
-          await useCardEffect(me, selectedTargets, card);
+          await resolveCardEffect(me, selectedTargets, card);
         } else {
           addLog("请选择至少1个目标", 'warning');
           return;
@@ -2691,7 +2749,7 @@ const App: React.FC = () => {
         // 五谷丰登和桃园结义：无需选择目标，直接生效
         setSelectedCardIds([]);
         setIsSelectingTarget(false);
-        await useCardEffect(me, [], card);
+        await resolveCardEffect(me, [], card);
       } else if (card.name === CardName.JIEDAO) {
         // 借刀杀人：使用已选择的两个目标
         if (jiedaoWeaponTarget && jiedaoVictimTarget) {
@@ -2703,7 +2761,7 @@ const App: React.FC = () => {
             setIsJiedaoMode(false);
             setJiedaoWeaponTarget(null);
             setJiedaoVictimTarget(null);
-            await useCardEffect(me, [weaponPlayer, victimPlayer], card);
+            await resolveCardEffect(me, [weaponPlayer, victimPlayer], card);
           }
         } else {
           addLog("请先选择两名目标角色", 'warning');
@@ -2713,7 +2771,7 @@ const App: React.FC = () => {
         // 闪电：对自己使用，放置到判定区
         setSelectedCardIds([]);
         setIsSelectingTarget(false);
-        await useCardEffect(me, [me], card);
+        await resolveCardEffect(me, [me], card);
       }
     } finally {
       setIsProcessing(p => Math.max(0, p - 1));
@@ -2898,7 +2956,7 @@ const App: React.FC = () => {
     showCardVisual(card, getPlayer(playerId)?.hero.name || '', 1200, getPlayer(playerId)?.hero.gender);
   };
 
-  const useCardEffect = async (source: Player, targets: Player[], card: Card) => {
+  const resolveCardEffect = async (source: Player, targets: Player[], card: Card) => {
     setIsProcessing(p => p + 1);
     try {
       // Log construction
@@ -3048,7 +3106,7 @@ const App: React.FC = () => {
               addLog(`【青龙偃月刀】发动，追加一击！`, 'skill');
               showSkillBanner(source.hero.name, '青龙偃月刀');
               await delay(500);
-              await useCardEffect(source, [effectiveTarget], extraSha);
+              await resolveCardEffect(source, [effectiveTarget], extraSha);
               continue;
             }
           }
@@ -3260,8 +3318,8 @@ const App: React.FC = () => {
           const isWuxieUsed = await triggerReaction(target.id, source.id, CardName.WUXIE, card);
           if (!isWuxieUsed) {
             // 有装备且（无手牌 或 35% 概率）则拆装备
-            const useEquip = equipCards.length > 0 && (target.hand.length === 0 || Math.random() < 0.35);
-            if (useEquip) {
+            const shouldEquip = equipCards.length > 0 && (target.hand.length === 0 || Math.random() < 0.35);
+            if (shouldEquip) {
               const brokenEquip = equipCards[Math.floor(Math.random() * equipCards.length)];
               const nextEquip = { ...(target.equipment ?? {}) };
               (Object.keys(nextEquip) as Array<keyof typeof nextEquip>).forEach(k => {
@@ -3769,12 +3827,12 @@ const App: React.FC = () => {
           const difficulty = aiDifficultyRef.current;
           const highValue = [CardName.JUEDOU, CardName.NANMAN, CardName.WANJIAN,
             CardName.LESI, CardName.BINGLIANG, CardName.HUOGONG].includes(triggerCard.name);
-          const useWuxie = !hasWuxie ? false
+          const shouldWuxie = !hasWuxie ? false
             : difficulty === 'easy' ? Math.random() < 0.5
             : difficulty === 'hard'
               ? (highValue || responder.identity === Identity.ZHUGONG || responder.hp <= 1 || Math.random() < 0.45)
               : true;
-          if (hasWuxie && useWuxie) {
+          if (hasWuxie && shouldWuxie) {
             const wuxieCard = responder.hand.find(c => c.name === CardName.WUXIE)!;
             playCard(responder.id, wuxieCard);
             addLog(`${responder.hero.name} 使用了【无懈可击】`, 'info');
@@ -4026,7 +4084,7 @@ const App: React.FC = () => {
                   const actualCard: Card = saveCard.name === CardName.TAO || saveCard.name === CardName.JIU
                     ? saveCard
                     : { ...saveCard, name: CardName.TAO, type: CardType.BASIC, description: '急救：红色牌当【桃】使用。' };
-                  await useCardEffect(player, [currentVictim], actualCard);
+                  await resolveCardEffect(player, [currentVictim], actualCard);
                   someoneSaved = true;
 
                   const updatedVictim = getPlayer(victimId)!;
@@ -4073,7 +4131,7 @@ const App: React.FC = () => {
                   ? saveCard
                   : { ...saveCard, name: CardName.TAO, type: CardType.BASIC, description: '急救：红色牌当【桃】使用。' };
                 addLog(`🍑 ${player.hero.name} 决定使用【${actualCard.name}】救援 ${victim.hero.name}`, 'success');
-                await useCardEffect(player, [currentVictim], actualCard);
+                await resolveCardEffect(player, [currentVictim], actualCard);
                 someoneSaved = true;
 
                 const updatedVictim = getPlayer(victimId)!;
@@ -4158,7 +4216,7 @@ const App: React.FC = () => {
   };
 
   // 黄盖「苦肉」：失去1点体力，摸两张牌
-  const useKurou = async (playerId: number) => {
+  const resolveKurou = async (playerId: number) => {
     const p = getPlayer(playerId);
     if (!p || p.isDead || p.hero.name !== '黄盖' || p.hp <= 1) return;
     setIsProcessing(v => v + 1);
@@ -4531,7 +4589,7 @@ const App: React.FC = () => {
 
     // 0. 黄盖「苦肉」：手牌少且体力充足时卖血摸牌
     if (aiPlayer.hero.name === '黄盖' && aiPlayer.hp > 2 && aiPlayer.hand.length <= 3) {
-      await useKurou(aiPlayer.id);
+      await resolveKurou(aiPlayer.id);
       const refreshed = getPlayer(aiPlayer.id);
       if (refreshed) aiPlayer = refreshed;
       await delay(600);
@@ -4646,7 +4704,7 @@ const App: React.FC = () => {
         const lesiCard: Card = { ...diamond, name: CardName.LESI, type: CardType.SCROLL, description: '国色：方块牌当【乐不思蜀】使用。' };
         addLog(`${aiPlayer.hero.name} 发动「国色」，将【${diamond.name}】当【乐不思蜀】使用`, 'skill');
         showSkillBanner(aiPlayer.hero.name, '国色');
-        await useCardEffect(aiPlayer, [target], lesiCard);
+        await resolveCardEffect(aiPlayer, [target], lesiCard);
         await delay(800);
         const refreshed = getPlayer(aiPlayer.id);
         if (refreshed) aiPlayer = refreshed;
@@ -4687,7 +4745,7 @@ const App: React.FC = () => {
     if (aiPlayer.hp < aiPlayer.maxHp && taoThreshold) {
       const peach = aiPlayer.hand.find(c => c.name === CardName.TAO);
       if (peach) {
-        await useCardEffect(aiPlayer, [aiPlayer], peach);
+        await resolveCardEffect(aiPlayer, [aiPlayer], peach);
         await delay(1500);
       }
     }
@@ -4695,7 +4753,7 @@ const App: React.FC = () => {
     // 3. Play Wuzhong
     const wuzhong = aiPlayer.hand.find(c => c.name === CardName.WUZHONG);
     if (wuzhong) {
-      await useCardEffect(aiPlayer, [aiPlayer], wuzhong);
+      await resolveCardEffect(aiPlayer, [aiPlayer], wuzhong);
       await delay(1500);
     }
 
@@ -4709,7 +4767,7 @@ const App: React.FC = () => {
       const riskyAlly = hard && targets.some(t => isAlly(aiPlayer, t) && t.hp <= 1
         && t.equipment?.armor?.name !== CardName.TENGJIA);
       if (hard ? (enemyCount > allyCount && !riskyAlly) : enemyCount >= allyCount) {
-        await useCardEffect(aiPlayer, targets, wanjian);
+        await resolveCardEffect(aiPlayer, targets, wanjian);
         await delay(1500);
       }
     }
@@ -4717,7 +4775,7 @@ const App: React.FC = () => {
     // 5. Play Shunshou Qianyang（仅限距离 1；黄月英「奇才」无视距离）
     const shunshou = aiPlayer.hand.find(c => c.name === CardName.SHUNSHOU);
     if (shunshou && shunshouTarget) {
-      await useCardEffect(aiPlayer, [shunshouTarget], shunshou);
+      await resolveCardEffect(aiPlayer, [shunshouTarget], shunshou);
       await delay(1500);
     }
     
@@ -4725,7 +4783,7 @@ const App: React.FC = () => {
     const guohe = aiPlayer.hand.find(c => c.name === CardName.GUOHE);
     if (guohe && targetId !== -1) {
       const target = getPlayer(targetId)!;
-      await useCardEffect(aiPlayer, [target], guohe);
+      await resolveCardEffect(aiPlayer, [target], guohe);
       await delay(1500);
     }
 
@@ -4743,7 +4801,7 @@ const App: React.FC = () => {
         addLog(`${aiPlayer.hero.name} 发动「奇袭」，将【${blackCard.name}】当【过河拆桥】使用`, 'skill');
         showSkillBanner(aiPlayer.hero.name, '奇袭');
         const tempGuohe = { ...blackCard, name: CardName.GUOHE };
-        await useCardEffect(aiPlayer, [target], tempGuohe);
+        await resolveCardEffect(aiPlayer, [target], tempGuohe);
         await delay(1500);
       }
     }
@@ -4752,7 +4810,7 @@ const App: React.FC = () => {
     const lesi = aiPlayer.hand.find(c => c.name === CardName.LESI);
     if (lesi && targetId !== -1) {
       const target = getPlayer(targetId)!;
-      await useCardEffect(aiPlayer, [target], lesi);
+      await resolveCardEffect(aiPlayer, [target], lesi);
       await delay(1500);
     }
 
@@ -4761,7 +4819,7 @@ const App: React.FC = () => {
     if (wugu) {
       const alivePlayers = players.filter(p => !p.isDead);
       if (alivePlayers.length > 0) {
-        await useCardEffect(aiPlayer, [], wugu);
+        await resolveCardEffect(aiPlayer, [], wugu);
         await delay(1500);
       }
     }
@@ -4773,7 +4831,7 @@ const App: React.FC = () => {
       const woundedPlayers = alivePlayers.filter(p => p.hp < p.maxHp);
       // 使用条件：有受伤的角色（包括自己或队友）
       if (woundedPlayers.length > 0) {
-        await useCardEffect(aiPlayer, [], taoyuan);
+        await resolveCardEffect(aiPlayer, [], taoyuan);
         await delay(1500);
       }
     }
@@ -4781,7 +4839,7 @@ const App: React.FC = () => {
     // 10. Play Bingliang Cunduan（仅限距离 1；黄月英「奇才」无视距离）
     const bingliang = aiPlayer.hand.find(c => c.name === CardName.BINGLIANG);
     if (bingliang && shunshouTarget) {
-      await useCardEffect(aiPlayer, [shunshouTarget], bingliang);
+      await resolveCardEffect(aiPlayer, [shunshouTarget], bingliang);
       await delay(1500);
     }
 
@@ -4790,7 +4848,7 @@ const App: React.FC = () => {
     if (huogong && targetId !== -1) {
       const target = getPlayer(targetId)!;
       if (target.hand.length > 0) {
-        await useCardEffect(aiPlayer, [target], huogong);
+        await resolveCardEffect(aiPlayer, [target], huogong);
         await delay(1500);
       }
     }
@@ -4800,7 +4858,7 @@ const App: React.FC = () => {
     if (tiesuo) {
       const targets = players.filter(p => p.id !== aiPlayer.id && !p.isDead).slice(0, 2);
       if (targets.length > 0) {
-        await useCardEffect(aiPlayer, targets, tiesuo);
+        await resolveCardEffect(aiPlayer, targets, tiesuo);
         await delay(1500);
       }
     }
@@ -4808,7 +4866,7 @@ const App: React.FC = () => {
     // 11. Play Jiu (before Slash for boost)
     const jiu = aiPlayer.hand.find(c => c.name === CardName.JIU);
     if (jiu && targetId !== -1) {
-      await useCardEffect(aiPlayer, [aiPlayer], jiu);
+      await resolveCardEffect(aiPlayer, [aiPlayer], jiu);
       await delay(1000);
     }
 
@@ -4816,7 +4874,7 @@ const App: React.FC = () => {
     const juedou = aiPlayer.hand.find(c => c.name === CardName.JUEDOU);
     if (juedou && targetId !== -1) {
       const target = getPlayer(targetId)!;
-      await useCardEffect(aiPlayer, [target], juedou);
+      await resolveCardEffect(aiPlayer, [target], juedou);
       await delay(1500);
     }
 
@@ -4828,7 +4886,7 @@ const App: React.FC = () => {
         const victim = players.filter(p => !p.isDead && p.id !== aiPlayer.id && p.id !== weaponTarget.id && isEnemy(aiPlayer, p))[0]
           || players.find(p => !p.isDead && p.id !== aiPlayer.id && p.id !== weaponTarget.id);
         if (victim) {
-          await useCardEffect(aiPlayer, [weaponTarget, victim], jiedao);
+          await resolveCardEffect(aiPlayer, [weaponTarget, victim], jiedao);
           await delay(1500);
         }
       }
@@ -4860,7 +4918,7 @@ const App: React.FC = () => {
         discardCards(aiNow.id, [zhangbaCost[1]]);
         addLog(`${aiNow.hero.name} 发动【丈八蛇矛】，将两张手牌当【杀】使用`, 'skill');
       }
-      await useCardEffect(aiNow, [target], slash);
+      await resolveCardEffect(aiNow, [target], slash);
       slashPlayed++;
       await delay(1200);
     }
@@ -4876,7 +4934,7 @@ const App: React.FC = () => {
       const riskyAlly = hard && targets.some(t => isAlly(aiPlayer, t) && t.hp <= 1
         && t.equipment?.armor?.name !== CardName.TENGJIA && t.hero.name !== '祝融');
       if (hard ? (enemyCount > allyCount && !riskyAlly) : enemyCount >= allyCount) {
-        await useCardEffect(aiPlayer, targets, nanman);
+        await resolveCardEffect(aiPlayer, targets, nanman);
         await delay(1500);
       }
     }
@@ -4964,15 +5022,13 @@ const App: React.FC = () => {
         {/* 多层背景效果 - 根据主题切换（在没有背景图或背景图加载失败时显示） */}
         {theme === 'dark' ? (
           <>
-            <div className="absolute inset-0 bg-gradient-to-br from-[#0a0a0a] via-[#1a1510] to-[#0d0d0d]"></div>
-            {/* 古风纹理背景 */}
-            <div className="absolute inset-0 opacity-30" style={{
+            {/* 静态暖光 + 极淡祥云暗纹：去掉 blur + animate 光斑，首页不再持续合成 */}
+            <div className="absolute inset-0 pointer-events-none" style={{
+              background: 'radial-gradient(ellipse 58% 44% at 50% 34%, rgba(200,164,92,0.13) 0%, rgba(0,0,0,0) 70%)'
+            }}></div>
+            <div className="absolute inset-0 opacity-20 pointer-events-none" style={{
               backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23d4af37' fill-opacity='0.05'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`
             }}></div>
-            {/* 动态光晕效果 */}
-            <div className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[400px] bg-gradient-radial from-amber-900/30 via-transparent to-transparent blur-3xl animate-pulse"></div>
-            <div className="absolute bottom-1/4 left-1/4 w-80 h-80 bg-red-900/20 rounded-full blur-[100px] animate-pulse"></div>
-            <div className="absolute top-1/4 right-1/4 w-80 h-80 bg-yellow-900/20 rounded-full blur-[100px] animate-pulse" style={{ animationDelay: '1s' }}></div>
             {/* 装饰性边框 */}
             <div className="absolute inset-8 border border-amber-800/20 rounded-lg pointer-events-none"></div>
             <div className="absolute inset-10 border border-amber-700/10 rounded-lg pointer-events-none"></div>
@@ -4995,114 +5051,69 @@ const App: React.FC = () => {
           </>
         )}
 
-        {/* 音乐控制按钮 */}
-        <div className="absolute top-6 right-6 z-50">
+        {/* 顶部控制：静音 / 主题 */}
+        <div className="absolute top-5 right-5 z-50 flex items-center gap-2">
           <button
             onClick={toggleMute}
-            className="w-10 h-10 rounded-full bg-gradient-to-b from-[#2a2018] to-[#1a1410] border-2 border-[#d4af37]/50 hover:border-[#d4af37] hover:scale-110 transition-all flex items-center justify-center shadow-lg"
-            title={isMuted ? "开启音乐" : "静音"}
+            className="ui-icon-btn"
+            title={isMuted ? '开启音乐' : '静音'}
+            aria-label={isMuted ? '开启音乐' : '静音'}
           >
-            <span className="text-lg">{isMuted ? "🔇" : "🎵"}</span>
+            <IconSpeaker muted={isMuted} />
           </button>
-        </div>
-
-        {/* 主题切换按钮 */}
-        <div className="absolute top-6 right-20 z-50">
           <button
             onClick={toggleTheme}
-            className={`w-10 h-10 rounded-full border-2 hover:scale-110 transition-all flex items-center justify-center shadow-lg ${
-              theme === 'dark' 
-                ? 'bg-gradient-to-b from-[#2a2018] to-[#1a1410] border-[#d4af37]/50 hover:border-[#d4af37]' 
-                : 'bg-gradient-to-b from-[#faf8f5] to-[#f5f0eb] border-[#e5e0db] hover:border-[#c4a77d]'
-            }`}
-            title={theme === 'dark' ? "切换到白天模式" : "切换到黑夜模式"}
+            className="ui-icon-btn"
+            title={theme === 'dark' ? '切换到白天模式' : '切换到黑夜模式'}
+            aria-label={theme === 'dark' ? '切换到白天模式' : '切换到黑夜模式'}
           >
-            <span className="text-lg">{theme === 'dark' ? "🌙" : "☀️"}</span>
+            <ThemeIcon theme={theme} />
           </button>
         </div>
 
-        <div className="z-10 text-center animate-fade-in">
-            {/* 主标题区域 */}
-            <div className="relative mb-8">
-              {/* 印章装饰 */}
-              <div className={`absolute -top-6 -right-10 md:-top-3 md:-right-24 rotate-6 w-12 h-12 md:w-16 md:h-16 rounded-md flex items-center justify-center border-2 shadow-[0_6px_20px_rgba(0,0,0,0.5)] ${
-                theme === 'dark'
-                  ? 'bg-gradient-to-br from-[#9e2b25] to-[#7a1f1a] border-[#d4af37]/60'
-                  : 'bg-gradient-to-br from-[#b03a32] to-[#8a2620] border-[#8a6914]/50'
-              }`}>
-                <span className="font-ancient text-3xl md:text-4xl text-[#f3d9a4] leading-none select-none">殺</span>
-              </div>
-              {/* 标题背景光晕 - 白天模式更强 */}
-              <div className={`absolute inset-0 blur-2xl transform scale-150 ${theme === 'dark' ? 'bg-gradient-to-b from-amber-600/20 to-transparent' : 'bg-gradient-to-b from-white/80 to-transparent'}`}></div>
-              
-              {/* 主标题 - 白天模式使用深色确保对比度，增加多层阴影 */}
-              <h1 className={`font-ancient text-7xl md:text-8xl lg:text-9xl mb-4 tracking-widest relative ${theme === 'dark' ? 'text-transparent bg-clip-text bg-gradient-to-b from-amber-300 via-yellow-500 to-amber-700 drop-shadow-[0_4px_8px_rgba(0,0,0,0.8)]' : 'text-[#1a1815] drop-shadow-[0_2px_4px_rgba(255,255,255,0.9)] drop-shadow-[0_0_30px_rgba(255,255,255,0.6)]'}`} style={theme === 'light' ? { textShadow: '0 2px 4px rgba(255,255,255,0.9), 0 0 30px rgba(255,255,255,0.7), 0 0 60px rgba(250,248,245,0.5)' } : {}}>
-                三国杀
-              </h1>
-              
-              {/* 标题装饰线 */}
-              <div className="flex items-center justify-center gap-4 mt-6">
-                <div className={`w-24 h-px ${theme === 'dark' ? 'bg-gradient-to-r from-transparent via-amber-600 to-amber-600' : 'bg-gradient-to-r from-transparent via-[#5d4037] to-[#5d4037]'}`}></div>
-                <div className={`w-2 h-2 rotate-45 ${theme === 'dark' ? 'bg-amber-500' : 'bg-[#5d4037]'}`}></div>
-                <div className={`w-32 h-px ${theme === 'dark' ? 'bg-gradient-to-r from-amber-600 via-amber-600 to-transparent' : 'bg-gradient-to-r from-[#5d4037] via-[#5d4037] to-transparent'}`}></div>
-              </div>
+        {/* 主内容：标题 + 出征面板 + 战绩，全部在一屏内 */}
+        <div className="relative z-10 flex min-h-screen w-full flex-col items-center justify-center px-5 py-16">
+          <div className="relative text-center">
+            {/* 朱印 */}
+            <div className={`absolute -top-5 right-1 md:-right-12 rotate-6 w-11 h-11 md:w-14 md:h-14 rounded-[5px] flex items-center justify-center border shadow-[0_6px_20px_rgba(0,0,0,0.5)] ${
+              theme === 'dark'
+                ? 'bg-gradient-to-br from-[#9e2b25] to-[#701c17] border-[#d4af37]/55'
+                : 'bg-gradient-to-br from-[#a8342c] to-[#7d211c] border-[#8a6914]/55'
+            }`}>
+              <span className="font-ancient text-3xl md:text-4xl text-[#f3d9a4] leading-none select-none">殺</span>
             </div>
-            
-            {/* 副标题 */}
-            <div className="relative mb-16">
-              <h2 className={`text-2xl md:text-3xl tracking-[0.8em] font-serif font-bold ${theme === 'dark' ? 'text-amber-200/80' : 'text-[#2d2a26]'}`} style={theme === 'light' ? { textShadow: '0 2px 4px rgba(255,255,255,0.8), 0 0 20px rgba(255,255,255,0.5)' } : {}}>
-                {playerCount}人军争篇
-              </h2>
-              <div className="mt-3 flex items-center justify-center gap-2">
-                <div className={`w-16 h-px ${theme === 'dark' ? 'bg-gradient-to-r from-transparent to-amber-700/50' : 'bg-gradient-to-r from-transparent to-[#5d4037]/70'}`}></div>
-                <span className={`text-sm tracking-widest font-semibold ${theme === 'dark' ? 'text-amber-600/60' : 'text-[#5d4037]'}`} style={theme === 'light' ? { textShadow: '0 1px 2px rgba(255,255,255,0.8)' } : {}}>SANGUOSHA</span>
-                <div className={`w-16 h-px ${theme === 'dark' ? 'bg-gradient-to-l from-transparent to-amber-700/50' : 'bg-gradient-to-l from-transparent to-[#5d4037]/70'}`}></div>
-              </div>
+
+            <h1 className={`font-ancient text-7xl md:text-8xl lg:text-[104px] leading-[1.15] tracking-[0.12em] relative ${
+              theme === 'dark'
+                ? 'text-transparent bg-clip-text bg-gradient-to-b from-[#f6e3ae] via-[#d4af37] to-[#8d6a18]'
+                : 'text-[#2a1d0e]'
+            }`}>
+              三国杀
+            </h1>
+
+            <div className="mt-3 flex items-center justify-center gap-4">
+              <span className={`h-px w-14 md:w-20 ${theme === 'dark' ? 'bg-gradient-to-r from-transparent to-[#c8a45c]/60' : 'bg-gradient-to-r from-transparent to-[#8b6914]/45'}`} />
+              <span className={`text-[13px] md:text-sm tracking-[0.42em] pl-[0.42em] font-ancient ${theme === 'dark' ? 'text-[#d9c49a]' : 'text-[#6b4a1a]'}`}>
+                群雄逐鹿 · {playerCount}人军争
+              </span>
+              <span className={`h-px w-14 md:w-20 ${theme === 'dark' ? 'bg-gradient-to-l from-transparent to-[#c8a45c]/60' : 'bg-gradient-to-l from-transparent to-[#8b6914]/45'}`} />
             </div>
-            
-            {/* 主按钮区域 */}
-            <div className="flex flex-col items-center gap-8">
-              {/* 人数选择 */}
-              <div className="flex flex-col items-center gap-4 mb-4">
-                <div className={`text-sm tracking-widest font-ancient font-bold ${theme === 'dark' ? 'text-amber-400/80' : 'text-[#3d2914]'}`} style={theme === 'light' ? { textShadow: '0 1px 2px rgba(255,255,255,0.8)' } : {}}>选择游戏人数</div>
-                <div className="flex gap-4">
-                  <button
-                    onClick={() => setPlayerCount(5)}
-                    className={`px-6 py-2 rounded-lg border-2 font-bold font-ancient transition-all shadow-lg ${
-                      playerCount === 5
-                        ? theme === 'dark'
-                          ? 'bg-gradient-to-b from-red-700 to-red-900 text-amber-100 border-red-500 shadow-[0_0_20px_rgba(220,38,38,0.5)]'
-                          : 'bg-gradient-to-b from-[#b8956a] to-[#a08050] text-white border-[#8b6f4a] shadow-[0_4px_15px_rgba(184,149,106,0.5)]'
-                        : theme === 'dark'
-                          ? 'bg-stone-800 text-stone-400 border-stone-600 hover:border-amber-600 hover:text-amber-300'
-                          : 'bg-white/90 text-[#3d2914] border-[#c4b8a8] hover:border-[#b8956a] hover:text-[#2d1f0f] shadow-[0_2px_8px_rgba(0,0,0,0.1)]'
-                    }`}
-                  >
-                    五人局
-                  </button>
-                  <button
-                    onClick={() => setPlayerCount(7)}
-                    className={`px-6 py-2 rounded-lg border-2 font-bold font-ancient transition-all shadow-lg ${
-                      playerCount === 7
-                        ? theme === 'dark'
-                          ? 'bg-gradient-to-b from-red-700 to-red-900 text-amber-100 border-red-500 shadow-[0_0_20px_rgba(220,38,38,0.5)]'
-                          : 'bg-gradient-to-b from-[#b8956a] to-[#a08050] text-white border-[#8b6f4a] shadow-[0_4px_15px_rgba(184,149,106,0.5)]'
-                        : theme === 'dark'
-                          ? 'bg-stone-800 text-stone-400 border-stone-600 hover:border-amber-600 hover:text-amber-300'
-                          : 'bg-white/90 text-[#3d2914] border-[#c4b8a8] hover:border-[#b8956a] hover:text-[#2d1f0f] shadow-[0_2px_8px_rgba(0,0,0,0.1)]'
-                    }`}
-                  >
-                    七人局
-                  </button>
-                </div>
+            <div className={`mt-2 text-[10px] tracking-[0.52em] pl-[0.52em] ${theme === 'dark' ? 'text-[#8f7c5e]' : 'text-[#9b8a6c]'}`}>
+              SANGUOSHA · IDENTITY
+            </div>
+          </div>
+
+          <div className="ui-panel mt-9 w-full max-w-[600px] px-6 py-6 md:px-8">
+            <div className="grid grid-cols-[76px_1fr] items-center gap-y-5 gap-x-4">
+              <span className="section-caption">对局人数</span>
+              <div className="flex gap-2" role="group" aria-label="对局人数">
+                <button className="ui-tile" aria-pressed={playerCount === 5} onClick={() => setPlayerCount(5)}>五人局</button>
+                <button className="ui-tile" aria-pressed={playerCount === 7} onClick={() => setPlayerCount(7)}>七人局</button>
               </div>
-              
-              {/* AI 难度选择 */}
-              <div className="flex flex-col items-center gap-3 -mt-2">
-                <div className={`text-sm tracking-widest font-ancient font-bold ${theme === 'dark' ? 'text-amber-400/80' : 'text-[#3d2914]'}`} style={theme === 'light' ? { textShadow: '0 1px 2px rgba(255,255,255,0.8)' } : {}}>
-                  AI 难度
-                </div>
-                <div className="flex gap-3">
+
+              <span className="section-caption">AI 难度</span>
+              <div>
+                <div className="flex flex-wrap gap-2" role="group" aria-label="AI 难度">
                   {([
                     { key: 'easy', label: '简单', hint: 'AI 会偶尔失误，可能乱弃关键牌' },
                     { key: 'normal', label: '普通', hint: '按身份与血量进行常规决策' },
@@ -5110,48 +5121,29 @@ const App: React.FC = () => {
                   ] as const).map(item => (
                     <button
                       key={item.key}
+                      className="ui-tile !text-base !px-4 !py-1.5"
+                      aria-pressed={aiDifficulty === item.key}
                       onClick={() => setAiDifficulty(item.key)}
                       title={item.hint}
-                      className={`px-5 py-1.5 rounded-lg border-2 font-ancient text-sm transition-all shadow-md ${
-                        aiDifficulty === item.key
-                          ? theme === 'dark'
-                            ? 'bg-gradient-to-b from-amber-600 to-amber-800 text-amber-50 border-amber-400 shadow-[0_0_16px_rgba(245,158,11,0.35)]'
-                            : 'bg-gradient-to-b from-[#b8956a] to-[#a08050] text-white border-[#8b6f4a]'
-                          : theme === 'dark'
-                            ? 'bg-stone-800/90 text-stone-400 border-stone-600 hover:border-amber-500 hover:text-amber-300'
-                            : 'bg-white/90 text-[#5d4037] border-[#c4b8a8] hover:border-[#b8956a]'
-                      }`}
                     >
                       {item.label}
                     </button>
                   ))}
                 </div>
-                <div className={`text-[11px] tracking-wide ${theme === 'dark' ? 'text-stone-500' : 'text-[#7b6a58]'}`}>
+                <p className={`mt-2 text-[11px] leading-relaxed ${theme === 'dark' ? 'text-[#8f806a]' : 'text-[#8a7a60]'}`}>
                   {aiDifficulty === 'easy' ? 'AI 会偶尔失误，适合熟悉规则' : aiDifficulty === 'hard' ? 'AI 会评估威胁、保留关键牌并协同队友' : '标准 AI 强度'}
-                </div>
+                </p>
               </div>
+            </div>
 
-              {/* 点兵出征按钮 */}
-              <button 
+            <div className={`mt-5 h-px ${theme === 'dark' ? 'bg-gradient-to-r from-transparent via-[#c8a45c]/25 to-transparent' : 'bg-gradient-to-r from-transparent via-[#8b6914]/20 to-transparent'}`} />
+
+            <div className="mt-6 flex flex-col items-center gap-3">
+              <button
                 onClick={() => { initAudio(); setScreen('select'); }}
-                className="group relative"
+                className="ui-cta"
               >
-                {/* 按钮外发光 - 白天模式更强 */}
-                <div className={`absolute -inset-1 rounded-xl blur transition-opacity duration-500 ${theme === 'dark' ? 'bg-gradient-to-r from-red-600 via-amber-500 to-red-600 opacity-40 group-hover:opacity-70' : 'bg-gradient-to-r from-[#b8956a] via-[#d4c4a8] to-[#b8956a] opacity-70 group-hover:opacity-95'}`}></div>
-                
-                {/* 按钮主体 */}
-                <div className={`relative px-20 py-5 text-2xl md:text-3xl font-bold font-ancient rounded-xl border-2 transition-all duration-300 transform group-hover:scale-105 group-hover:-translate-y-1 overflow-hidden shadow-2xl ${theme === 'dark' ? 'bg-gradient-to-b from-red-700 via-red-800 to-red-900 text-amber-100 border-red-500/50 shadow-[0_10px_40px_rgba(185,28,28,0.4),inset_0_1px_0_rgba(255,255,255,0.1)]' : 'bg-gradient-to-b from-[#b8956a] via-[#d4c4a8] to-[#a08050] text-white border-[#8b6f4a]/50 shadow-[0_10px_40px_rgba(184,149,106,0.4),inset_0_1px_0_rgba(255,255,255,0.3)]'}`}>
-                  {/* 按钮内部纹理 */}
-                  <div className="absolute inset-0 opacity-20" style={{
-                    backgroundImage: `url("data:image/svg+xml,%3Csvg width='20' height='20' viewBox='0 0 20 20' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='%23ffffff' fill-opacity='0.1'%3E%3Ccircle cx='2' cy='2' r='1'/%3E%3C/g%3E%3C/svg%3E")`
-                  }}></div>
-                  
-                  {/* 按钮文字 */}
-                  <span className="relative z-10 tracking-widest drop-shadow-[0_2px_4px_rgba(0,0,0,0.3)]">点兵出征</span>
-                  
-                  {/* 悬停光效 */}
-                  <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000"></div>
-                </div>
+                点兵出征
               </button>
 
               {/* 继续上一局：读取本地存档，从该回合开头重放 */}
@@ -5163,81 +5155,82 @@ const App: React.FC = () => {
                 return (
                   <button
                     onClick={resumeGame}
-                    className={`group flex flex-col items-center gap-0.5 px-8 py-2.5 rounded-xl border-2 transition-all hover:scale-[1.04] shadow-lg ${
-                      theme === 'dark'
-                        ? 'border-[#c8a45c]/45 bg-gradient-to-b from-[#2a2118]/90 to-[#171310]/90 hover:border-[#e8cf94]'
-                        : 'border-[#c4a77d]/60 bg-gradient-to-b from-white/95 to-[#f2ebe0]/95 hover:border-[#8b6914]'
-                    }`}
+                    className="group flex items-center gap-3 px-6 py-2 rounded-lg border border-[#c8a45c]/40 bg-[#1b1510]/80 transition-colors hover:border-[#e8cf94] hover:bg-[#241c14]/90"
                   >
-                    <span className={`font-ancient text-lg tracking-widest ${theme === 'dark' ? 'text-[#e8cf94]' : 'text-[#8b6914]'}`}>
-                      ↺ 继续上一局
-                    </span>
-                    <span className={`text-[11px] tracking-wide ${theme === 'dark' ? 'text-stone-400' : 'text-[#6b6459]'}`}>
+                    <span className="font-ancient text-lg tracking-[0.18em] text-[#e8cf94]">继续上一局</span>
+                    <span className={`text-[11px] tracking-wide ${theme === 'dark' ? 'text-[#9a8b74]' : 'text-[#7a6a52]'}`}>
                       {myHeroName} · {savedGame.playerCount}人局 · 存于 {savedAt}
                     </span>
                   </button>
                 );
               })()}
-              
-              {/* 玩法说明入口 */}
-              <button
-                onClick={() => setShowRules(true)}
-                className={`group flex items-center gap-2 px-6 py-2 rounded-full border transition-all hover:scale-105 ${
-                  theme === 'dark'
-                    ? 'border-[#8b7355]/50 text-[#c8bda8] hover:border-[#d4af37] hover:text-[#e8cf94]'
-                    : 'border-[#c4a77d]/60 text-[#5d4037] hover:border-[#8b6914] hover:text-[#3d2914]'
-                }`}
-              >
-                <span>📖</span>
-                <span className="tracking-widest font-semibold">玩法说明</span>
-              </button>
 
-              {/* 特性标签 */}
-              <div className={`flex gap-6 md:gap-10 text-sm mt-6 ${theme === 'dark' ? 'text-stone-400' : 'text-[#3d2914]'}`}>
-                <span className="flex items-center gap-2 group cursor-default">
-                  <span className={`w-2.5 h-2.5 rounded-full transition-transform group-hover:scale-125 ${theme === 'dark' ? 'bg-gradient-to-br from-red-500 to-red-700 shadow-[0_0_8px_rgba(239,68,68,0.6)]' : 'bg-gradient-to-br from-[#b85a5a] to-[#9a4040] shadow-[0_0_8px_rgba(184,90,90,0.5)]'}`}></span>
-                  <span className={`font-semibold transition-colors ${theme === 'dark' ? 'group-hover:text-amber-300/80' : 'group-hover:text-[#1a0f0a]'}`} style={theme === 'light' ? { textShadow: '0 1px 2px rgba(255,255,255,0.6)' } : {}}>策略对战</span>
-                </span>
-                <span className="flex items-center gap-2 group cursor-default">
-                  <span className={`w-2.5 h-2.5 rounded-full transition-transform group-hover:scale-125 ${theme === 'dark' ? 'bg-gradient-to-br from-amber-500 to-amber-700 shadow-[0_0_8px_rgba(245,158,11,0.6)]' : 'bg-gradient-to-br from-[#b8956a] to-[#9a7a4a] shadow-[0_0_8px_rgba(184,149,106,0.5)]'}`}></span>
-                  <span className={`font-semibold transition-colors ${theme === 'dark' ? 'group-hover:text-amber-300/80' : 'group-hover:text-[#1a0f0a]'}`} style={theme === 'light' ? { textShadow: '0 1px 2px rgba(255,255,255,0.6)' } : {}}>智慧博弈</span>
-                </span>
-                <span className="flex items-center gap-2 group cursor-default">
-                  <span className={`w-2.5 h-2.5 rounded-full transition-transform group-hover:scale-125 ${theme === 'dark' ? 'bg-gradient-to-br from-blue-500 to-blue-700 shadow-[0_0_8px_rgba(59,130,246,0.6)]' : 'bg-gradient-to-br from-[#6a8cb8] to-[#4a6c98] shadow-[0_0_8px_rgba(106,140,184,0.5)]'}`}></span>
-                  <span className={`font-semibold transition-colors ${theme === 'dark' ? 'group-hover:text-amber-300/80' : 'group-hover:text-[#1a0f0a]'}`} style={theme === 'light' ? { textShadow: '0 1px 2px rgba(255,255,255,0.6)' } : {}}>身份欺诈</span>
-                </span>
-              </div>
+              <button onClick={() => setShowRules(true)} className="ui-text-btn">
+                <IconBook />
+                <span>玩法说明</span>
+              </button>
             </div>
+          </div>
+
+          <div className="footer-line mt-6">
+            <span>对局 <b>{stats.games}</b></span>
+            <span className="sep">·</span>
+            <span>胜 <b className={stats.wins > 0 ? '!text-[#9fcfae]' : ''}>{stats.wins}</b></span>
+            <span className="sep">·</span>
+            <span>负 <b className={stats.losses > 0 ? '!text-[#e0a49c]' : ''}>{stats.losses}</b></span>
+            {stats.games > 0 && (
+              <>
+                <span className="sep">·</span>
+                <span>胜率 <b>{Math.round((stats.wins / stats.games) * 100)}%</b></span>
+              </>
+            )}
+          </div>
+        </div>
+
+        {/* 页脚版本信息：与战绩分离，避免相互叠压 */}
+        <div className="pointer-events-none absolute bottom-4 left-0 right-0 z-10 footer-line">
+          <span>三国杀 · {playerCount}人军争篇</span>
+          <span className="sep">◆</span>
+          <span>{APP_VERSION}</span>
         </div>
         
-        {/* 玩法说明弹窗 */}
+        {/* 玩法说明弹窗：头部/正文/底部三段式，正文独立滚动 */}
         {showRules && (
           <div className="absolute inset-0 z-[120] modal-mask flex items-center justify-center p-4" onClick={() => setShowRules(false)}>
             <div
-              className="modal-shell max-w-3xl w-full max-h-[85vh] overflow-y-auto p-6 md:p-8 scrollbar-thin"
+              className="modal-shell max-w-3xl w-full max-h-[86vh] flex flex-col overflow-hidden"
               onClick={(e) => e.stopPropagation()}
             >
-              <div className="text-center mb-6">
-                <h3 className="modal-title text-4xl font-ancient">📖 玩法说明</h3>
-                <div className="w-40 modal-divider mx-auto mt-3"></div>
+              <div className="relative flex-none px-6 py-5 border-b border-[#8b7355]/30">
+                <div className="text-center">
+                  <h3 className="modal-title text-3xl font-ancient">玩法说明</h3>
+                  <div className="w-32 modal-divider mx-auto mt-2.5" />
+                </div>
+                <button
+                  onClick={() => setShowRules(false)}
+                  aria-label="关闭玩法说明"
+                  className="btn-ink absolute top-4 right-4 w-8 h-8 rounded-full flex items-center justify-center text-sm"
+                >
+                  ✕
+                </button>
               </div>
 
-              <div className="space-y-5 text-[#e5dcc8]">
+              <div className="flex-1 overflow-y-auto px-5 md:px-7 py-5 space-y-4 text-[#e5dcc8] scrollbar-thin">
                 {/* 身份 */}
-                <section className="bg-black/25 rounded-lg p-4 border border-[#8b7355]/30">
-                  <h4 className="font-ancient text-xl text-[#e8cf94] mb-2">身份与胜利</h4>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
-                    <div className="p-2 rounded bg-[#c8a45c]/10 border border-[#c8a45c]/30"><span className="font-bold text-[#e8cf94]">主公</span>：明示身份，体力上限+1</div>
-                    <div className="p-2 rounded bg-[#c8a45c]/10 border border-[#c8a45c]/30"><span className="font-bold text-[#e8cf94]">忠臣</span>：与主公同阵营</div>
-                    <div className="p-2 rounded bg-[#9e2b25]/15 border border-[#c86b62]/40"><span className="font-bold text-[#f0c8c2]">反贼</span>：击杀主公即胜</div>
-                    <div className="p-2 rounded bg-[#3a3a4a]/30 border border-[#7a7a96]/40"><span className="font-bold text-[#e8e8f0]">内奸</span>：最后与主公单挑并获胜</div>
+                <section className="rounded-md bg-black/20 p-4 border border-[#8b7355]/25">
+                  <h4 className="font-ancient text-xl text-[#e8cf94] mb-2.5"><span className="mr-2 text-[#8b7355] text-sm">壹</span>身份与胜利</h4>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5 text-sm">
+                    <div className="p-2.5 rounded bg-[#c8a45c]/10 border border-[#c8a45c]/30"><span className="font-bold text-[#e8cf94]">主公</span>：明示身份，体力上限+1</div>
+                    <div className="p-2.5 rounded bg-[#c8a45c]/10 border border-[#c8a45c]/30"><span className="font-bold text-[#e8cf94]">忠臣</span>：与主公同阵营</div>
+                    <div className="p-2.5 rounded bg-[#9e2b25]/15 border border-[#c86b62]/40"><span className="font-bold text-[#f0c8c2]">反贼</span>：击杀主公即胜</div>
+                    <div className="p-2.5 rounded bg-[#3a3a4a]/30 border border-[#7a7a96]/40"><span className="font-bold text-[#e8e8f0]">内奸</span>：最后与主公单挑并获胜</div>
                   </div>
-                  <p className="text-xs text-[#bfae94] mt-2">身份在角色阵亡时公开。杀死反贼摸3张牌；主公误杀忠臣需弃光手牌。</p>
+                  <p className="text-xs text-[#bfae94] mt-2.5">身份在角色阵亡时公开。杀死反贼摸3张牌；主公误杀忠臣需弃光手牌。</p>
                 </section>
 
                 {/* 流程 */}
-                <section className="bg-black/25 rounded-lg p-4 border border-[#8b7355]/30">
-                  <h4 className="font-ancient text-xl text-[#e8cf94] mb-2">回合流程</h4>
+                <section className="rounded-md bg-black/20 p-4 border border-[#8b7355]/25">
+                  <h4 className="font-ancient text-xl text-[#e8cf94] mb-2.5"><span className="mr-2 text-[#8b7355] text-sm">贰</span>回合流程</h4>
                   <div className="flex flex-wrap items-center gap-2 text-sm">
                     {['回合开始', '判定', '摸牌阶段', '出牌阶段', '弃牌阶段', '回合结束'].map((s, i) => (
                       <span key={s} className="flex items-center gap-2">
@@ -5246,12 +5239,12 @@ const App: React.FC = () => {
                       </span>
                     ))}
                   </div>
-                  <p className="text-xs text-[#bfae94] mt-2">判定区有延时锦囊（闪电 / 乐不思蜀 / 兵粮寸断）时，回合开始与摸牌、出牌阶段前会进行判定。弃牌阶段手牌不能超过当前体力值。</p>
+                  <p className="text-xs text-[#bfae94] mt-2.5">判定区有延时锦囊（闪电 / 乐不思蜀 / 兵粮寸断）时，回合开始与摸牌、出牌阶段前会进行判定。弃牌阶段手牌不能超过当前体力值。</p>
                 </section>
 
                 {/* 牌类 */}
-                <section className="bg-black/25 rounded-lg p-4 border border-[#8b7355]/30">
-                  <h4 className="font-ancient text-xl text-[#e8cf94] mb-2">牌型速览</h4>
+                <section className="rounded-md bg-black/20 p-4 border border-[#8b7355]/25">
+                  <h4 className="font-ancient text-xl text-[#e8cf94] mb-2.5"><span className="mr-2 text-[#8b7355] text-sm">叁</span>牌型速览</h4>
                   <ul className="text-sm space-y-1.5">
                     <li><span className="text-[#e8cf94] font-bold">基本牌</span>：杀（攻击）、闪（抵消杀）、桃（回血）、酒（杀伤害+1 或濒死自救）</li>
                     <li><span className="text-[#e8cf94] font-bold">锦囊牌</span>：决斗、无中生有、南蛮入侵、万箭齐发、顺手牵羊、过河拆桥、无懈可击、火攻、铁索连环、五谷丰登、桃园结义、借刀杀人、乐不思蜀、兵粮寸断、闪电</li>
@@ -5263,8 +5256,8 @@ const App: React.FC = () => {
                 </section>
 
                 {/* 操作 */}
-                <section className="bg-black/25 rounded-lg p-4 border border-[#8b7355]/30">
-                  <h4 className="font-ancient text-xl text-[#e8cf94] mb-2">操作技巧</h4>
+                <section className="rounded-md bg-black/20 p-4 border border-[#8b7355]/25">
+                  <h4 className="font-ancient text-xl text-[#e8cf94] mb-2.5"><span className="mr-2 text-[#8b7355] text-sm">肆</span>操作技巧</h4>
                   <ul className="text-sm space-y-1.5">
                     <li>点击手牌选择，点击头像指定目标；再点一次可取消</li>
                     <li>非选目标时，点击任意武将头像可查看人物介绍、技能与装备详情</li>
@@ -5275,37 +5268,14 @@ const App: React.FC = () => {
                 </section>
               </div>
 
-              <div className="mt-6 flex justify-center">
-                <button
-                  onClick={() => setShowRules(false)}
-                  className="px-10 py-3 bg-gradient-to-b from-[#8b4513] to-[#654321] text-[#f5deb3] rounded-lg border-2 border-[#d4af37]/50 hover:from-[#a0522d] hover:to-[#8b4513] hover:scale-105 transition-all font-ancient text-xl"
-                >
+              <div className="flex-none px-6 py-4 border-t border-[#8b7355]/30 flex justify-center">
+                <button onClick={() => setShowRules(false)} className="btn-gold px-10 py-2.5 rounded-lg font-ancient text-xl tracking-[0.2em]">
                   知道了
                 </button>
               </div>
             </div>
           </div>
         )}
-
-        {/* 版本信息 */}
-        <div className={`absolute bottom-6 flex flex-col items-center gap-1 text-xs tracking-widest ${theme === 'dark' ? 'text-stone-500' : 'text-[#5d4037]'}`}>
-          <div className={`flex items-center gap-3 ${theme === 'dark' ? 'text-stone-400' : 'text-[#5d4037]'}`}>
-            <span>对局 <span className={`font-bold ${theme === 'dark' ? 'text-[#e8cf94]' : 'text-[#8b6914]'}`}>{stats.games}</span></span>
-            <span className={theme === 'dark' ? 'text-stone-600' : 'text-[#c4b8a8]'}>|</span>
-            <span>胜 <span className={`font-bold ${theme === 'dark' ? 'text-emerald-500' : 'text-[#3f7d55]'}`}>{stats.wins}</span></span>
-            <span className={theme === 'dark' ? 'text-stone-600' : 'text-[#c4b8a8]'}>|</span>
-            <span>负 <span className={`font-bold ${theme === 'dark' ? 'text-rose-500' : 'text-[#a83a3a]'}`}>{stats.losses}</span></span>
-            {stats.games > 0 && (
-              <>
-                <span className={theme === 'dark' ? 'text-stone-600' : 'text-[#c4b8a8]'}>|</span>
-                <span>胜率 <span className={`font-bold ${theme === 'dark' ? 'text-[#e8cf94]' : 'text-[#8b6914]'}`}>{Math.round((stats.wins / stats.games) * 100)}%</span></span>
-              </>
-            )}
-          </div>
-          <div>
-            <span className={theme === 'dark' ? 'text-amber-700/50' : 'text-[#8b6f4a]/70'}>◆</span> 三国杀 · {playerCount}人军争篇 v3.20 <span className={theme === 'dark' ? 'text-amber-700/50' : 'text-[#8b6f4a]/70'}>◆</span>
-          </div>
-        </div>
       </div>
     );
   }
@@ -5368,150 +5338,146 @@ const App: React.FC = () => {
           </>
         )}
 
-        {/* Header - 固定在顶部，不悬浮 */}
-        <div className="flex-none relative z-20 px-4 pt-4">
-          <div className="text-center py-4">
-            <h2 className={`font-ancient text-5xl mb-2 drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)] ${theme === 'dark' ? 'text-yellow-500' : 'text-[#8b6914]'}`}>选择您的武将</h2>
-            <div className={`w-48 h-0.5 bg-gradient-to-r from-transparent to-transparent mx-auto ${theme === 'dark' ? 'via-yellow-600' : 'via-[#8b6914]'}`}></div>
-          </div>
-          
-          {/* 音乐控制按钮 */}
-          <div className="absolute top-4 right-4">
+        {/* Header：返回 / 标题 / 图标控制 */}
+        <div className="flex-none relative z-20 px-4 pt-3">
+          <div className="relative flex items-center justify-center py-2">
             <button
-              onClick={toggleMute}
-              className={`w-10 h-10 rounded-full border-2 hover:scale-110 transition-all flex items-center justify-center shadow-lg mr-2 ${
-                theme === 'dark'
-                  ? 'bg-gradient-to-b from-[#2a2018] to-[#1a1410] border-[#d4af37]/50 hover:border-[#d4af37]'
-                  : 'bg-gradient-to-b from-[#faf8f5] to-[#f5f0eb] border-[#c4a77d]/50 hover:border-[#c4a77d]'
-              }`}
-              title={isMuted ? "开启音乐" : "静音"}
+              onClick={() => { setSelectedHero(null); setScreen('start'); }}
+              className="ui-text-btn absolute left-0"
+              aria-label="返回首页"
             >
-              <span className="text-lg">{isMuted ? "🔇" : "🎵"}</span>
+              <IconArrowLeft />
+              <span>返回</span>
             </button>
-          </div>
 
-          {/* 主题切换按钮 */}
-          <div className="absolute top-4 right-16">
-            <button
-              onClick={toggleTheme}
-              className={`w-10 h-10 rounded-full border-2 hover:scale-110 transition-all flex items-center justify-center shadow-lg ${
-                theme === 'dark'
-                  ? 'bg-gradient-to-b from-[#2a2018] to-[#1a1410] border-[#d4af37]/50 hover:border-[#d4af37]'
-                  : 'bg-gradient-to-b from-[#faf8f5] to-[#f5f0eb] border-[#c4a77d]/50 hover:border-[#c4a77d]'
-              }`}
-              title={theme === 'dark' ? "切换到白天模式" : "切换到黑夜模式"}
-            >
-              <span className="text-lg">{theme === 'dark' ? "🌙" : "☀️"}</span>
-            </button>
-          </div>
-        </div>
-        
-        {/* 可滚动内容区域 */}
-        <div className="flex-1 overflow-y-auto px-4 pb-32 relative z-10">
-        
-        {/* Hero Cards Grid */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-6 w-full max-w-6xl pb-32 relative z-10 mx-auto">
-          {HEROES.map(hero => (
-            <div 
-              key={hero.id}
-              onClick={() => setSelectedHero(hero)}
-              className={`
-                cursor-pointer rounded-xl overflow-hidden border-2 transition-all duration-300 relative group
-                ${theme === 'dark' 
-                  ? selectedHero?.id === hero.id 
-                    ? 'bg-gradient-to-b from-[#3a3530] to-[#2a2520] border-[#f4d03f] scale-105 shadow-[0_0_40px_rgba(244,208,63,0.5),0_0_15px_rgba(244,208,63,0.3)] ring-2 ring-[#f4d03f]/30'
-                    : 'bg-gradient-to-b from-[#2a2520] to-[#1a1815] border-[#5d4a3a] hover:border-[#8b7355] shadow-lg hover:shadow-[0_0_20px_rgba(139,115,85,0.3)]'
-                  : selectedHero?.id === hero.id
-                    ? 'bg-gradient-to-b from-[#f5e6c8] to-[#e8d4a8] border-[#b8860b] scale-105 shadow-[0_0_35px_rgba(184,134,11,0.45),0_0_12px_rgba(184,134,11,0.25)] ring-2 ring-[#b8860b]/20'
-                    : 'bg-gradient-to-b from-[#f0e6d3] to-[#e0d0b8] border-[#a08060] hover:border-[#8b6914] shadow-lg hover:shadow-[0_0_15px_rgba(139,105,20,0.25)]'
-                }
-              `}
-            >
-              {/* Hero Image Area */}
-              <div className={`h-48 md:h-64 overflow-hidden relative ${theme === 'dark' ? 'bg-[#1a1510]' : 'bg-[#d4c4a8]'}`}>
-                 <img src={hero.avatarUrl} alt={hero.name} loading="lazy" decoding="async" className="w-full h-full object-cover opacity-90 group-hover:opacity-100 transition-all duration-300 group-hover:scale-110" />
-                 
-                 {/* Kingdom Badge - 深墨章 + 势力色字，与对局界面统一 */}
-                 <div className={`absolute top-2 right-2 px-2 py-0.5 rounded-[4px] rotate-3 font-bold text-xs border shadow-md bg-[#161210]/95 border-[#c8a45c]/50 ${
-                   hero.kingdom === '魏' ? 'text-[#8fb4d9]' :
-                   hero.kingdom === '蜀' ? 'text-[#d98a8a]' :
-                   hero.kingdom === '吴' ? 'text-[#8fc39a]' :
-                   'text-[#bfae94]'
-                 }`}>
-                   {hero.kingdom}
-                 </div>
-                 
-                 {/* HP Badge */}
-                 <div className={`absolute bottom-2 left-2 px-2 py-0.5 rounded-[4px] font-bold text-xs border ${theme === 'dark' ? 'bg-black/60 text-[#e8a99f] border-[#9e2b25]/60' : 'bg-[#f5ebe0] text-[#9e2b25] border-[#c86b62]/50 shadow-sm'}`}>
-                   ♥ {hero.maxHp}
-                 </div>
-                 
-                 {/* Hover Overlay */}
-                 <div className={`absolute inset-0 bg-gradient-to-t opacity-0 group-hover:opacity-100 transition-opacity ${theme === 'dark' ? 'from-[#1a1510]/80 to-transparent' : 'from-[#8b6914]/20 to-transparent'}`}></div>
-              </div>
-              
-              {/* Hero Info */}
-              <div className={`p-4 ${theme === 'dark' ? 'bg-gradient-to-b from-[#2a2520] to-[#1a1815]' : 'bg-gradient-to-b from-[#e8dcc8] to-[#d4c4a8]'}`}>
-                <h3 className={`font-ancient text-3xl text-center mb-3 ${theme === 'dark' ? 'text-[#d4af37] drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]' : 'text-[#5d3a1a] drop-shadow-[0_1px_1px_rgba(255,255,255,0.5)]'}`}>{hero.name}</h3>
-                
-                {/* Skill Description */}
-                <div className={`p-3 rounded-lg border shadow-inner ${theme === 'dark' ? 'bg-[#0f0c0a]/80 border-[#3d3025]/60' : 'bg-[#fffdf9]/90 border-[#8b6914]/30'}`}>
-                    <div className={`text-sm font-extrabold mb-2 text-center tracking-wide ${theme === 'dark' ? 'text-[#f4d03f] drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]' : 'text-[#6b4a1a] drop-shadow-[0_1px_1px_rgba(255,255,255,0.8)]'}`}>【{hero.skillName}】</div>
-                    <div className={`text-xs leading-relaxed text-center font-semibold ${theme === 'dark' ? 'text-[#d4c4a8] drop-shadow-[0_1px_1px_rgba(0,0,0,0.5)]' : 'text-[#3d2914] drop-shadow-[0_1px_1px_rgba(255,255,255,0.5)]'}`}>{hero.skillDesc}</div>
-                    {hero.lordSkillName && (
-                      <div className={`mt-2 pt-2 border-t text-[11px] leading-relaxed text-center font-semibold ${theme === 'dark' ? 'border-[#3d3025]/60 text-[#e8cf94]' : 'border-[#8b6914]/30 text-[#7a4a10]'}`}>
-                        主公技【{hero.lordSkillName}】：{hero.lordSkillDesc}
-                      </div>
-                    )}
-                </div>
+            <div className="text-center">
+              <h2 className={`font-ancient text-4xl md:text-5xl ${theme === 'dark' ? 'text-[#e8cf94]' : 'text-[#6b4a1a]'}`}>选择您的武将</h2>
+              <div className={`mt-1.5 text-[10px] tracking-[0.42em] pl-[0.42em] ${theme === 'dark' ? 'text-[#8f7c5e]' : 'text-[#9b8a6c]'}`}>
+                CHOOSE YOUR GENERAL · {HEROES.length} 名
               </div>
             </div>
-          ))}
-        </div>
-        
-        {/* Confirm Button - 固定在底部 */}
-        {selectedHero && (
-          <div className="fixed bottom-0 left-0 right-0 p-6 flex justify-center z-30">
-            <div className="flex flex-col items-center gap-3">
-              {/* Selected Hero Info */}
-              <div className={`flex items-center gap-3 px-5 py-2 rounded-full border shadow-lg ${theme === 'dark' ? 'bg-stone-900/90 border-yellow-600/50' : 'bg-[#faf8f5]/95 border-[#c4a77d]/50'}`}>
-                <img src={selectedHero.avatarUrl} alt={selectedHero.name} loading="eager" decoding="async" className="w-10 h-10 rounded-full border-2 border-yellow-500" />
-                <div>
-                  <div className={`text-xs ${theme === 'dark' ? 'text-stone-300' : 'text-[#5d4037]'}`}>已选择</div>
-                  <div className={`font-ancient text-lg ${theme === 'dark' ? 'text-yellow-500' : 'text-[#8b6914]'}`}>{selectedHero.name}</div>
-                </div>
-              </div>
-              
-              <div className="flex items-center gap-4">
-                <button
-                  onClick={() => {
-                    const pool = HEROES.filter(h => h.id !== selectedHero?.id);
-                    const pick = pool[Math.floor(Math.random() * pool.length)];
-                    startGame(pick);
-                  }}
-                  className={`px-6 py-3 rounded-full font-bold text-lg transition-all transform hover:scale-105 hover:-translate-y-1 font-ancient tracking-widest border-2 shadow-lg ${
-                    theme === 'dark'
-                      ? 'bg-gradient-to-b from-[#2a2520] to-[#1a1815] text-[#c8bda8] border-[#8b7355]/60 hover:border-[#d4af37] hover:text-[#e8cf94]'
-                      : 'bg-gradient-to-b from-[#e8dcc8] to-[#d4c4a8] text-[#5d4037] border-[#a08060] hover:border-[#8b6914]'
-                  }`}
-                  title="随机挑选一名武将立即出战"
-                >
-                  🎲 天命随机
-                </button>
-                <button
-                  onClick={() => startGame(selectedHero)}
-                  className={`group relative px-12 py-3 rounded-full font-bold text-xl transition-all transform hover:scale-105 hover:-translate-y-1 font-ancient tracking-widest border-2 shadow-[0_0_25px_rgba(234,179,8,0.4),inset_0_1px_0_rgba(255,255,255,0.2)] ${
-                    theme === 'dark'
-                      ? 'bg-gradient-to-b from-yellow-600 to-yellow-800 hover:from-yellow-500 hover:to-yellow-700 text-stone-100 border-yellow-500'
-                      : 'bg-gradient-to-b from-[#c4a77d] to-[#a08050] hover:from-[#d4b87d] hover:to-[#b09060] text-white border-[#8b6914]'
-                  }`}
-                >
-                  <span className="relative z-10">确认出战</span>
-                </button>
-              </div>
+
+            <div className="absolute right-0 top-1/2 -translate-y-1/2 flex items-center gap-2">
+              <button onClick={toggleMute} className="ui-icon-btn" title={isMuted ? '开启音乐' : '静音'} aria-label={isMuted ? '开启音乐' : '静音'}>
+                <IconSpeaker muted={isMuted} />
+              </button>
+              <button onClick={toggleTheme} className="ui-icon-btn" title={theme === 'dark' ? '切换到白天模式' : '切换到黑夜模式'} aria-label={theme === 'dark' ? '切换到白天模式' : '切换到黑夜模式'}>
+                <ThemeIcon theme={theme} />
+              </button>
             </div>
           </div>
-        )}
+        </div>
+
+        {/* 武将网格：桌面端一屏 3 行，整张牌面裁切，技能名压在牌角 */}
+        <div className="flex-1 overflow-y-auto px-4 pb-28 relative z-10 scrollbar-thin">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 min-[1200px]:grid-cols-8 gap-3 w-full max-w-[1440px] mx-auto pt-2">
+            {HEROES.map(hero => (
+              <button
+                key={hero.id}
+                onClick={() => setSelectedHero(hero)}
+                className="hero-pick group text-left"
+                aria-pressed={selectedHero?.id === hero.id}
+                aria-label={`选择 ${hero.name}`}
+                title={`${hero.name}（${hero.kingdom} · ${hero.maxHp} 体力）【${hero.skillName}】${hero.skillDesc}${hero.lordSkillName ? ` 主公技【${hero.lordSkillName}】${hero.lordSkillDesc}` : ''}`}
+              >
+                <img
+                  src={hero.avatarUrl}
+                  alt={hero.name}
+                  loading="lazy"
+                  decoding="async"
+                  className="absolute inset-0 w-full h-full object-cover object-top transition-transform duration-500 group-hover:scale-[1.04]"
+                />
+                <div className="hero-pick-shade" />
+
+                {/* 势力印章 */}
+                <span className={`absolute top-2 left-2 w-6 h-6 rounded-[3px] flex items-center justify-center text-[11px] font-bold border border-[#c8a45c]/50 bg-[#14100c]/90 ${
+                  hero.kingdom === '魏' ? 'text-[#8fb4d9]' :
+                  hero.kingdom === '蜀' ? 'text-[#d98a8a]' :
+                  hero.kingdom === '吴' ? 'text-[#8fc39a]' :
+                  'text-[#bfae94]'
+                }`}>
+                  {hero.kingdom}
+                </span>
+
+                {/* 体力 */}
+                <span className="absolute top-2 right-2 px-1.5 py-0.5 rounded-[3px] text-[10px] font-bold bg-[#120d09]/85 text-[#e8a99f] border border-[#9e2b25]/60">
+                  {hero.maxHp} 血
+                </span>
+
+                {/* 选中角标 */}
+                {selectedHero?.id === hero.id && (
+                  <span className="absolute right-2 bottom-[64px] w-6 h-6 rounded-full bg-[#d4af37] text-[#241a0e] flex items-center justify-center text-xs font-bold shadow-lg">
+                    ✓
+                  </span>
+                )}
+
+                <div className="absolute inset-x-0 bottom-0 px-2.5 pb-2.5 pt-8">
+                  <div className="font-ancient text-[19px] leading-tight text-[#f4e4bf] drop-shadow-[0_1px_3px_rgba(0,0,0,0.85)]">
+                    {hero.name}
+                  </div>
+                  <div className="mt-0.5 flex items-center gap-1.5 text-[10px] tracking-wide text-[#d9c49a]/90">
+                    <span className="truncate">【{hero.skillName}】</span>
+                    {hero.lordSkillName && <span className="flex-none px-1 rounded-[2px] bg-[#9e2b25]/85 text-[9px] text-[#f7e7cf]">主</span>}
+                  </div>
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* 底部详情条：始终存在，未选将时提示并可直接天命随机 */}
+        <div className="pick-detail flex-none z-30 px-4 py-2.5">
+          <div className="max-w-[1440px] mx-auto flex items-center gap-3 md:gap-4">
+            {selectedHero ? (
+              <>
+                <img
+                  src={selectedHero.avatarUrl}
+                  alt={selectedHero.name}
+                  loading="eager"
+                  decoding="async"
+                  className="w-12 h-12 rounded-md object-cover object-top border border-[#c8a45c]/60 flex-none"
+                />
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-baseline gap-2">
+                    <h3 className={`font-ancient text-2xl ${theme === 'dark' ? 'text-[#e8cf94]' : 'text-[#6b4a1a]'}`}>{selectedHero.name}</h3>
+                    <span className={`text-[11px] tracking-wider ${theme === 'dark' ? 'text-[#9a8b74]' : 'text-[#8a7a60]'}`}>
+                      {selectedHero.kingdom} · {selectedHero.maxHp} 体力 · 【{selectedHero.skillName}】
+                    </span>
+                  </div>
+                  <p className={`mt-0.5 text-xs leading-relaxed truncate ${theme === 'dark' ? 'text-[#c8bda8]' : 'text-[#5a4c38]'}`}>
+                    {selectedHero.skillDesc}
+                    {selectedHero.lordSkillName && <span className={`ml-2 ${theme === 'dark' ? 'text-[#d9b46a]' : 'text-[#8b6914]'}`}>主公技【{selectedHero.lordSkillName}】{selectedHero.lordSkillDesc}</span>}
+                  </p>
+                </div>
+              </>
+            ) : (
+              <div className={`flex-1 text-center text-sm ${theme === 'dark' ? 'text-[#9a8b74]' : 'text-[#8a7a60]'}`}>
+                滚动浏览 {HEROES.length} 名武将 · 点选查看技能，确认后出战
+              </div>
+            )}
+
+            <div className="flex items-center gap-2 flex-none">
+              <button
+                onClick={() => {
+                  const pool = HEROES.filter(h => h.id !== selectedHero?.id);
+                  const pick = pool[Math.floor(Math.random() * pool.length)];
+                  startGame(pick);
+                }}
+                className="btn-ink flex items-center gap-1.5 px-4 py-2 rounded-lg font-ancient text-base tracking-wider"
+                title="随机挑选一名武将立即出战"
+              >
+                <IconDice />
+                天命随机
+              </button>
+              <button
+                onClick={() => selectedHero && startGame(selectedHero)}
+                disabled={!selectedHero}
+                className="btn-gold px-7 py-2.5 rounded-lg font-ancient text-lg tracking-[0.18em]"
+              >
+                确认出战
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     );
@@ -5578,10 +5544,11 @@ const App: React.FC = () => {
          <div className="absolute top-4 right-4 z-50">
            <button
              onClick={toggleMute}
-             className={`w-10 h-10 rounded-full border-2 hover:border-[#d4af37] hover:scale-110 transition-all flex items-center justify-center shadow-lg ${theme === 'dark' ? 'bg-gradient-to-b from-[#2a2018] to-[#1a1410] border-[#d4af37]/50' : 'bg-gradient-to-b from-[#faf8f5] to-[#f5f0eb] border-[#c4a77d]/50'}`}
-             title={isMuted ? "开启音乐" : "静音"}
+             className="ui-icon-btn"
+             title={isMuted ? '开启音乐' : '静音'}
+             aria-label={isMuted ? '开启音乐' : '静音'}
            >
-             <span className="text-lg">{isMuted ? "🔇" : "🎵"}</span>
+             <IconSpeaker muted={isMuted} />
            </button>
          </div>
 
@@ -5607,22 +5574,22 @@ const App: React.FC = () => {
            );
          })()}
 
-         <h1 className={`font-ancient text-8xl md:text-9xl mb-8 z-10 drop-shadow-2xl relative ${theme === 'light' ? 'text-[#8b6914]' : 'text-yellow-600'}`}>
+         <h1 className={`font-ancient text-6xl md:text-8xl mb-4 z-10 drop-shadow-2xl relative ${theme === 'light' ? 'text-[#8b6914]' : 'text-[#d9b85c]'}`}>
            游戏结束
            <span className="absolute -inset-4 bg-yellow-600/10 blur-xl rounded-lg"></span>
          </h1>
-         <h2 className={`text-4xl md:text-5xl font-ancient mb-12 z-10 border-b-2 pb-4 ${theme === 'dark' ? 'text-stone-200 border-stone-600' : 'text-[#2d2a26] border-[#c4a77d]'}`}>
-           获胜方：<span className="text-red-500">{winnerSide ? WINNER_LABEL[winnerSide] : ''}</span>
+         <h2 className={`text-3xl md:text-4xl font-ancient mb-6 z-10 border-b pb-3 ${theme === 'dark' ? 'text-stone-200 border-[#8b7355]/50' : 'text-[#2d2a26] border-[#c4a77d]'}`}>
+           获胜方：<span className={theme === 'dark' ? 'text-[#e0705f]' : 'text-[#9e2b25]'}>{winnerSide ? WINNER_LABEL[winnerSide] : ''}</span>
          </h2>
          
-         <div className="z-10 modal-shell rounded-2xl p-8 mb-8 max-w-4xl w-full">
-           <h3 className="modal-title text-3xl font-ancient mb-1 text-center">玩家身份</h3>
-           <div className="modal-divider mb-6" />
-           <div className="flex flex-wrap justify-center gap-4">
+         <div className="z-10 modal-shell rounded-xl p-5 md:p-6 mb-6 max-w-3xl w-full">
+           <h3 className="modal-title text-2xl font-ancient mb-1 text-center">玩家身份</h3>
+           <div className="modal-divider mb-4" />
+           <div className="flex flex-wrap justify-center gap-3">
              {players.map((player, idx) => (
                <div
                  key={player.id}
-                 className={`reveal-card flex flex-col items-center p-4 rounded-xl border transition-all duration-300 w-[104px]
+                 className={`reveal-card flex flex-col items-center p-3 rounded-xl border transition-all duration-300 w-24
                    ${player.isDead
                      ? 'bg-black/45 border-[#9e2b25]/60 opacity-70 grayscale'
                      : 'bg-black/25 border-[#8b7355]/35 hover:border-[#c8a45c]/70 hover:bg-black/35'
@@ -5706,7 +5673,7 @@ const App: React.FC = () => {
   const isCompact = viewport.h > 0 && viewport.h < 780;
 
   return (
-    <div className={`h-screen w-full flex flex-col overflow-hidden relative font-serif ${theme === 'light' ? 'parchment-bg' : 'bg-[#1c1c1c]'}`}>
+    <div className={`h-screen w-full flex flex-col overflow-hidden relative ${theme === 'light' ? 'parchment-bg' : 'bg-[#1c1c1c]'}`}>
       {/* 背景轮播 - 白天模式显示 - 放在最底层 */}
       {theme === 'light' && (
         <div className="absolute inset-0" style={{ zIndex: -10 }}>
@@ -5723,8 +5690,8 @@ const App: React.FC = () => {
         style={{
           zIndex: -5,
           background: theme === 'dark'
-            ? 'linear-gradient(180deg, #14100d 0%, #241b14 48%, #0c0906 100%)'
-            : 'linear-gradient(180deg, #faf8f5 0%, #f2ece2 48%, #ece5d9 100%)'
+            ? 'repeating-linear-gradient(42deg, rgba(255,236,190,0.014) 0 1px, rgba(0,0,0,0) 1px 4px), linear-gradient(180deg, #14100d 0%, #241b14 48%, #0c0906 100%)'
+            : 'repeating-linear-gradient(42deg, rgba(120,95,55,0.035) 0 1px, rgba(0,0,0,0) 1px 5px), linear-gradient(180deg, #faf8f5 0%, #f2ece2 48%, #ece5d9 100%)'
         }}
       />
       {/* 中央牌桌柔光（静态 radial-gradient，零滤镜开销） */}
@@ -5863,10 +5830,11 @@ const App: React.FC = () => {
               onClick={(e) => e.stopPropagation()}
             >
                <div className="flex items-center justify-between px-5 py-3 border-b border-[#8b7355]/35">
-                 <h3 className="modal-title text-xl font-ancient">🗂️ 弃牌堆 <span className="text-sm opacity-60 tracking-normal normal-case">{discardPile.length} 张</span></h3>
+                 <h3 className="modal-title text-xl font-ancient">弃牌堆 <span className="text-sm opacity-60 tracking-normal normal-case">{discardPile.length} 张</span></h3>
                  <button
                    onClick={() => setShowDiscardViewer(false)}
                    className="btn-ink w-8 h-8 rounded-full flex items-center justify-center text-sm"
+                   aria-label="关闭弃牌堆"
                  >✕</button>
                </div>
                <div className="flex-1 overflow-y-auto p-5 scrollbar-thin">
@@ -6044,7 +6012,7 @@ const App: React.FC = () => {
             <div className="modal-shell max-w-3xl w-[95%] max-h-[85vh] overflow-y-auto p-6 scrollbar-thin">
                {/* 标题 */}
                <div className="text-center mb-6">
-                 <h3 className="modal-title text-4xl font-ancient mb-2">📜 技能说明</h3>
+                 <h3 className="modal-title text-3xl font-ancient mb-2">技能说明</h3>
                  <div className="w-32 modal-divider mx-auto"></div>
                </div>
 
@@ -6515,7 +6483,7 @@ const App: React.FC = () => {
           <div className="modal-frame max-w-5xl w-[95%] p-8">
             {/* 标题 */}
             <div className="text-center mb-6">
-              <h3 className="modal-title text-4xl font-ancient mb-3">🌾 五谷丰登</h3>
+              <h3 className="modal-title text-3xl font-ancient mb-3">五谷丰登</h3>
               <p className="modal-text text-lg">{wuguSelection.playerName}，请选择一张牌</p>
               <p className={`mt-1 text-sm ${(wuguLeft ?? 0) <= 5 ? 'text-[#e0705f] animate-pulse' : 'text-[#e8cf94]'}`}>
                 <span className="text-lg font-bold tabular-nums">{wuguLeft ?? DECISION_SECONDS}</span> 秒内请选择，超时自动选取
@@ -6598,16 +6566,11 @@ const App: React.FC = () => {
         <button
           onClick={() => setIsAiTakeover(!isAiTakeover)}
           title={isAiTakeover ? '关闭托管，亲自操作' : '开启托管，由 AI 代打（弹窗期间点击也会立即接管）'}
-          className={`h-10 px-3 rounded-full border-2 flex items-center gap-1.5 shadow-lg transition-all hover:scale-105 text-sm font-bold tracking-wider ${
-            isAiTakeover
-              ? 'bg-[#9e2b25] border-[#c86b62] text-[#f7e7cf] shadow-[0_0_16px_rgba(158,43,37,0.5)]'
-              : theme === 'dark'
-                ? 'bg-gradient-to-b from-[#2a2018] to-[#1a1410] border-[#d4af37]/50 text-[#e8cf94] hover:border-[#d4af37]'
-                : 'bg-gradient-to-b from-[#faf8f5] to-[#f5f0eb] border-[#c4a77d]/60 text-[#8b6914] hover:border-[#c4a77d]'
-          }`}
+          aria-pressed={isAiTakeover}
+          className={`ui-icon-btn gap-2 px-3 ${isAiTakeover ? '!bg-[#5d1b16] !border-[#c86b62] !text-[#f7e7cf]' : ''}`}
         >
-          <span>{isAiTakeover ? '🤖' : '🎮'}</span>
-          <span>{isAiTakeover ? '托管中' : '托管'}</span>
+          <span className={`w-1.5 h-1.5 rounded-full ${isAiTakeover ? 'bg-[#f2a79c]' : 'bg-[#c8a45c]/70'}`} />
+          <span className="text-xs font-bold tracking-[0.16em]">{isAiTakeover ? '托管中' : '托管'}</span>
         </button>
       </div>
 
@@ -6616,53 +6579,37 @@ const App: React.FC = () => {
         {/* 顶部装饰条 */}
         <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-transparent via-yellow-700/50 to-transparent"></div>
 
-        {/* 音乐控制按钮 */}
-        <div className="absolute top-2 right-4 z-50">
-          <button
-            onClick={toggleMute}
-            className={`w-10 h-10 rounded-full border-2 hover:scale-110 transition-all flex items-center justify-center shadow-lg ${
-              theme === 'dark'
-                ? 'bg-gradient-to-b from-[#2a2018] to-[#1a1410] border-[#d4af37]/50 hover:border-[#d4af37]'
-                : 'bg-gradient-to-b from-[#faf8f5] to-[#f5f0eb] border-[#e5e0db] hover:border-[#c4a77d]'
-            }`}
-            title={isMuted ? "开启音乐" : "静音"}
-          >
-            <span className="text-lg">{isMuted ? "🔇" : "🎵"}</span>
-          </button>
-        </div>
-
-        {/* 主题切换按钮 */}
-        <div className="absolute top-2 right-16 z-50">
-          <button
-            onClick={toggleTheme}
-            className={`w-10 h-10 rounded-full border-2 hover:scale-110 transition-all flex items-center justify-center shadow-lg ${
-              theme === 'dark'
-                ? 'bg-gradient-to-b from-[#2a2018] to-[#1a1410] border-[#d4af37]/50 hover:border-[#d4af37]'
-                : 'bg-gradient-to-b from-[#faf8f5] to-[#f5f0eb] border-[#e5e0db] hover:border-[#c4a77d]'
-            }`}
-            title={theme === 'dark' ? "切换到白天模式" : "切换到黑夜模式"}
-          >
-            <span className="text-lg">{theme === 'dark' ? "🌙" : "☀️"}</span>
-          </button>
-        </div>
-
-        {/* 游戏速度控制 */}
-        <div className="absolute top-2 right-28 z-50">
+        {/* 右上角控制组：速度 / 主题 / 静音 */}
+        <div className="absolute top-2 right-3 z-50 flex items-center gap-2">
           <button
             onClick={() => setSpeedLevel(speedLevel === 1 ? 2 : speedLevel === 2 ? 3 : 1)}
-            className={`h-10 px-3 rounded-full border-2 hover:scale-110 transition-all flex items-center justify-center shadow-lg font-bold text-sm tracking-wider ${
-              theme === 'dark'
-                ? 'bg-gradient-to-b from-[#2a2018] to-[#1a1410] border-[#d4af37]/50 hover:border-[#d4af37] text-[#e8cf94]'
-                : 'bg-gradient-to-b from-[#faf8f5] to-[#f5f0eb] border-[#e5e0db] hover:border-[#c4a77d] text-[#5c5854]'
-            }`}
+            className="ui-icon-btn font-bold text-sm tracking-wider"
             title="切换游戏速度"
+            aria-label={`切换游戏速度，当前 ${speedLevel} 倍`}
           >
-            ⚡ ×{speedLevel}
+            <IconBolt />
+            <span className="tabular-nums">×{speedLevel}</span>
+          </button>
+          <button
+            onClick={toggleTheme}
+            className="ui-icon-btn"
+            title={theme === 'dark' ? '切换到白天模式' : '切换到黑夜模式'}
+            aria-label={theme === 'dark' ? '切换到白天模式' : '切换到黑夜模式'}
+          >
+            <ThemeIcon theme={theme} />
+          </button>
+          <button
+            onClick={toggleMute}
+            className="ui-icon-btn"
+            title={isMuted ? '开启音乐' : '静音'}
+            aria-label={isMuted ? '开启音乐' : '静音'}
+          >
+            <IconSpeaker muted={isMuted} />
           </button>
         </div>
 
         {/* 环形座位布局 */}
-        <div className={`relative w-full flex items-start justify-center gap-1 overflow-x-auto md:block ${isCompact ? 'md:h-[152px]' : 'md:h-[288px]'} md:gap-0 md:overflow-visible py-1 md:py-0 px-1 md:px-0 scrollbar-hide`}>
+        <div className={`relative w-full flex items-start justify-center gap-1 overflow-x-auto md:block ${isCompact ? 'md:h-[200px]' : 'md:h-[288px]'} md:gap-0 md:overflow-visible py-1 md:py-0 px-1 md:px-0 scrollbar-hide`}>
           {enemies.map((p, index) => {
             // 计算环形位置
             const totalEnemies = enemies.length;
@@ -6696,9 +6643,23 @@ const App: React.FC = () => {
                 </div>
               )}
               
-              {/* 玩家卡牌容器 - 统一深墨描金 */}
+              {/* 玩家卡牌容器 - 统一深墨描金；支持 Enter / Space 等价点击 */}
               <div
+                role="button"
+                tabIndex={0}
+                aria-label={p.isDead ? `${p.hero.name}（已阵亡）` : `查看 ${p.hero.name} 的武将详情`}
                 onClick={() => {
+                  const selecting = isSelectingTarget || isLijianMode || isJieyinMode
+                    || (isRendeMode && rendeSelectedCardIds.length > 0) || (isJiedaoMode && !p.isDead);
+                  if (selecting) {
+                    handleTargetClick(p.id);
+                  } else if (!dyingState && !pendingReaction && !isProcessing) {
+                    setInspectPlayerId(p.id);
+                  }
+                }}
+                onKeyDown={(e) => {
+                  if (e.key !== 'Enter' && e.key !== ' ') return;
+                  e.preventDefault();
                   const selecting = isSelectingTarget || isLijianMode || isJieyinMode
                     || (isRendeMode && rendeSelectedCardIds.length > 0) || (isJiedaoMode && !p.isDead);
                   if (selecting) {
@@ -6710,6 +6671,7 @@ const App: React.FC = () => {
                 title={p.isDead ? `${p.hero.name}（已阵亡）` : `点击查看 ${p.hero.name} 的武将详情`}
                 className={`
                 relative p-1.5 md:p-2 rounded-lg border-2 kingdom-frame hero-card ${KINGDOM_CLASS[p.hero.kingdom] ?? ''}
+                focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#e8cf94]
                 ${damageAnimTarget === p.id || healAnimTarget === p.id
                   ? '' // 动画期间禁用过渡效果
                   : 'transition-[transform,box-shadow,border-color] duration-300'
@@ -6780,7 +6742,7 @@ const App: React.FC = () => {
                 )}
 
                 {/* 武将头像区域 */}
-                <div className={`relative w-[74px] h-[92px] ${isCompact ? 'md:w-[64px] md:h-[76px]' : 'md:w-24 md:h-28'} mb-2 ${
+                <div className={`relative w-[74px] h-[92px] ${isCompact ? 'md:w-[56px] md:h-[68px]' : 'md:w-24 md:h-28'} mb-2 ${
                   healAnimTarget === p.id ? 'animate-heal-glow' :
                   damageAnimTarget === p.id ? 'animate-damage-glow' : ''
                 } ${skillGlowId === p.id ? 'skill-glow' : ''} ${aiThinkingId === p.id ? 'ai-thinking' : ''}`}>
@@ -6842,7 +6804,7 @@ const App: React.FC = () => {
                 
                 {/* 武将信息 */}
                 <div className="text-center">
-                  <div className={`font-ancient text-base mb-1 truncate ${theme === 'dark' ? 'text-[#e8dcc8]' : 'text-[#3a332a]'}`}>{p.hero.name}</div>
+                  <div className="font-ancient text-base mb-1 truncate text-[#e8dcc8]">{p.hero.name}</div>
                   {/* 技能名牌：官方武将牌在姓名下方标注技能 */}
                   <div className="kingdom-name text-[10px] tracking-[0.12em] leading-none mb-1 truncate opacity-85">【{p.hero.skillName}】</div>
                   
@@ -6916,10 +6878,10 @@ const App: React.FC = () => {
 
                   {/* 手牌数 */}
                   <div className="flex items-center justify-center gap-1 md:gap-2 text-[10px] md:text-xs mt-1">
-                    <span className="text-stone-500">手牌</span>
-                    <span className="text-yellow-500 font-bold">{p.hand.length}</span>
-                    <span className="text-stone-500">距离</span>
-                    <span className={`font-bold ${getDistance(me.id, p.id) <= getAttackRange(me) ? 'text-emerald-400' : 'text-stone-500'}`}>
+                    <span className="text-[#8f806a]">手牌</span>
+                    <span className="font-bold text-[#e8cf94]">{p.hand.length}</span>
+                    <span className="text-[#8f806a]">距离</span>
+                    <span className={`font-bold ${getDistance(me.id, p.id) <= getAttackRange(me) ? 'text-[#9fcfae]' : 'text-[#8f806a]'}`}>
                       {getDistance(me.id, p.id)}
                     </span>
                   </div>
@@ -6935,16 +6897,23 @@ const App: React.FC = () => {
       <div className="flex-1 relative flex items-center justify-center w-full">
         
         {/* Logs - 左侧日志区域 - 可滚动 - 优化位置和大小 */}
-        <div className="absolute left-2 top-0 bottom-4 w-80 hidden md:block z-10">
-           <div className="h-full flex flex-col bg-gradient-to-b from-[#171310]/95 to-[#0d0a07]/95 rounded-b-lg border-x border-b border-[#8b7355]/40 shadow-[0_8px_30px_rgba(0,0,0,0.45)] overflow-hidden">
+        <div className="absolute left-2 top-0 bottom-4 w-64 min-[1280px]:w-72 hidden md:block z-10">
+           <div className="log-panel h-full flex flex-col overflow-hidden">
              {/* 标题栏 */}
-             <div className="flex-none px-3 py-2 border-b border-[#8b7355]/30 bg-black/30">
-               <div className="text-[#c8a45c]/90 text-xs font-bold tracking-wider">📜 战况记录 <span className="text-[#c8a45c]/45 font-normal">({logs.length})</span></div>
+             <div className="flex-none px-3 py-2 border-b border-[#8b7355]/25 bg-black/25">
+               <div className="flex items-center gap-2">
+                 <span className="w-[3px] h-4 rounded-sm bg-gradient-to-b from-[#f0d894] to-[#a8842c]" />
+                 <span className="text-xs font-bold tracking-[0.2em] text-[#d9c49a]">战况记录</span>
+                 <span className="ml-auto text-[10px] tabular-nums text-[#8f806a]">{logs.length}</span>
+               </div>
              </div>
              {/* 可滚动日志内容 */}
              <div 
                ref={logsContainerRef}
-               className="flex-1 overflow-y-auto p-2 space-y-1.5 scrollbar-thin scrollbar-thumb-stone-600 scrollbar-track-transparent max-h-[calc(100vh-200px)]"
+               role="log"
+               aria-live="polite"
+               aria-label="战况记录"
+               className="flex-1 overflow-y-auto p-2 space-y-1.5 scrollbar-thin scrollbar-thumb-stone-600 scrollbar-track-transparent"
                onScroll={() => {
                  // 用户开始滚动
                  isUserScrollingRef.current = true;
@@ -7019,8 +6988,8 @@ const App: React.FC = () => {
         </div>
 
         {/* Phase Indicator - 五阶段进度轨 */}
-        <div className={`absolute top-4 right-4 rounded-xl px-4 py-2.5 z-10 border shadow-lg ${theme === 'dark' ? 'bg-stone-900/85 border-stone-600' : 'bg-[#faf8f5]/90 border-[#c4a77d]/60'}`}>
-          <div className={`text-[10px] mb-1.5 tracking-widest ${theme === 'dark' ? 'text-stone-400' : 'text-[#5c5854]'}`}>当前阶段</div>
+        <div className="ui-panel absolute top-4 right-3 px-4 py-2.5 z-10">
+          <div className={`text-[10px] mb-1.5 tracking-[0.24em] ${theme === 'dark' ? 'text-[#9a8b74]' : 'text-[#8a7a60]'}`}>当前阶段</div>
           <div className="flex items-center gap-1">
             {[GamePhase.START, GamePhase.DRAW, GamePhase.ACTION, GamePhase.DISCARD, GamePhase.END].map((ph, i) => {
               const phIndex = [GamePhase.START, GamePhase.DRAW, GamePhase.ACTION, GamePhase.DISCARD, GamePhase.END].indexOf(phase);
@@ -7064,8 +7033,15 @@ const App: React.FC = () => {
           )}
         </div>
 
+        {/* 中央牌桌：静态椭圆绒面，给牌堆与结算一个视觉落点 */}
+        <div className="table-felt z-0" aria-hidden="true" />
+        {/* 桌面水印：极淡的「殺」字，补足中央留白但不抢牌堆 */}
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-0" aria-hidden="true">
+          <span className={`font-ancient select-none leading-none text-[110px] md:text-[150px] ${theme === 'dark' ? 'text-[#c8a45c]/[0.045]' : 'text-[#8b6914]/[0.07]'}`}>殺</span>
+        </div>
+
         {/* Center Decks - 牌堆和弃牌堆 - 原版三国杀风格 */}
-        <div className="flex items-center gap-12 z-0 transform scale-90 md:scale-100">
+        <div className="relative flex items-center gap-12 z-[1] transform scale-90 md:scale-100">
            {/* 弃牌堆（点击查看明细） */}
            <div className="relative group cursor-pointer" onClick={() => setShowDiscardViewer(true)} title="点击查看弃牌堆">
               <div className={`text-sm text-center mb-2 font-ancient tracking-wider transition-colors ${theme === 'dark' ? 'text-stone-400 group-hover:text-yellow-500' : 'text-[#5c5854] group-hover:text-[#8b6914]'}`}>弃牌堆</div>
@@ -7096,9 +7072,8 @@ const App: React.FC = () => {
                    </div>
                  </div>
                ) : (
-                 <div className={`w-24 h-36 rounded-lg flex flex-col items-center justify-center border border-dashed ${theme === 'dark' ? 'border-[#6a5642]/60 text-stone-500 bg-black/30' : 'border-[#c4a77d]/60 text-[#8a8680] bg-[#f5f0eb]/40'}`}>
-                   <span className="font-ancient text-base opacity-70">弃牌堆</span>
-                   <span className="text-xs mt-1 opacity-50">0</span>
+                 <div className={`w-24 h-36 rounded-lg flex items-center justify-center border border-dashed ${theme === 'dark' ? 'border-[#6a5642]/60 text-[#7d6d56] bg-black/30' : 'border-[#c4a77d]/60 text-[#a09585] bg-[#f5f0eb]/40'}`}>
+                   <span className="font-ancient text-sm tracking-[0.2em] opacity-70">空</span>
                  </div>
                )}
            </div>
@@ -7179,7 +7154,7 @@ const App: React.FC = () => {
         {advice && (
           <div className="absolute right-4 top-10 w-72 modal-frame p-4 z-30">
              <div className="flex items-center gap-2 mb-3 border-b border-[#8b7355]/35 pb-2">
-                <span className="text-3xl">📜</span>
+                <span className="w-[3px] h-6 rounded-sm bg-gradient-to-b from-[#f0d894] to-[#a8842c]" />
                 <div className="modal-title font-ancient text-2xl">孔明锦囊</div>
              </div>
              <p className="text-sm modal-text leading-relaxed italic tracking-wide">"{advice}"</p>
@@ -7193,8 +7168,8 @@ const App: React.FC = () => {
         {/* 底部装饰线 */}
         <div className={`absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent ${theme === 'dark' ? 'via-yellow-700/30' : 'via-[#c4a77d]/30'} to-transparent`}></div>
         
-        {/* 玩家信息栏 */}
-        <div className="flex flex-col md:flex-row md:justify-between md:items-end gap-2 px-2 md:px-4 mb-2 md:mb-3">
+        {/* 玩家信息栏：桌面端居中，与上方环形座位形成「自己在牌桌下首」的构图 */}
+        <div className="flex flex-col md:flex-row md:justify-center md:items-center gap-2 md:gap-7 px-2 md:px-4 mb-2 md:mb-3">
           {/* 玩家头像和信息 - 原版三国杀风格 */}
           <div className="flex items-center gap-4">
             <div className="relative">
@@ -7246,7 +7221,15 @@ const App: React.FC = () => {
 
                 {/* 武将头像区域 */}
                 <div
+                  role="button"
+                  tabIndex={0}
+                  aria-label={`查看 ${me.hero.name} 的武将详情`}
                   onClick={() => { if (!dyingState && !pendingReaction) setInspectPlayerId(me.id); }}
+                  onKeyDown={(e) => {
+                    if (e.key !== 'Enter' && e.key !== ' ') return;
+                    e.preventDefault();
+                    if (!dyingState && !pendingReaction) setInspectPlayerId(me.id);
+                  }}
                   title={`点击查看 ${me.hero.name} 的武将详情`}
                   className={`relative w-20 h-24 cursor-pointer ${isCompact ? 'md:w-[76px] md:h-[90px]' : 'md:w-24 md:h-28'} ${
                   healAnimTarget === 0 ? 'animate-heal-glow' :
@@ -7318,7 +7301,7 @@ const App: React.FC = () => {
             </div>
             
             {/* 玩家详细信息面板 */}
-            <div className={`rounded-xl px-4 py-3 border shadow-lg ${theme === 'dark' ? 'bg-[#1c1611]/90 border-[#8b7355]/45' : 'bg-[#fbf8f2]/90 border-[#c4a77d]/60'}`}>
+            <div className="ui-panel px-4 py-3 w-[280px] md:w-[320px]">
               <div className={`font-ancient text-lg mb-2 ${theme === 'dark' ? 'text-[#e8dcc8]' : 'text-[#3a332a]'}`}>{me.hero.name}</div>
               
               {/* 体力值 - 朱红勾玉 */}
@@ -7376,18 +7359,18 @@ const App: React.FC = () => {
                   <span className="text-[#e8cf94] font-bold text-lg">{me.hand.length}</span>
                 </div>
                 <div className="flex items-center gap-1">
-                  <span className={theme === 'dark' ? 'text-stone-500' : 'text-[#8a8680]'}>技能</span>
-                  <span className={`font-bold ${theme === 'dark' ? 'text-[#8fb4d9]' : 'text-[#3a6a8f]'}`}>{me.hero.skillName}</span>
+                  <span className={theme === 'dark' ? 'text-[#8f806a]' : 'text-[#8a7a60]'}>技能</span>
+                  <span className={`font-bold ${theme === 'dark' ? 'text-[#d9c49a]' : 'text-[#6b4a1a]'}`}>{me.hero.skillName}</span>
                 </div>
                 <div className="flex items-center gap-1">
-                  <span className={theme === 'dark' ? 'text-stone-500' : 'text-[#8a8680]'}>范围</span>
-                  <span className="text-emerald-400 font-bold">{getAttackRange(me)}</span>
+                  <span className={theme === 'dark' ? 'text-[#8f806a]' : 'text-[#8a7a60]'}>范围</span>
+                  <span className={`font-bold ${theme === 'dark' ? 'text-[#9fcfae]' : 'text-[#3f7d55]'}`}>{getAttackRange(me)}</span>
                 </div>
               </div>
 
               {/* 我的装备区 */}
               <div className="flex items-center gap-1.5 mt-2 flex-wrap">
-                <span className={`text-xs ${theme === 'dark' ? 'text-stone-500' : 'text-[#8a8680]'}`}>装备</span>
+                <span className={`text-xs ${theme === 'dark' ? 'text-[#8f806a]' : 'text-[#8a7a60]'}`}>装备</span>
                 {me.equipment?.weapon ? (
                   <span className="px-2 py-0.5 rounded-[4px] bg-[#2b3a2b]/80 border border-[#6a8a6a]/60 text-[#cfe8cf] text-[11px] font-bold" title={EQUIP_META[me.equipment.weapon.name]?.desc}>
                     {me.equipment.weapon.name}({EQUIP_META[me.equipment.weapon.name]?.range ?? 1})
@@ -7412,25 +7395,9 @@ const App: React.FC = () => {
             </div>
           </div>
             
-            {/* Control Buttons - 操作按钮 - 原版三国杀风格 */}
+            {/* Control Buttons - 操作按钮：托管已统一放在左上角，避免重复入口 */}
             <div className="flex flex-wrap gap-2 md:gap-3 items-center relative z-40">
-              {/* 操作按钮组 */}
-              <div className={`flex flex-wrap items-center gap-2 rounded-xl p-2 border ${theme === 'dark' ? 'bg-[#14100d]/85 border-[#8b7355]/40' : 'bg-[#fbf8f2]/90 border-[#c4a77d]/50'}`}>
-                {/* AI Takeover Toggle */}
-                <button 
-                  onClick={() => setIsAiTakeover(!isAiTakeover)}
-                  className={`
-                    px-4 py-2 rounded-lg border text-sm font-bold transition-colors
-                    ${isAiTakeover 
-                      ? 'bg-[#9e2b25] border-[#c86b62] text-[#f7e7cf] shadow-[0_0_14px_rgba(158,43,37,0.4)]' 
-                      : theme === 'dark'
-                        ? 'bg-[#241b16] border-[#8b7355]/50 text-[#c8bda8] hover:border-[#c8a45c] hover:text-[#e8cf94]'
-                        : 'bg-[#efe8dc] border-[#c4a77d]/60 text-[#6a6055] hover:border-[#b8955c] hover:text-[#3a332a]'}
-                  `}
-                >
-                  {isAiTakeover ? '🤖 AI托管中' : '🎮 托管'}
-                </button>
-
+              <div className="ui-panel flex flex-wrap items-center gap-2 p-2">
                 {/* Action Buttons */}
                 {isMyTurn && phase === GamePhase.ACTION && !isAiTakeover && (
                   <>
@@ -7453,12 +7420,7 @@ const App: React.FC = () => {
                               <button 
                                 onClick={handleConfirmPlay}
                                 disabled={!!dyingState || !!isProcessing}
-                                className={`
-                                  px-6 py-2 rounded-lg text-lg font-bold font-ancient shadow-lg transition-all border-2
-                                  ${!!dyingState || !!isProcessing 
-                                    ? 'bg-stone-800 text-stone-600 border-stone-700 cursor-not-allowed opacity-50' 
-                                    : 'bg-gradient-to-b from-yellow-600 to-yellow-800 text-white border-yellow-400 hover:scale-105 hover:shadow-yellow-900/50 cursor-pointer'}
-                                `}
+                                className={`btn-gold px-6 py-2 rounded-lg text-lg font-ancient tracking-[0.14em] ${!!dyingState || !!isProcessing ? 'opacity-45 cursor-not-allowed' : ''}`}
                               >
                                 出 牌
                               </button>
@@ -7474,12 +7436,7 @@ const App: React.FC = () => {
                               <button 
                                 onClick={handleConfirmPlay}
                                 disabled={!!dyingState || !!isProcessing}
-                                className={`
-                                  px-6 py-2 rounded-lg text-lg font-bold font-ancient shadow-lg transition-all border-2
-                                  ${!!dyingState || !!isProcessing 
-                                    ? 'bg-stone-800 text-stone-600 border-stone-700 cursor-not-allowed opacity-50' 
-                                    : 'bg-gradient-to-b from-yellow-600 to-yellow-800 text-white border-yellow-400 hover:scale-105 hover:shadow-yellow-900/50 cursor-pointer'}
-                                `}
+                                className={`btn-gold px-6 py-2 rounded-lg text-lg font-ancient tracking-[0.14em] ${!!dyingState || !!isProcessing ? 'opacity-45 cursor-not-allowed' : ''}`}
                               >
                                 出牌 ({weaponPlayer?.hero.name}→{victimPlayer?.hero.name})
                               </button>
@@ -7492,12 +7449,7 @@ const App: React.FC = () => {
                               <button 
                                 onClick={handleConfirmPlay}
                                 disabled={!!dyingState || !!isProcessing}
-                                className={`
-                                  px-6 py-2 rounded-lg text-lg font-bold font-ancient shadow-lg transition-all border-2
-                                  ${!!dyingState || !!isProcessing 
-                                    ? 'bg-stone-800 text-stone-600 border-stone-700 cursor-not-allowed opacity-50' 
-                                    : 'bg-gradient-to-b from-yellow-600 to-yellow-800 text-white border-yellow-400 hover:scale-105 hover:shadow-yellow-900/50 cursor-pointer'}
-                                `}
+                                className={`btn-gold px-6 py-2 rounded-lg text-lg font-ancient tracking-[0.14em] ${!!dyingState || !!isProcessing ? 'opacity-45 cursor-not-allowed' : ''}`}
                               >
                                 出 牌 ({tiesuoSelectedTargets.length}/2)
                               </button>
@@ -7892,7 +7844,7 @@ const App: React.FC = () => {
                        {players[0].hero.name === '黄盖' && players[0].hp > 1 && (
                          <button
                            disabled={!!isProcessing || !!dyingState}
-                           onClick={() => { void useKurou(players[0].id); }}
+                           onClick={() => { void resolveKurou(players[0].id); }}
                            className="skill-btn text-base"
                          >
                            苦肉
@@ -7984,10 +7936,8 @@ const App: React.FC = () => {
                       <button 
                         onClick={endTurn}
                         disabled={!!dyingState || isProcessing}
-                        className={`px-6 py-2 rounded-lg text-lg font-bold font-ancient shadow-lg transition-[transform,background-color,border-color] border-2
-                          ${(dyingState || isProcessing) 
-                            ? 'bg-[#1a1512] text-[#5a5248] border-[#3a3229] cursor-not-allowed opacity-50' 
-                            : 'bg-[#2b2318] text-[#e8cf94] border-[#c8a45c]/60 hover:bg-[#3a2f22] hover:border-[#c8a45c] hover:scale-105'}
+                        className={`btn-ink px-6 py-2 rounded-lg text-lg font-ancient tracking-[0.1em] border
+                          ${(dyingState || isProcessing) ? 'opacity-45 cursor-not-allowed' : ''}
                         `}
                       >
                         结束回合
@@ -8011,9 +7961,9 @@ const App: React.FC = () => {
                         onClick={handleDiscardConfirm}
                         disabled={!!dyingState || isProcessing || !exact}
                         className={`
-                          px-8 py-3 rounded-lg text-xl font-bold font-ancient shadow-lg transition-[transform,background-color] border-2
+                          px-8 py-2.5 rounded-lg text-xl font-ancient tracking-[0.14em] border
                           ${exact && !dyingState && !isProcessing
-                            ? 'bg-[#9e2b25] text-[#f7e7cf] border-[#c86b62] hover:bg-[#b0322b] hover:scale-105 cursor-pointer shadow-[0_4px_18px_rgba(158,43,37,0.4)]'
+                            ? 'btn-gold'
                             : 'bg-[#1a1512] text-[#5a5248] border-[#3a3229] cursor-not-allowed'}
                         `}
                       >
@@ -8041,13 +7991,9 @@ const App: React.FC = () => {
                 <button
                   onClick={handleAskStrategy}
                   disabled={me.isDead || !!dyingState || isProcessing}
-                  className={`px-4 py-2 rounded-lg border text-sm font-bold transition-colors flex items-center gap-2
-                    ${(dyingState || isProcessing)
-                      ? 'opacity-50 cursor-not-allowed bg-[#1a1512] border-[#3a3229] text-[#5a5248]'
-                      : 'bg-[#2b2318] border-[#c8a45c]/60 text-[#e8cf94] hover:bg-[#3a2f22] hover:border-[#c8a45c] hover:text-[#f7e7cf]'}
-                  `}
+                  className={`btn-ink px-4 py-2 rounded-lg text-sm flex items-center gap-1.5 ${(dyingState || isProcessing) ? 'opacity-50 cursor-not-allowed' : ''}`}
                 >
-                  <span>🎋</span>
+                  <IconBook />
                   问计
                 </button>
             </div>
@@ -8059,7 +8005,12 @@ const App: React.FC = () => {
            {theme === 'dark' && (
              <div className="absolute inset-x-4 bottom-0 h-32 rounded-t-2xl pointer-events-none bg-gradient-to-t from-[#0c0906]/85 to-transparent"></div>
            )}
-           
+           <div className="hand-tray" aria-hidden="true" />
+           <div className="absolute left-4 bottom-3 hidden md:flex items-center gap-1.5 pointer-events-none">
+             <span className={`text-[10px] tracking-[0.28em] ${theme === 'dark' ? 'text-[#8f806a]' : 'text-[#9a8a70]'}`}>手牌</span>
+             <span className={`font-ancient text-lg leading-none ${theme === 'dark' ? 'text-[#e8cf94]' : 'text-[#8b6914]'}`}>{me.hand.length}</span>
+           </div>
+
            <div className="flex -space-x-2 sm:space-x-1 md:space-x-2 items-end px-4 pb-2 relative">
              {me.hand.map((card, index) => {
                // Selection Logic

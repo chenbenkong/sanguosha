@@ -46,9 +46,13 @@
         src: url('./fonts/NotoSerifSC-700-sub.woff2') format('woff2');
       }
       body {
-        font-family: 'Noto Serif SC', 'Source Han Serif SC', 'SimSun', serif;
+        /* 正文改为无衬线（系统自带苹方 / 微软雅黑，无版权顾虑），
+           标题与叙述仍用 Ma Shan Zheng + Noto Serif SC，形成「题跋 + 正文」层级 */
+        font-family: 'Noto Sans SC', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Source Han Sans SC', sans-serif;
         background-color: #1a1512;
         color: #e5e5e5;
+        -webkit-font-smoothing: antialiased;
+        text-rendering: optimizeLegibility;
         overscroll-behavior: none;
         /* Wood texture background pattern */
         background-image: repeating-linear-gradient(45deg, #1a1512 25%, transparent 25%, transparent 75%, #1a1512 75%, #1a1512), repeating-linear-gradient(45deg, #1a1512 25%, #261f1b 25%, #261f1b 75%, #1a1512 75%, #1a1512);
