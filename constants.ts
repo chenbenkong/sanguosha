@@ -46,6 +46,8 @@ export const HEROES: Hero[] = [
     skillName: '奸雄',
     skillDesc: '受到伤害后，你可以获得造成伤害的牌。',
     gender: 'male',
+    lordSkillName: '护驾',
+    lordSkillDesc: '当你需要使用或打出【闪】时，可令其他魏势力角色打出一张【闪】（视为你打出）。',
   },
   {
     id: 'liubei',
@@ -57,6 +59,8 @@ export const HEROES: Hero[] = [
     skillName: '仁德',
     skillDesc: '出牌阶段，你可以将任意手牌交给其他角色。每阶段给出2张或更多牌时，你回复1点体力。',
     gender: 'male',
+    lordSkillName: '激将',
+    lordSkillDesc: '当你需要使用或打出【杀】时，可令其他蜀势力角色打出一张【杀】（视为你打出）。',
   },
   {
     id: 'sunquan',
@@ -68,6 +72,8 @@ export const HEROES: Hero[] = [
     skillName: '制衡',
     skillDesc: '出牌阶段，你可以弃置任意张牌，然后摸等量的牌。',
     gender: 'male',
+    lordSkillName: '救援',
+    lordSkillDesc: '其他吴势力角色对你使用【桃】时，你额外回复1点体力。',
   },
   {
     id: 'lubu',
@@ -109,8 +115,8 @@ export const HEROES: Hero[] = [
     maxHp: 3,
     avatarUrl: 'images/heroes/司马懿.webp',
     description: '狼顾之鬼',
-    skillName: '鬼才',
-    skillDesc: '成功使用卡牌免疫了对方的任何攻击，回复一滴血，如果血量是满的，则获得一张牌。',
+    skillName: '反馈',
+    skillDesc: '受到伤害后，你可以获得伤害来源的一张手牌。',
     gender: 'male',
   },
   {
@@ -120,8 +126,8 @@ export const HEROES: Hero[] = [
     maxHp: 3,
     avatarUrl: 'images/heroes/貂蝉.webp',
     description: '绝世舞姬',
-    skillName: '离间',
-    skillDesc: '出牌阶段，弃置一张牌，令两名男性角色进行决斗。',
+    skillName: '离间 / 闭月',
+    skillDesc: '离间：出牌阶段，弃置一张牌，令两名男性角色进行决斗。闭月：回合结束时摸一张牌。',
     gender: 'female',
   },
   {
@@ -164,8 +170,8 @@ export const HEROES: Hero[] = [
     maxHp: 3,
     avatarUrl: 'images/heroes/周瑜.webp',
     description: '美周郎',
-    skillName: '英姿',
-    skillDesc: '摸牌阶段，你额外摸一张牌。',
+    skillName: '英姿 / 反间',
+    skillDesc: '英姿：摸牌阶段额外摸一张牌。反间：出牌阶段限一次，令一名其他角色猜测花色，展示你一张手牌；猜错则受1点伤害，并获得该牌。',
     gender: 'male',
   },
   {
@@ -230,8 +236,8 @@ export const HEROES: Hero[] = [
     maxHp: 3,
     avatarUrl: 'images/heroes/大乔.webp',
     description: '国色天香',
-    skillName: '流离',
-    skillDesc: '你成为【杀】的目标时，可以弃置一张手牌，将此【杀】转移给你攻击范围内的另一名角色。',
+    skillName: '流离 / 国色',
+    skillDesc: '流离：你成为【杀】的目标时，可弃一张手牌将【杀】转移给攻击范围内的另一名角色。国色：你可以将一张方块牌当【乐不思蜀】使用。',
     gender: 'female',
   },
   {
@@ -299,6 +305,95 @@ export const HEROES: Hero[] = [
     skillName: '追忆',
     skillDesc: '你死亡时，可令一名其他角色摸三张牌。',
     gender: 'female',
+  },
+  // —— 标准包补员 ——
+  {
+    id: 'zhangliao',
+    name: '张辽',
+    kingdom: '魏',
+    maxHp: 4,
+    avatarUrl: 'images/heroes/张辽.webp',
+    description: '威震逍遥津',
+    skillName: '突袭',
+    skillDesc: '摸牌阶段，你可以不摸牌，改为获得至多两名其他角色的各一张手牌。',
+    gender: 'male',
+  },
+  {
+    id: 'xuchu',
+    name: '许褚',
+    kingdom: '魏',
+    maxHp: 4,
+    avatarUrl: 'images/heroes/许褚.webp',
+    description: '虎痴',
+    skillName: '裸衣',
+    skillDesc: '摸牌阶段，你可以少摸一张牌；本回合你的【杀】与【决斗】伤害+1（手中有杀或决斗时自动发动）。',
+    gender: 'male',
+  },
+  {
+    id: 'guojia',
+    name: '郭嘉',
+    kingdom: '魏',
+    maxHp: 3,
+    avatarUrl: 'images/heroes/郭嘉.webp',
+    description: '早终的先知',
+    skillName: '天妒 / 遗计',
+    skillDesc: '天妒：你的判定牌生效后获得之。遗计：你受到伤害后摸两张牌。',
+    gender: 'male',
+  },
+  {
+    id: 'machao',
+    name: '马超',
+    kingdom: '蜀',
+    maxHp: 4,
+    avatarUrl: 'images/heroes/马超.webp',
+    description: '一骑当千',
+    skillName: '马术 / 铁骑',
+    skillDesc: '马术：你计算与其他角色的距离-1。铁骑：你使用【杀】指定目标后判定，若为红色，目标不能使用【闪】。',
+    gender: 'male',
+  },
+  {
+    id: 'zhugeliang',
+    name: '诸葛亮',
+    kingdom: '蜀',
+    maxHp: 3,
+    avatarUrl: 'images/heroes/诸葛亮.webp',
+    description: '卧龙',
+    skillName: '观星 / 空城',
+    skillDesc: '观星：回合开始时观看牌堆顶三张牌并调整顺序。空城：你没有手牌时不能成为【杀】或【决斗】的目标。',
+    gender: 'male',
+  },
+  {
+    id: 'huanggai',
+    name: '黄盖',
+    kingdom: '吴',
+    maxHp: 4,
+    avatarUrl: 'images/heroes/黄盖.webp',
+    description: '轻身为国',
+    skillName: '苦肉',
+    skillDesc: '出牌阶段，你可以失去1点体力，然后摸两张牌。',
+    gender: 'male',
+  },
+  {
+    id: 'luxun',
+    name: '陆逊',
+    kingdom: '吴',
+    maxHp: 3,
+    avatarUrl: 'images/heroes/陆逊.webp',
+    description: '儒生雄才',
+    skillName: '谦逊 / 连营',
+    skillDesc: '谦逊：你不能成为【顺手牵羊】和【乐不思蜀】的目标。连营：你失去最后一张手牌时摸一张牌。',
+    gender: 'male',
+  },
+  {
+    id: 'huatuo',
+    name: '华佗',
+    kingdom: '群',
+    maxHp: 3,
+    avatarUrl: 'images/heroes/华佗.webp',
+    description: '神医',
+    skillName: '青囊',
+    skillDesc: '出牌阶段限一次，弃置一张手牌，令一名角色回复1点体力。',
+    gender: 'male',
   }
 ];
 
@@ -326,7 +421,7 @@ const CARD_META: Partial<Record<CardName, { type: CardType; desc: string; color:
 };
 
 // 牌堆 = 标准版 + EX + 军争篇中本作已实现的牌型，全部使用官方花色与点数。
-// 尚未实现因而未入池：火杀 / 雷杀（属性杀）、藤甲 / 白银狮子、丈八蛇矛 / 贯石斧 / 雌雄双股剑 / 寒冰剑 / 麒麟弓、爪黄飞电 / 骅骝。
+// 尚未入池的军争武器：古锭刀、朱雀羽扇（后续补齐）。
 const generateDeck = (): Card[] => {
   const deck: Card[] = [];
   let idCounter = 0;

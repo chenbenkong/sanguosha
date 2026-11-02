@@ -83,6 +83,9 @@ export interface Hero {
   skillName: string;
   skillDesc: string;
   gender: 'male' | 'female';
+  /** 主公技（仅主公身份时生效） */
+  lordSkillName?: string;
+  lordSkillDesc?: string;
 }
 
 export interface Player {
