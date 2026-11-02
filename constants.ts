@@ -214,8 +214,8 @@ export const HEROES: Hero[] = [
     maxHp: 3,
     avatarUrl: 'images/heroes/张春华.webp',
     description: '冷血皇后',
-    skillName: '伤逝',
-    skillDesc: '回合结束时，若你的手牌数少于已损失的体力值，你摸牌补至该数值。',
+    skillName: '绝情 / 伤逝',
+    skillDesc: '绝情：你造成的伤害改为令目标失去等量体力。伤逝：回合结束时，若你的手牌数少于已损失的体力值，你摸牌补至该数值。',
     gender: 'female',
   },
   {
@@ -225,8 +225,8 @@ export const HEROES: Hero[] = [
     maxHp: 4,
     avatarUrl: 'images/heroes/祝融.webp',
     description: '南蛮女王',
-    skillName: '巨象',
-    skillDesc: '【南蛮入侵】对你无效，且你可以获得之（改为摸一张牌）。',
+    skillName: '巨象 / 烈刃',
+    skillDesc: '巨象：【南蛮入侵】对你无效，且你可以获得之（改为摸一张牌）。烈刃：你的【杀】造成伤害后，可与目标拼点，赢则获得其一张牌。',
     gender: 'female',
   },
   {
@@ -247,8 +247,8 @@ export const HEROES: Hero[] = [
     maxHp: 3,
     avatarUrl: 'images/heroes/小乔.webp',
     description: '江东之花',
-    skillName: '红颜',
-    skillDesc: '你的方块牌视为红桃（判定时生效）。',
+    skillName: '红颜 / 天香',
+    skillDesc: '红颜：你的方块牌视为红桃（判定时生效）。天香：受到伤害时，可弃一张红桃手牌，将伤害转移给伤害来源（简化实现）。',
     gender: 'female',
   },
   {
@@ -258,8 +258,8 @@ export const HEROES: Hero[] = [
     maxHp: 3,
     avatarUrl: 'images/heroes/蔡文姬.webp',
     description: '异乡的孤女',
-    skillName: '断肠',
-    skillDesc: '你死亡时，伤害来源失去所有手牌。',
+    skillName: '悲歌 / 断肠',
+    skillDesc: '悲歌：一名角色受到【杀】伤害后，你可以弃一张牌并判定：红桃其回复1点体力，方块其摸两张牌，梅花伤害来源弃两张牌，黑桃伤害来源弃一张牌。断肠：你死亡时，伤害来源失去所有手牌。',
     gender: 'female',
   },
   {
@@ -291,8 +291,8 @@ export const HEROES: Hero[] = [
     maxHp: 3,
     avatarUrl: 'images/heroes/王异.webp',
     description: '决意的巾帼',
-    skillName: '秘计',
-    skillDesc: '回合开始时，若你已受伤，你摸X张牌（X为你已损失的体力值）。',
+    skillName: '秘计 / 贞烈',
+    skillDesc: '秘计：回合开始时，若你已受伤，你摸X张牌（X为你已损失的体力值）。贞烈：你成为其他角色【杀】或非延时锦囊牌的目标时，可失去1点体力并弃其一张手牌，令此牌对你无效。',
     gender: 'female',
   },
   {
@@ -302,8 +302,8 @@ export const HEROES: Hero[] = [
     maxHp: 3,
     avatarUrl: 'images/heroes/步练师.webp',
     description: '无冕之后',
-    skillName: '追忆',
-    skillDesc: '你死亡时，可令一名其他角色摸三张牌。',
+    skillName: '安恤 / 追忆',
+    skillDesc: '安恤：出牌阶段限一次，选择两名手牌数不同的其他角色，令手牌少者获得手牌多者一张牌；若之后两人手牌数相等，你摸一张牌。追忆：你死亡时，可令一名其他角色摸三张牌。',
     gender: 'female',
   },
   // —— 标准包补员 ——
@@ -391,8 +391,8 @@ export const HEROES: Hero[] = [
     maxHp: 3,
     avatarUrl: 'images/heroes/华佗.webp',
     description: '神医',
-    skillName: '青囊',
-    skillDesc: '出牌阶段限一次，弃置一张手牌，令一名角色回复1点体力。',
+    skillName: '青囊 / 急救',
+    skillDesc: '青囊：出牌阶段限一次，弃置一张手牌，令一名角色回复1点体力。急救：你的回合外，可将一张红色牌当【桃】使用。',
     gender: 'male',
   }
 ];

@@ -118,6 +118,15 @@ function shuffle<T>(array: T[]): T[] {
   return shuffled;
 }
 
+// 拼点用点数大小
+const rankValue = (rank: string): number => {
+  if (rank === 'A') return 1;
+  if (rank === 'J') return 11;
+  if (rank === 'Q') return 12;
+  if (rank === 'K') return 13;
+  return parseInt(rank, 10) || 0;
+};
+
 const App: React.FC = () => {
   // --- Theme ---
   const { theme, toggleTheme } = useTheme();
@@ -312,6 +321,10 @@ const App: React.FC = () => {
   const [isQingnangMode, setIsQingnangMode] = useState<boolean>(false);
   const [qingnangCardId, setQingnangCardId] = useState<string | null>(null);
   const [hasUsedQingnang, setHasUsedQingnang] = useState<boolean>(false);
+  // 步练师「安恤」：出牌阶段限一次，选择两名手牌数不同的角色
+  const [isAnxuMode, setIsAnxuMode] = useState<boolean>(false);
+  const [hasUsedAnxu, setHasUsedAnxu] = useState<boolean>(false);
+  const [anxuTargets, setAnxuTargets] = useState<number[]>([]);
   // 许褚「裸衣」：本回合【杀】/【决斗】伤害+1
   const luoyiPlayerRef = useRef<number | null>(null);
 
@@ -334,6 +347,7 @@ const App: React.FC = () => {
     rescuerId?: number;
     hasTao?: boolean;
     hasJiu?: boolean;
+    hasJijiu?: boolean;
     resolve: (result: boolean) => void;
   } | null>(null);
 
@@ -341,6 +355,8 @@ const App: React.FC = () => {
   const dyingResolver = useRef<((result: boolean) => void) | null>(null);
   const dyingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const dyingTickRef = useRef<number | null>(null);
+  // 刚被救活的角色短时间内不再重复询问，避免回合结算重入时弹出第二个濒死框
+  const recentlySavedRef = useRef<Record<number, number>>({});
 
   // Skill Info Modal State
   const [showSkillModal, setShowSkillModal] = useState<boolean>(false);
@@ -860,6 +876,9 @@ const App: React.FC = () => {
     setIsQingnangMode(false);
     setQingnangCardId(null);
     setHasUsedQingnang(false);
+    setIsAnxuMode(false);
+    setHasUsedAnxu(false);
+    setAnxuTargets([]);
     luoyiPlayerRef.current = null;
     setIsJiedaoMode(false);
     setJiedaoWeaponTarget(null);
@@ -1133,6 +1152,9 @@ const App: React.FC = () => {
         setHasUsedQingnang(false);
         setIsQingnangMode(false);
         setQingnangCardId(null);
+        setHasUsedAnxu(false);
+        setIsAnxuMode(false);
+        setAnxuTargets([]);
         luoyiPlayerRef.current = null;
         addLog(`>>> ${currentPlayer.hero.name} (${currentPlayer.isHuman ? '你' : 'AI'}) 回合开始 <<<`, 'info');
 
@@ -1405,7 +1427,8 @@ const App: React.FC = () => {
         // 结束阶段：若有角色体力<=0且未死亡，进行濒死求桃
         const latestPlayers = playersRef.current.length ? playersRef.current : players;
         for (const p of latestPlayers) {
-          if (p.hp <= 0 && !p.isDead) {
+          const savedAt = recentlySavedRef.current[p.id];
+          if (p.hp <= 0 && !p.isDead && !(savedAt && Date.now() - savedAt < 3000)) {
             addLog(`${p.hero.name} 体力为 ${p.hp}，进入濒死状态！`, 'danger');
             // 进入濒死求桃流程
             const isSaved = await askForPeaches(p.id);
@@ -1646,6 +1669,10 @@ const App: React.FC = () => {
         setIsQingnangMode(false);
         setQingnangCardId(null);
       }
+      if (isAnxuMode) {
+        setIsAnxuMode(false);
+        setAnxuTargets([]);
+      }
       if (isZhangbaMode || zhangbaPending) {
         setIsZhangbaMode(false);
         setZhangbaPending(null);
@@ -1661,7 +1688,7 @@ const App: React.FC = () => {
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [showRules, showSkillModal, showDiscardViewer, advice, isZhihengMode, isLijianMode, isRendeMode, isJieyinMode, isQixiMode, isZhangbaMode, zhangbaPending, isFanjianMode, isGuoseMode, isQingnangMode]);
+  }, [showRules, showSkillModal, showDiscardViewer, advice, isZhihengMode, isLijianMode, isRendeMode, isJieyinMode, isQixiMode, isZhangbaMode, zhangbaPending, isFanjianMode, isGuoseMode, isQingnangMode, isAnxuMode]);
 
   // Clear any selection when entering reaction mode
   useEffect(() => {
@@ -1858,6 +1885,13 @@ const App: React.FC = () => {
         setActiveSelectedId(card.id);
         setIsSelectingTarget(true);
         addLog(`已选择【${card.name}】作为「青囊」的代价，请选择回复目标`, 'info');
+        setTimeout(() => { clickGuard.current = false; }, 200);
+        return;
+      }
+
+      // 步练师「安恤」：只选角色，不选牌
+      if (isAnxuMode) {
+        addLog('「安恤」：请直接点击两名角色', 'info');
         setTimeout(() => { clickGuard.current = false; }, 200);
         return;
       }
@@ -2181,6 +2215,36 @@ const App: React.FC = () => {
       setIsSelectingTarget(false);
       addLog(`${meH.hero.name} 发动「青囊」，弃置【${cost.name}】，令 ${target.hero.name} 回复1点体力`, 'skill');
       showSkillBanner(meH.hero.name, '青囊');
+      setTimeout(() => { clickGuard.current = false; }, 200);
+      return;
+    }
+
+    // 步练师「安恤」：选择两名手牌数不同的其他角色
+    if (isAnxuMode) {
+      const meA = players.find(p => p.isHuman) || players[0];
+      const target = players.find(p => p.id === targetId);
+      if (!target || target.isDead || target.id === meA.id) {
+        setTimeout(() => { clickGuard.current = false; }, 200);
+        return;
+      }
+      if (anxuTargets.includes(targetId)) {
+        setAnxuTargets(prev => prev.filter(id => id !== targetId));
+        addLog(`取消了【${target.hero.name}】的安恤选择`, 'info');
+      } else if (anxuTargets.length < 2) {
+        const next = [...anxuTargets, targetId];
+        setAnxuTargets(next);
+        addLog(`安恤已选择：${next.map(id => getPlayer(id)?.hero.name).join('、')}（${next.length}/2）`, 'info');
+        if (next.length === 2) {
+          setIsProcessing(p => p + 1);
+          try {
+            await resolveAnxu(meA.id, next);
+          } finally {
+            setIsProcessing(p => Math.max(0, p - 1));
+          }
+        }
+      } else {
+        addLog('「安恤」最多选择两名角色', 'warning');
+      }
       setTimeout(() => { clickGuard.current = false; }, 200);
       return;
     }
@@ -2830,6 +2894,11 @@ const App: React.FC = () => {
             }
           }
 
+          // 王异「贞烈」：失去1点体力，弃伤害来源一张手牌，令此【杀】无效
+          if (await tryZhenlie(effectiveTarget, source, card)) {
+            continue;
+          }
+
           // 空城：没有手牌的诸葛亮不能成为【杀】的目标
           const slashProtection = getTargetProtection(effectiveTarget, CardName.SHA);
           if (slashProtection) {
@@ -2927,6 +2996,10 @@ const App: React.FC = () => {
       // JUEDOU
       else if (card.name === CardName.JUEDOU) {
          const target = targets[0];
+         if (await tryZhenlie(target, source, card)) {
+           playCard(source.id, card);
+           return;
+         }
          const protect = getTargetProtection(target, CardName.JUEDOU);
          if (protect) {
            addLog(`${target.hero.name} 发动「${protect}」，【决斗】无效`, 'skill');
@@ -2960,6 +3033,7 @@ const App: React.FC = () => {
             await delay(400);
             continue;
           }
+          if (await tryZhenlie(t, source, card)) continue;
           // 先询问是否使用无懈可击
           const isWuxieUsed = await triggerReaction(t.id, source.id, CardName.WUXIE, card);
           if (!isWuxieUsed) {
@@ -3028,6 +3102,7 @@ const App: React.FC = () => {
             await delay(400);
             continue;
           }
+          if (await tryZhenlie(t, source, card)) continue;
           // 先询问是否使用无懈可击
           const isWuxieUsed = await triggerReaction(t.id, source.id, CardName.WUXIE, card);
           if (!isWuxieUsed) {
@@ -3043,6 +3118,10 @@ const App: React.FC = () => {
         const protect = getTargetProtection(target, CardName.SHUNSHOU);
         if (protect) {
           addLog(`${target.hero.name} 发动「${protect}」，不能被【顺手牵羊】指定`, 'skill');
+          return;
+        }
+        if (await tryZhenlie(target, source, card)) {
+          playCard(source.id, card);
           return;
         }
         const targetHasEquip = !!(target.equipment?.weapon || target.equipment?.armor || target.equipment?.horsePlus || target.equipment?.horseMinus);
@@ -3108,6 +3187,10 @@ const App: React.FC = () => {
       // 过河拆桥
       else if (card.name === CardName.GUOHE) {
         const target = targets[0];
+        if (await tryZhenlie(target, source, card)) {
+          playCard(source.id, card);
+          return;
+        }
         const equipCards = [target.equipment?.weapon, target.equipment?.armor, target.equipment?.horsePlus, target.equipment?.horseMinus].filter(Boolean) as Card[];
         if (target.hand.length > 0 || equipCards.length > 0) {
           playCard(source.id, card);
@@ -3159,6 +3242,10 @@ const App: React.FC = () => {
       // 火攻
       else if (card.name === CardName.HUOGONG) {
         const target = targets[0];
+        if (await tryZhenlie(target, source, card)) {
+          playCard(source.id, card);
+          return;
+        }
         // 先将火攻放入弃牌堆
         playCard(source.id, card);
         if (target.hand.length === 0) {
@@ -3342,9 +3429,13 @@ const App: React.FC = () => {
       }
       // 借刀杀人
       else if (card.name === CardName.JIEDAO) {
-        playCard(source.id, card);
         const target = targets[0];
         const victim = targets[1];
+        if (await tryZhenlie(target, source, card)) {
+          playCard(source.id, card);
+          return;
+        }
+        playCard(source.id, card);
         addLog(`${source.hero.name} 对 ${target.hero.name} 使用了【借刀杀人】，令其攻击 ${victim.hero.name}`, 'info');
         
         // 询问目标是否使用无懈可击
@@ -3756,7 +3847,8 @@ const App: React.FC = () => {
 
   const askForPeaches = async (victimId: number): Promise<boolean> => {
     const victim = getPlayer(victimId)!;
-    if (victim.hp > 0) {
+    const savedAt = recentlySavedRef.current[victimId];
+    if (victim.hp > 0 || (savedAt && Date.now() - savedAt < 3000)) {
       setDyingState(null);
       return true;
     }
@@ -3786,11 +3878,15 @@ const App: React.FC = () => {
 
           const hasTao = player.hand.some(c => c.name === CardName.TAO);
           const hasJiu = player.hand.some(c => c.name === CardName.JIU);
-          const canSave = hasTao || hasJiu;
+          // 华佗「急救」：回合外可将红色牌当【桃】
+          const hasRed = player.hero.name === '华佗' && player.id !== turnIndex
+            && player.hand.some(c => c.suit === Suit.HEART || c.suit === Suit.DIAMOND);
+          const hasJijiu = hasRed && !hasTao && !hasJiu;
+          const canSave = hasTao || hasJiu || hasRed;
 
           // 所有有桃或酒的角色（包括濒死角色自己）都可以选择是否使用
           if (canSave) {
-            const saveCardName = hasTao ? '桃' : '酒';
+            const saveCardName = hasTao ? '桃' : hasJiu ? '酒' : '红色牌（急救）';
             addLog(`👉 询问 ${player.hero.name} 是否使用【${saveCardName}】救援 ${victim.hero.name}`, 'info');
 
             // 如果是人类玩家，显示弹窗询问
@@ -3806,6 +3902,7 @@ const App: React.FC = () => {
                   rescuerId: player.id,
                   hasTao,
                   hasJiu,
+                  hasJijiu,
                   resolve: (result: boolean) => {
                     resolve(result);
                   }
@@ -3840,15 +3937,20 @@ const App: React.FC = () => {
               setDyingState(null);
 
               if (result) {
-                // 玩家选择救援，优先使用桃，没有桃则使用酒
-                const saveCard = player.hand.find(c => c.name === CardName.TAO) || 
-                                player.hand.find(c => c.name === CardName.JIU);
+                // 玩家选择救援，优先使用桃，其次酒，华佗可用红色牌急救
+                const saveCard = player.hand.find(c => c.name === CardName.TAO)
+                  || player.hand.find(c => c.name === CardName.JIU)
+                  || player.hand.find(c => c.suit === Suit.HEART || c.suit === Suit.DIAMOND);
                 if (saveCard) {
-                  await useCardEffect(player, [currentVictim], saveCard);
+                  const actualCard: Card = saveCard.name === CardName.TAO || saveCard.name === CardName.JIU
+                    ? saveCard
+                    : { ...saveCard, name: CardName.TAO, type: CardType.BASIC, description: '急救：红色牌当【桃】使用。' };
+                  await useCardEffect(player, [currentVictim], actualCard);
                   someoneSaved = true;
 
                   const updatedVictim = getPlayer(victimId)!;
                   if (updatedVictim.hp > 0) {
+                    recentlySavedRef.current[victimId] = Date.now();
                     addLog(`✅ ${updatedVictim.hero.name} 被救活，脱离了濒死状态！`, 'success');
                     return true;
                   }
@@ -3868,6 +3970,7 @@ const App: React.FC = () => {
                 rescuerId: player.id,
                 hasTao,
                 hasJiu,
+                hasJijiu,
                 resolve: () => {} // AI不需要点击，所以用空函数
               });
 
@@ -3877,19 +3980,24 @@ const App: React.FC = () => {
               if (shouldSave) {
                 await delay(1500); // 给玩家看到AI在思考
                 setDyingState(null);
-                // AI优先使用桃，没有桃则使用酒
-                const saveCard = player.hand.find(c => c.name === CardName.TAO) || 
-                                player.hand.find(c => c.name === CardName.JIU);
+                // AI优先使用桃，其次酒，华佗可用红色牌急救
+                const saveCard = player.hand.find(c => c.name === CardName.TAO)
+                  || player.hand.find(c => c.name === CardName.JIU)
+                  || player.hand.find(c => c.suit === Suit.HEART || c.suit === Suit.DIAMOND);
                 if (!saveCard) {
                   addLog(`⚠️ ${player.hero.name} 想救援但没有【桃】或【酒】了`, 'warning');
                   continue; // 继续询问下一个玩家
                 }
-                addLog(`🍑 ${player.hero.name} 决定使用【${saveCard.name}】救援 ${victim.hero.name}`, 'success');
-                await useCardEffect(player, [currentVictim], saveCard);
+                const actualCard: Card = saveCard.name === CardName.TAO || saveCard.name === CardName.JIU
+                  ? saveCard
+                  : { ...saveCard, name: CardName.TAO, type: CardType.BASIC, description: '急救：红色牌当【桃】使用。' };
+                addLog(`🍑 ${player.hero.name} 决定使用【${actualCard.name}】救援 ${victim.hero.name}`, 'success');
+                await useCardEffect(player, [currentVictim], actualCard);
                 someoneSaved = true;
 
                 const updatedVictim = getPlayer(victimId)!;
                 if (updatedVictim.hp > 0) {
+                  recentlySavedRef.current[victimId] = Date.now();
                   addLog(`✅ ${updatedVictim.hero.name} 被救活，脱离了濒死状态！`, 'success');
                   return true;
                 }
@@ -3917,6 +4025,8 @@ const App: React.FC = () => {
       setDyingState(null);
       return false;
     } finally {
+      setDyingState(null);
+      setDyingLeft(null);
       setIsProcessing(p => Math.max(0, p - 1));
     }
   };
@@ -3968,6 +4078,113 @@ const App: React.FC = () => {
     }
   };
 
+  // 蔡文姬「悲歌」：一名角色受到【杀】伤害后，弃一张牌判定
+  const triggerBeige = async (victimId: number, sourceId: number, damageCard?: Card) => {
+    if (damageCard?.name !== CardName.SHA) return;
+    const cai = playersRef.current.find(p => !p.isDead && p.hero.name === '蔡文姬');
+    if (!cai || cai.hand.length === 0) return;
+    const cost = cai.hand.find(c => c.name !== CardName.TAO && c.name !== CardName.SHAN) || cai.hand[0];
+    discardCards(cai.id, [cost]);
+    addLog(`${cai.hero.name} 发动「悲歌」，弃置【${cost.name}】进行判定`, 'skill');
+    showSkillBanner(cai.hero.name, '悲歌');
+    const jc = await performJudgment(cai.id, '悲歌');
+    if (!jc) return;
+    const victim = getPlayer(victimId);
+    const attacker = getPlayer(sourceId);
+    if (jc.suit === Suit.HEART && victim && !victim.isDead) {
+      updatePlayer(victim.id, { hp: Math.min(victim.maxHp, victim.hp + 1) });
+      addLog(`「悲歌」判定为红桃，${victim.hero.name} 回复1点体力`, 'success');
+    } else if (jc.suit === Suit.DIAMOND && victim && !victim.isDead) {
+      drawCards(victim.id, 2);
+      addLog(`「悲歌」判定为方块，${victim.hero.name} 摸两张牌`, 'success');
+    } else if (jc.suit === Suit.CLUB && attacker && !attacker.isDead) {
+      const discard = attacker.hand.slice(0, 2);
+      discardCards(attacker.id, discard);
+      addLog(`「悲歌」判定为梅花，${attacker.hero.name} 弃置 ${discard.length} 张牌`, 'warning');
+    } else if (jc.suit === Suit.SPADE && attacker && !attacker.isDead) {
+      const discard = attacker.hand.slice(0, 1);
+      discardCards(attacker.id, discard);
+      addLog(`「悲歌」判定为黑桃，${attacker.hero.name} 弃置一张牌`, 'warning');
+    }
+  };
+
+  // 祝融「烈刃」：使用【杀】造成伤害后与目标拼点，赢则获得其一张牌
+  const triggerLieren = async (victimId: number, sourceId: number, damageCard?: Card) => {
+    if (damageCard?.name !== CardName.SHA) return;
+    const source = getPlayer(sourceId);
+    const victim = getPlayer(victimId);
+    if (!source || !victim || source.isDead || victim.isDead || sourceId === victimId) return;
+    if (source.hero.name !== '祝融' || source.hand.length === 0 || victim.hand.length === 0) return;
+    const sourceCard = [...source.hand].sort((a, b) => rankValue(b.rank) - rankValue(a.rank))[0];
+    const victimCard = [...victim.hand].sort((a, b) => rankValue(b.rank) - rankValue(a.rank))[0];
+    discardCards(sourceId, [sourceCard]);
+    discardCards(victimId, [victimCard]);
+    addLog(`【烈刃】拼点：${source.hero.name} ${sourceCard.rank} vs ${victim.hero.name} ${victimCard.rank}`, 'skill');
+    showSkillBanner(source.hero.name, '烈刃');
+    if (rankValue(sourceCard.rank) > rankValue(victimCard.rank)) {
+      const currentVictim = getPlayer(victimId);
+      if (currentVictim && currentVictim.hand.length > 0) {
+        const gained = currentVictim.hand[Math.floor(Math.random() * currentVictim.hand.length)];
+        mutateHand(victimId, hand => hand.filter(c => c.id !== gained.id));
+        mutateHand(sourceId, hand => [...hand, gained]);
+        addLog(`「烈刃」获胜，${source.hero.name} 获得 ${victim.hero.name} 的【${gained.name}】`, 'success');
+      }
+    } else {
+      addLog(`「烈刃」拼点未获胜`, 'info');
+    }
+  };
+
+  // 王异「贞烈」：成为【杀】或非延时锦囊目标时，失去1点体力弃其一张手牌，令此牌无效
+  const tryZhenlie = async (target: Player, source: Player, card: Card): Promise<boolean> => {
+    if (target.hero.name !== '王异' || target.id === source.id || target.isDead || target.hp <= 1) return false;
+    const harmful = card.name === CardName.SHA
+      || [CardName.JUEDOU, CardName.NANMAN, CardName.WANJIAN, CardName.SHUNSHOU,
+          CardName.GUOHE, CardName.HUOGONG, CardName.JIEDAO].includes(card.name);
+    if (!harmful) return false;
+    const attacker = getPlayer(source.id);
+    if (!attacker || attacker.hand.length === 0) return false;
+    updatePlayer(target.id, { hp: target.hp - 1 });
+    const cost = attacker.hand[0];
+    discardCards(attacker.id, [cost]);
+    addLog(`${target.hero.name} 发动「贞烈」，失去1点体力并弃置【${cost.name}】，令【${card.name}】无效`, 'skill');
+    showSkillBanner(target.hero.name, '贞烈');
+    await delay(400);
+    return true;
+  };
+
+  // 步练师「安恤」：让手牌少者获得手牌多者一张，若之后相等则摸一张
+  const resolveAnxu = async (meId: number, targetIds: number[]) => {
+    const me = getPlayer(meId);
+    const a = getPlayer(targetIds[0]);
+    const b = getPlayer(targetIds[1]);
+    if (!me || !a || !b || a.isDead || b.isDead || a.id === b.id) return false;
+    if (a.hand.length === b.hand.length) {
+      addLog('「安恤」需要两名手牌数不同的角色', 'warning');
+      setAnxuTargets([]);
+      return false;
+    }
+    const fewer = a.hand.length < b.hand.length ? a : b;
+    const more = a.hand.length > b.hand.length ? a : b;
+    if (more.hand.length === 0) return false;
+    const given = more.hand[Math.floor(Math.random() * more.hand.length)];
+    mutateHand(more.id, hand => hand.filter(c => c.id !== given.id));
+    mutateHand(fewer.id, hand => [...hand, given]);
+    addLog(`${me.hero.name} 发动「安恤」，${fewer.hero.name} 获得 ${more.hero.name} 的【${given.name}】`, 'skill');
+    showSkillBanner(me.hero.name, '安恤');
+    setHasUsedAnxu(true);
+    setIsAnxuMode(false);
+    setAnxuTargets([]);
+    setIsSelectingTarget(false);
+    await delay(400);
+    const afterFewer = getPlayer(fewer.id);
+    const afterMore = getPlayer(more.id);
+    if (afterFewer && afterMore && afterFewer.hand.length === afterMore.hand.length) {
+      drawCards(meId, 1);
+      addLog(`「安恤」后两人手牌数相等，${me.hero.name} 摸一张牌`, 'success');
+    }
+    return true;
+  };
+
   const takeDamage = async (
     victimId: number,
     sourceId: number,
@@ -4001,6 +4218,23 @@ const App: React.FC = () => {
         addLog(`【裸衣】触发，${source?.hero.name ?? ''} 的伤害+1`, 'danger');
       }
 
+      // 张春华「绝情」：造成的伤害改为失去体力（不触发防具/伤害后技能）
+      if (source?.hero.name === '张春华' && sourceId !== victimId && finalAmount > 0) {
+        const target = getPlayer(victimId)!;
+        const lostHp = Math.max(0, target.hp - finalAmount);
+        setDamageAnimTarget(victimId);
+        setTimeout(() => setDamageAnimTarget(null), 500);
+        updatePlayer(victimId, { hp: lostHp });
+        addLog(`${target.hero.name} 因「绝情」失去 ${finalAmount} 点体力！当前体力: ${lostHp}/${target.maxHp}`, 'danger');
+        showSkillBanner(source.hero.name, '绝情');
+        await delay(500);
+        if (lostHp <= 0) {
+          const saved = await askForPeaches(victimId);
+          if (!saved) await handleDeath(victimId, sourceId);
+        }
+        return;
+      }
+
       // 防具：藤甲受火焰伤害+1；白银狮子把大于1的伤害压到1
       let victim = getPlayer(victimId)!;
       const armor = victim.equipment?.armor?.name;
@@ -4022,6 +4256,30 @@ const App: React.FC = () => {
           discardCards(v.id, cost);
           addLog(`【寒冰剑】发动：防止伤害，改为弃置 ${v.hero.name} 的 ${cost.length} 张牌`, 'skill');
           await delay(300);
+          return;
+        }
+      }
+
+      // 小乔「天香」：弃一张红桃手牌，将伤害转移给伤害来源
+      if (victim.hero.name === '小乔' && sourceId !== victimId) {
+        const heartCard = victim.hand.find(c => c.suit === Suit.HEART || c.suit === Suit.DIAMOND);
+        if (heartCard) {
+          discardCards(victimId, [heartCard]);
+          addLog(`${victim.hero.name} 发动「天香」，弃置【${heartCard.name}】将伤害转移`, 'skill');
+          showSkillBanner(victim.hero.name, '天香');
+          await delay(400);
+          const receiver = getPlayer(sourceId);
+          if (receiver && !receiver.isDead) {
+            await takeDamage(sourceId, sourceId, finalAmount, damageCard, dmgNature === 'normal' ? undefined : dmgNature);
+            const after = getPlayer(sourceId);
+            if (after && !after.isDead) {
+              const lost = Math.min(5, after.maxHp - after.hp);
+              if (lost > 0) {
+                drawCards(after.id, lost);
+                addLog(`${after.hero.name} 因「天香」摸 ${lost} 张牌`, 'info');
+              }
+            }
+          }
           return;
         }
       }
@@ -4064,6 +4322,12 @@ const App: React.FC = () => {
           addLog(`${victim.hero.name} 发动「反馈」，获得 ${attacker.hero.name} 的【${gained.name}】`, 'skill');
           showSkillBanner(victim.hero.name, '反馈');
         }
+      }
+
+      // 蔡文姬「悲歌」/ 祝融「烈刃」：伤害后触发
+      await triggerBeige(victimId, sourceId, damageCard);
+      if (getPlayer(victimId)?.hp > 0) {
+        await triggerLieren(victimId, sourceId, damageCard);
       }
 
       // 麒麟弓：造成伤害后，可弃置目标一匹坐骑
@@ -4287,6 +4551,20 @@ const App: React.FC = () => {
       }
     }
 
+    // 步练师「安恤」：把手牌从多的一方转给少的一方
+    if (aiPlayer.hero.name === '步练师' && !hasUsedAnxu) {
+      const others = playersRef.current.filter(p => !p.isDead && p.id !== aiPlayer.id);
+      const allies = others.filter(p => isAlly(aiPlayer, p)).sort((a, b) => a.hand.length - b.hand.length);
+      const enemies = others.filter(p => isEnemy(aiPlayer, p)).sort((a, b) => b.hand.length - a.hand.length);
+      const fewer = allies[0] ?? [...others].sort((a, b) => a.hand.length - b.hand.length)[0];
+      const more = enemies.find(p => p.hand.length > (fewer?.hand.length ?? 0))
+        ?? [...others].filter(p => p.id !== fewer?.id && p.hand.length > (fewer?.hand.length ?? 0))
+          .sort((a, b) => b.hand.length - a.hand.length)[0];
+      if (fewer && more && fewer.id !== more.id && fewer.hand.length !== more.hand.length) {
+        await resolveAnxu(aiPlayer.id, [fewer.id, more.id]);
+        await delay(900);
+      }
+    }
     const picked = pickAITarget(aiPlayer);
     targetId = picked ? picked.id : -1;
     // 距离为 1 的可达敌人（顺手/兵粮/杀 使用）
@@ -5914,7 +6192,9 @@ const App: React.FC = () => {
                        ? '请选择是否使用【桃】或【酒】救援' 
                        : dyingState.hasTao 
                          ? '请选择是否使用【桃】救援'
-                         : '请选择是否使用【酒】救援'}
+                         : dyingState.hasJiu
+                           ? '请选择是否使用【酒】救援'
+                           : '请选择是否使用红色牌发动「急救」'}
                    </p>
                  )}
                </div>
@@ -5929,8 +6209,10 @@ const App: React.FC = () => {
                    <div className="mb-6 flex justify-center gap-2 flex-wrap">
                      {/* Show player's hand with peaches and wine highlighted */}
                      {me.hand.map(card => {
-                       const isSaveCard = card.name === CardName.TAO || card.name === CardName.JIU;
-                       const cardType = card.name === CardName.TAO ? '桃' : '酒';
+                       const isJijiuCard = !!dyingState.hasJijiu
+                         && (card.suit === Suit.HEART || card.suit === Suit.DIAMOND);
+                       const isSaveCard = card.name === CardName.TAO || card.name === CardName.JIU || isJijiuCard;
+                       const cardType = card.name === CardName.TAO ? '桃' : card.name === CardName.JIU ? '酒' : '急救';
                        return (
                          <div 
                            key={card.id} 
@@ -5959,14 +6241,16 @@ const App: React.FC = () => {
                           // 使用桃或酒
                           dyingState.resolve(true);
                         }}
-                        disabled={!me.hand.some(c => c.name === CardName.TAO || c.name === CardName.JIU)}
+                        disabled={!me.hand.some(c => c.name === CardName.TAO || c.name === CardName.JIU
+                          || (dyingState.hasJijiu && (c.suit === Suit.HEART || c.suit === Suit.DIAMOND)))}
                         className={`px-8 py-3 rounded-lg font-ancient text-xl ${
-                          me.hand.some(c => c.name === CardName.TAO || c.name === CardName.JIU)
+                          me.hand.some(c => c.name === CardName.TAO || c.name === CardName.JIU
+                            || (dyingState.hasJijiu && (c.suit === Suit.HEART || c.suit === Suit.DIAMOND)))
                           ? 'btn-gold'
                           : 'btn-ink opacity-45'
                         }`}
                       >
-                        {dyingState.hasTao ? '使用桃' : '使用酒'}
+                        {dyingState.hasTao ? '使用桃' : dyingState.hasJiu ? '使用酒' : '使用急救'}
                       </button>
                       <button 
                         onClick={() => {
@@ -7325,6 +7609,37 @@ const App: React.FC = () => {
                            className="btn-ink px-4 py-2 rounded-lg font-ancient text-base"
                          >
                            取消青囊
+                         </button>
+                       )}
+
+                       {/* 步练师「安恤」 */}
+                       {players[0].hero.name === '步练师' && !isAnxuMode && !hasUsedAnxu
+                         && players.filter(p => !p.isDead && !p.isHuman).length >= 2 && (
+                         <button
+                           onClick={() => {
+                             setIsAnxuMode(true);
+                             setAnxuTargets([]);
+                             setSelectedCardIds([]);
+                             setActiveSelectedId(null);
+                             setIsSelectingTarget(true);
+                             addLog('「安恤」：请选择两名手牌数不同的其他角色', 'info');
+                           }}
+                           className="skill-btn text-base"
+                         >
+                           安恤
+                         </button>
+                       )}
+                       {isAnxuMode && (
+                         <button
+                           onClick={() => {
+                             setIsAnxuMode(false);
+                             setAnxuTargets([]);
+                             setIsSelectingTarget(false);
+                             addLog('取消了「安恤」', 'info');
+                           }}
+                           className="btn-ink px-4 py-2 rounded-lg font-ancient text-base"
+                         >
+                           取消安恤
                          </button>
                        )}
 
