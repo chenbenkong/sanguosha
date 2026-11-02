@@ -5158,7 +5158,7 @@ const App: React.FC = () => {
                     className="group flex items-center gap-3 px-6 py-2 rounded-lg border border-[#c8a45c]/40 bg-[#1b1510]/80 transition-colors hover:border-[#e8cf94] hover:bg-[#241c14]/90"
                   >
                     <span className="font-ancient text-lg tracking-[0.18em] text-[#e8cf94]">继续上一局</span>
-                    <span className={`text-[11px] tracking-wide ${theme === 'dark' ? 'text-[#9a8b74]' : 'text-[#7a6a52]'}`}>
+                    <span className="text-[11px] tracking-wide text-[#9a8b74]">
                       {myHeroName} · {savedGame.playerCount}人局 · 存于 {savedAt}
                     </span>
                   </button>
@@ -6244,7 +6244,8 @@ const App: React.FC = () => {
                  {me.hand.length > 0 && (
                    <div className="bg-gradient-to-b from-[#1a1510] to-[#0f0f0f] p-4 rounded-lg border border-[#d4af37]/30">
                      <h6 className="text-lg font-bold text-[#d4af37] mb-4 flex items-center gap-2 font-ancient">
-                       <span>🎴</span> 当前手牌使用效果
+                       <span className="w-[3px] h-5 rounded-sm bg-gradient-to-b from-[#f0d894] to-[#a8842c]" />
+                       当前手牌使用效果
                      </h6>
                      <div className="grid grid-cols-1 gap-3 max-h-[400px] overflow-y-auto">
                        {me.hand.map((card, index) => {
