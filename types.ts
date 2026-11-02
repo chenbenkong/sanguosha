@@ -36,12 +36,21 @@ export enum CardName {
   QINGLONG = '青龙偃月刀',
   FANGTIAN = '方天画戟',
   ZHUGE = '诸葛连弩',
+  ZHANGBA = '丈八蛇矛',
+  GUANSHI = '贯石斧',
+  CIXIONG = '雌雄双股剑',
+  HANBING = '寒冰剑',
+  QILIN = '麒麟弓',
   BAGUA = '八卦阵',
   RENWANG = '仁王盾',
+  TENGJIA = '藤甲',
+  BAIYIN = '白银狮子',
   CHITU = '赤兔',
   DAWAN = '大宛',
+  ZIXING = '紫骍',
   DILU = '的卢',
   JUEYING = '绝影',
+  ZHUAHUANG = '爪黄飞电',
 }
 
 export interface Card {
@@ -53,6 +62,8 @@ export interface Card {
   value: number; 
   description: string;
   imageColor: string; // CSS class for background gradient
+  /** 属性杀：火杀 / 雷杀（普通杀不带此字段） */
+  attribute?: 'fire' | 'thunder';
 }
 
 export enum Identity {

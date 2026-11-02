@@ -302,6 +302,10 @@ const App: React.FC = () => {
   // 甘宁「奇袭」技能状态：将黑色牌当【过河拆桥】使用
   const [isQixiMode, setIsQixiMode] = useState<boolean>(false);
 
+  // 丈八蛇矛：两张手牌当【杀】
+  const [isZhangbaMode, setIsZhangbaMode] = useState<boolean>(false);
+  const [zhangbaPending, setZhangbaPending] = useState<Card[] | null>(null);
+
   // 战绩统计（localStorage 持久化）
   const [stats, setStats] = useState<{ games: number; wins: number; losses: number }>(() => {
     try {
@@ -607,6 +611,17 @@ const App: React.FC = () => {
     return (slashUsageRef.current[p.id] ?? 0) < 1;
   }, []);
 
+  // 失去装备后的结算：白银狮子离场回复 1 点体力
+  const onEquipLost = useCallback((playerId: number, equipName: CardName) => {
+    if (equipName !== CardName.BAIYIN) return;
+    const p = getPlayer(playerId);
+    if (!p || p.isDead) return;
+    if (p.hp < p.maxHp) {
+      updatePlayer(playerId, { hp: p.hp + 1 });
+      addLog(`【白银狮子】离场，${p.hero.name} 回复 1 点体力（${p.hp + 1}/${p.maxHp}）`, 'success');
+    }
+  }, [getPlayer, updatePlayer]);
+
   // 装备牌上装：同槽位旧装备进入弃牌堆
   const equipCard = useCallback((playerId: number, card: Card) => {
     const meta = EQUIP_META[card.name];
@@ -626,12 +641,13 @@ const App: React.FC = () => {
         return next;
       });
       addLog(`${player.hero.name} 弃置了旧装备【${prev.name}】`, 'info');
+      onEquipLost(playerId, prev.name);
       triggerXiaoji(playerId);
     }
     playSound(card.name, player.hero.gender);
     addLog(`${player.hero.name} 装备了【${card.name}】${meta.range ? `（攻击范围 ${meta.range}）` : ''}`, 'success');
     return true;
-  }, [getPlayer, mutateHand, updatePlayer, triggerXiaoji]);
+  }, [getPlayer, mutateHand, updatePlayer, triggerXiaoji, onEquipLost]);
 
   // --- Initialization ---
 
@@ -796,6 +812,8 @@ const App: React.FC = () => {
     setJieyinTarget(null);
     setHasUsedJieyin(false);
     setIsQixiMode(false);
+    setIsZhangbaMode(false);
+    setZhangbaPending(null);
     setIsJiedaoMode(false);
     setJiedaoWeaponTarget(null);
     setJiedaoVictimTarget(null);
@@ -1089,7 +1107,7 @@ const App: React.FC = () => {
             addLog(`⚡【闪电】命中！${currentPlayer.hero.name} 受到3点雷电伤害！`, 'danger');
             await takeDamage(currentPlayer.id, currentPlayer.id, 3, {
               ...jc, name: CardName.SHANDIAN,
-            } as Card);
+            } as Card, 'thunder');
           } else {
             // 传递给下一名存活角色
             let nextIdx = (currentPlayer.id + 1) % players.length;
@@ -1491,6 +1509,10 @@ const App: React.FC = () => {
         setJieyinTarget(null);
       }
       if (isQixiMode) setIsQixiMode(false);
+      if (isZhangbaMode || zhangbaPending) {
+        setIsZhangbaMode(false);
+        setZhangbaPending(null);
+      }
       setIsJiedaoMode(false);
       setJiedaoWeaponTarget(null);
       setJiedaoVictimTarget(null);
@@ -1502,7 +1524,7 @@ const App: React.FC = () => {
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [showRules, showSkillModal, showDiscardViewer, advice, isZhihengMode, isLijianMode, isRendeMode, isJieyinMode, isQixiMode]);
+  }, [showRules, showSkillModal, showDiscardViewer, advice, isZhihengMode, isLijianMode, isRendeMode, isJieyinMode, isQixiMode, isZhangbaMode, zhangbaPending]);
 
   // Clear any selection when entering reaction mode
   useEffect(() => {
@@ -1659,6 +1681,19 @@ const App: React.FC = () => {
       const isZhaoyun = me.hero.name === '赵云';
       const isGuanyu = me.hero.name === '关羽';
       const isRedCard = [Suit.HEART, Suit.DIAMOND].includes(card.suit); // 红色牌（红桃和方块）
+
+      // 丈八蛇矛模式：选两张手牌
+      if (isZhangbaMode) {
+        if (selectedCardIds.includes(card.id)) {
+          setSelectedCardIds(prev => prev.filter(id => id !== card.id));
+        } else if (selectedCardIds.length < 2) {
+          setSelectedCardIds(prev => [...prev, card.id]);
+        } else {
+          addLog('丈八蛇矛只能选两张手牌', 'warning');
+        }
+        setTimeout(() => { clickGuard.current = false; }, 150);
+        return;
+      }
 
       // 制衡模式：支持多选
       if (isZhihengMode) {
@@ -1831,8 +1866,8 @@ const App: React.FC = () => {
 
   // 简化的状态同步逻辑，仅保留一个useEffect来确保状态一致性
   useEffect(() => {
-    // 仅在非弃牌阶段、非制衡模式、非仁德模式下执行单选强制逻辑
-    if (phase !== GamePhase.DISCARD && !isZhihengMode && !isRendeMode) {
+    // 仅在非弃牌阶段、非制衡/仁德/丈八模式下执行单选强制逻辑
+    if (phase !== GamePhase.DISCARD && !isZhihengMode && !isRendeMode && !isZhangbaMode) {
       // 确保只有一个选中的卡牌
       if (selectedCardIds.length > 1) {
         // 使用最后一个选中的卡牌
@@ -1846,10 +1881,49 @@ const App: React.FC = () => {
         setActiveSelectedId(firstSelected);
       }
     }
-  }, [selectedCardIds, phase, isZhihengMode, isRendeMode]);
+  }, [selectedCardIds, phase, isZhihengMode, isRendeMode, isZhangbaMode]);
 
   const handleTargetClick = async (targetId: number) => {
     if (dyingState || isProcessing) return;
+
+    // 丈八蛇矛：两张手牌当【杀】已选定，正在点目标
+    if (zhangbaPending) {
+      const meZ = players.find(p => p.isHuman) || players[0];
+      const target = players.find(p => p.id === targetId);
+      if (!target || target.isDead || target.id === meZ.id) {
+        setTimeout(() => { clickGuard.current = false; }, 200);
+        return;
+      }
+      if (!canReach(meZ, target)) {
+        addLog(`【${target.hero.name}】超出攻击范围，无法对其使用【杀】`, 'warning');
+        setTimeout(() => { clickGuard.current = false; }, 200);
+        return;
+      }
+      const [first, second] = zhangbaPending;
+      setZhangbaPending(null);
+      setSelectedCardIds([]);
+      setActiveSelectedId(null);
+      setIsSelectingTarget(false);
+      // 第一张由虚拟【杀】落桌时弃置，第二张先手动弃置
+      discardCards(meZ.id, [second]);
+      const virtualSlash: Card = {
+        ...first,
+        name: CardName.SHA,
+        type: CardType.BASIC,
+        attribute: undefined,
+        description: '丈八蛇矛：两张手牌当【杀】使用。',
+      };
+      addLog(`${meZ.hero.name} 发动【丈八蛇矛】，将【${first.name}】与【${second.name}】当【杀】使用`, 'skill');
+      showSkillBanner(meZ.hero.name, '丈八蛇矛');
+      setIsProcessing(p => p + 1);
+      try {
+        await useCardEffect(meZ, [target], virtualSlash);
+      } finally {
+        setIsProcessing(p => Math.max(0, p - 1));
+        setTimeout(() => { clickGuard.current = false; }, 200);
+      }
+      return;
+    }
 
     // 甘宁「奇袭」：将选中的黑色牌当【过河拆桥】对目标使用
     if (isQixiMode) {
@@ -2489,6 +2563,27 @@ const App: React.FC = () => {
             await delay(500);
             continue;
           }
+          // 藤甲：普通【杀】无效（火杀/雷杀不受影响）
+          if (!ignoreArmor && armor === CardName.TENGJIA && !card.attribute) {
+            addLog(`${effectiveTarget.hero.name} 的【藤甲】挡住了普通【杀】，伤害无效`, 'success');
+            await delay(500);
+            continue;
+          }
+
+          // 雌雄双股剑：指定异性目标后，令其弃一张手牌，或令你摸一张牌
+          if (source.equipment?.weapon?.name === CardName.CIXIONG
+              && source.hero.gender !== effectiveTarget.hero.gender) {
+            const t = getPlayer(effectiveTarget.id);
+            if (t && t.hand.length > 0) {
+              const cost = t.hand[Math.floor(Math.random() * t.hand.length)];
+              discardCards(t.id, [cost]);
+              addLog(`【雌雄双股剑】发动，${t.hero.name} 弃置了【${cost.name}】`, 'skill');
+            } else {
+              drawCards(source.id, 1);
+              addLog(`【雌雄双股剑】发动，${source.hero.name} 摸一张牌`, 'skill');
+            }
+            await delay(400);
+          }
 
           // 黄忠「烈弓」：目标手牌不少于自己体力时，此【杀】不可被闪避
           const isLieGong = source.hero.name === '黄忠' && effectiveTarget.hand.length >= source.hp;
@@ -2502,6 +2597,21 @@ const App: React.FC = () => {
           const hpBefore = getPlayer(effectiveTarget.id)?.hp ?? 0;
           await triggerReaction(effectiveTarget.id, source.id, CardName.SHAN, card);
           const hpAfter = getPlayer(effectiveTarget.id)?.hp ?? 0;
+
+          // 贯石斧：被【闪】抵消时，可弃两张牌令此【杀】依然造成伤害
+          const isGuanshi = source.equipment?.weapon?.name === CardName.GUANSHI;
+          if (isGuanshi && hpAfter === hpBefore && !getPlayer(effectiveTarget.id)?.isDead
+              && source.hand.length >= 2 && (effectiveTarget.hp <= 1 || source.hand.length >= 4)) {
+            const cost = source.hand.slice(0, 2);
+            discardCards(source.id, cost);
+            addLog(`【贯石斧】发动！${source.hero.name} 弃置两张牌，令此【杀】依然造成伤害`, 'skill');
+            showSkillBanner(source.hero.name, '贯石斧');
+            await delay(400);
+            const t = getPlayer(effectiveTarget.id);
+            if (t && !t.isDead) await takeDamage(t.id, source.id, 1, card);
+            await delay(300);
+            continue;
+          }
 
           // 青龙偃月刀：若【杀】被闪避且手中还有【杀】，追加一击
           const isQinglong = source.equipment?.weapon?.name === CardName.QINGLONG;
@@ -2540,6 +2650,12 @@ const App: React.FC = () => {
             addLog(`${t.hero.name} 发动「巨象」，「南蛮入侵」对其无效`, 'skill');
             showSkillBanner(t.hero.name, '巨象');
             drawCards(t.id, 1);
+            await delay(400);
+            continue;
+          }
+          // 藤甲：南蛮入侵对其无效
+          if (t.equipment?.armor?.name === CardName.TENGJIA) {
+            addLog(`${t.hero.name} 的【藤甲】使【南蛮入侵】无效`, 'success');
             await delay(400);
             continue;
           }
@@ -2597,6 +2713,12 @@ const App: React.FC = () => {
         playCard(source.id, card);
         addLog('万箭齐发！全场需打出【闪】', 'danger');
         for (const t of targets) {
+          // 藤甲：万箭齐发对其无效
+          if (t.equipment?.armor?.name === CardName.TENGJIA) {
+            addLog(`${t.hero.name} 的【藤甲】使【万箭齐发】无效`, 'success');
+            await delay(400);
+            continue;
+          }
           // 先询问是否使用无懈可击
           const isWuxieUsed = await triggerReaction(t.id, source.id, CardName.WUXIE, card);
           if (!isWuxieUsed) {
@@ -2627,6 +2749,7 @@ const App: React.FC = () => {
               });
               updatePlayer(target.id, { equipment: nextEquip });
               mutateHand(source.id, hand => [...hand, stolenEquip]);
+              onEquipLost(target.id, stolenEquip.name);
               triggerXiaoji(target.id);
               addLog(`${source.hero.name} 顺手牵走了 ${target.hero.name} 的装备【${stolenEquip.name}】`, 'chat');
             } else if (target.hand.length > 0) {
@@ -2686,6 +2809,7 @@ const App: React.FC = () => {
                 discardPileRef.current = newPile;
                 return newPile;
               });
+              onEquipLost(target.id, brokenEquip.name);
               triggerXiaoji(target.id);
               addLog(`${source.hero.name} 拆掉了 ${target.hero.name} 的装备【${brokenEquip.name}】`, 'chat');
             } else {
@@ -2740,17 +2864,8 @@ const App: React.FC = () => {
           });
           setDiscardPile(prev => [...prev, sameSuitCard]);
           addLog(`${source.hero.name} 弃置了【${sameSuitCard.name}】(${sameSuitCard.suit})，对 ${target.hero.name} 造成1点火焰伤害！`, 'danger');
-          // 铁索连环传导：目标被横置时，火焰伤害波及所有横置角色（先重置避免连环循环）
-          const chainedPlayers = playersRef.current.filter(p => p.isChained && !p.isDead);
-          if (target.isChained && chainedPlayers.length > 1) {
-            addLog(`🔗【铁索连环】传导！火焰伤害波及 ${chainedPlayers.map(p => p.hero.name).join('、')}`, 'danger');
-            chainedPlayers.forEach(cp => updatePlayer(cp.id, { isChained: false }));
-            for (const cp of chainedPlayers) {
-              await takeDamage(cp.id, source.id, 1, card);
-            }
-          } else {
-            await takeDamage(target.id, source.id, 1, card);
-          }
+          // 属性伤害统一由 takeDamage 处理（含藤甲加伤与铁索传导）
+          await takeDamage(target.id, source.id, 1, card, 'fire');
         } else {
           addLog(`${source.hero.name} 没有${shownCard.suit}花色的手牌，【火攻】失败！`, 'warning');
         }
@@ -3524,9 +3639,23 @@ const App: React.FC = () => {
     return Math.random() < 0.3;
   };
 
-  const takeDamage = async (victimId: number, sourceId: number, amount: number, damageCard?: Card) => {
+  const takeDamage = async (
+    victimId: number,
+    sourceId: number,
+    amount: number,
+    damageCard?: Card,
+    nature?: 'fire' | 'thunder',
+  ) => {
     setIsProcessing(p => p + 1);
     try {
+      // 伤害属性：显式传入优先，其次看伤害牌（火杀 / 雷杀）
+      const dmgNature: 'normal' | 'fire' | 'thunder' = nature ?? damageCard?.attribute ?? 'normal';
+      const natureLabel = dmgNature === 'fire' ? '火焰' : dmgNature === 'thunder' ? '雷电' : '';
+      const source = getPlayer(sourceId);
+      // 青釭剑：使用【杀】时无视目标防具
+      const ignoreArmor = damageCard?.name === CardName.SHA
+        && source?.equipment?.weapon?.name === CardName.QINGGANG;
+
       // 检查是否有"酒"的伤害加成（仅对杀有效）
       let finalAmount = amount;
       if (damageCard?.name === CardName.SHA && window.jiuBoost?.[sourceId]) {
@@ -3536,16 +3665,71 @@ const App: React.FC = () => {
         window.jiuBoost[sourceId] = false;
       }
 
+      // 防具：藤甲受火焰伤害+1；白银狮子把大于1的伤害压到1
+      let victim = getPlayer(victimId)!;
+      const armor = victim.equipment?.armor?.name;
+      if (!ignoreArmor && armor === CardName.TENGJIA && dmgNature === 'fire') {
+        finalAmount += 1;
+        addLog(`${victim.hero.name} 的【藤甲】遇火，火焰伤害+1`, 'danger');
+      }
+      if (!ignoreArmor && armor === CardName.BAIYIN && finalAmount > 1) {
+        finalAmount = 1;
+        addLog(`${victim.hero.name} 的【白银狮子】将伤害减为 1 点`, 'skill');
+      }
+
+      // 寒冰剑：造成伤害时，可防止伤害并改为弃置目标两张牌
+      if (damageCard?.name === CardName.SHA && source?.equipment?.weapon?.name === CardName.HANBING) {
+        const v = getPlayer(victimId);
+        // 仅在目标手牌不少于两张、且此伤害不致命时改为弃牌，避免误放过斩杀
+        if (v && v.hand.length >= 2 && v.hp > finalAmount) {
+          const cost = v.hand.slice(0, 2);
+          discardCards(v.id, cost);
+          addLog(`【寒冰剑】发动：防止伤害，改为弃置 ${v.hero.name} 的 ${cost.length} 张牌`, 'skill');
+          await delay(300);
+          return;
+        }
+      }
+
+      // 铁索连环：属性伤害传导（先统一重置，避免递归传导）
+      let chainOthers: Player[] = [];
+      if (dmgNature !== 'normal' && victim.isChained) {
+        const chained = playersRef.current.filter(p => p.isChained && !p.isDead);
+        if (chained.length > 1) {
+          addLog(`🔗【铁索连环】传导！${natureLabel}伤害波及 ${chained.map(p => p.hero.name).join('、')}`, 'danger');
+          chained.forEach(cp => updatePlayer(cp.id, { isChained: false }));
+          chainOthers = chained.filter(p => p.id !== victimId);
+        }
+      }
+
       setDamageAnimTarget(victimId);
       playSound('damage');
       setTimeout(() => setDamageAnimTarget(null), 500);
 
-      let victim = getPlayer(victimId)!;
+      victim = getPlayer(victimId)!;
       const newHp = victim.hp - finalAmount;
-      
+
       // 立即更新玩家体力
       updatePlayer(victimId, { hp: newHp });
-      addLog(`${victim.hero.name} 受到 ${finalAmount} 点伤害！当前体力: ${newHp}/${victim.maxHp}`, 'danger');
+      addLog(`${victim.hero.name} 受到 ${finalAmount} 点${natureLabel}伤害！当前体力: ${newHp}/${victim.maxHp}`, 'danger');
+
+      // 麒麟弓：造成伤害后，可弃置目标一匹坐骑
+      if (damageCard?.name === CardName.SHA && source?.equipment?.weapon?.name === CardName.QILIN) {
+        const v = getPlayer(victimId);
+        const slot = v?.equipment?.horsePlus ? 'horsePlus' as const : v?.equipment?.horseMinus ? 'horseMinus' as const : null;
+        if (v && slot) {
+          const horse = v.equipment![slot]!;
+          const nextEquip = { ...(v.equipment ?? {}) };
+          delete nextEquip[slot];
+          updatePlayer(victimId, { equipment: nextEquip });
+          setDiscardPile(prev => {
+            const next = [...prev, horse];
+            discardPileRef.current = next;
+            return next;
+          });
+          triggerXiaoji(victimId);
+          addLog(`${source.hero.name} 的【麒麟弓】射落了 ${v.hero.name} 的【${horse.name}】`, 'skill');
+        }
+      }
 
       // 身份推理：攻击主公者视为反贼；击杀已亮明反贼者视为忠臣
       if (sourceId !== victimId) {
@@ -3604,6 +3788,12 @@ const App: React.FC = () => {
         } else {
           addLog(`「刚烈」判定为红桃，未能反伤`, 'info');
         }
+      }
+
+      // 铁索连环传导：结算完当前目标后，依次传导给其他横置角色
+      for (const cp of chainOthers) {
+        if (getPlayer(cp.id)?.isDead) continue;
+        await takeDamage(cp.id, sourceId, amount, damageCard, dmgNature === 'normal' ? undefined : dmgNature);
       }
     } finally {
       setIsProcessing(p => Math.max(0, p - 1));
@@ -3845,11 +4035,27 @@ const App: React.FC = () => {
     for (let i = 0; i < 3; i++) {
       const aiNow = getPlayer(aiPlayer.id);
       if (!aiNow || aiNow.isDead) break;
-      const slash = aiNow.hand.find(c => c.name === CardName.SHA);
+      let slash = aiNow.hand.find(c => c.name === CardName.SHA);
+      let zhangbaCost: Card[] = [];
+      // 丈八蛇矛：没有【杀】时，可用两张手牌当【杀】
+      if (!slash && aiNow.equipment?.weapon?.name === CardName.ZHANGBA && aiNow.hand.length >= 2) {
+        zhangbaCost = aiNow.hand.slice(0, 2);
+        slash = {
+          ...zhangbaCost[0],
+          name: CardName.SHA,
+          type: CardType.BASIC,
+          attribute: undefined,
+          description: '丈八蛇矛：两张手牌当【杀】使用。',
+        };
+      }
       const target = players
         .filter(p => !p.isDead && p.id !== aiNow.id && isEnemy(aiNow, p) && canReach(aiNow, p))
         .sort((a, b) => a.hp - b.hp)[0];
       if (!slash || !target || !canPlaySlash(aiNow)) break;
+      if (zhangbaCost.length === 2) {
+        discardCards(aiNow.id, [zhangbaCost[1]]);
+        addLog(`${aiNow.hero.name} 发动【丈八蛇矛】，将两张手牌当【杀】使用`, 'skill');
+      }
       await useCardEffect(aiNow, [target], slash);
       slashPlayed++;
       await delay(1200);
@@ -6546,6 +6752,61 @@ const App: React.FC = () => {
                          </button>
                        )}
 
+                       {/* 丈八蛇矛：两张手牌当【杀】 */}
+                       {players[0].equipment?.weapon?.name === CardName.ZHANGBA && !isZhangbaMode && !zhangbaPending
+                         && players[0].hand.length >= 2 && (
+                         <button
+                           onClick={() => {
+                             setIsZhangbaMode(true);
+                             setSelectedCardIds([]);
+                             setActiveSelectedId(null);
+                             setIsSelectingTarget(false);
+                             addLog('【丈八蛇矛】：请选择两张手牌当【杀】使用', 'info');
+                           }}
+                           className="skill-btn text-base"
+                         >
+                           丈八蛇矛
+                         </button>
+                       )}
+                       {isZhangbaMode && (
+                         <>
+                           <button
+                             disabled={selectedCardIds.length !== 2}
+                             onClick={() => {
+                               const meZ = players.find(p => p.isHuman) || players[0];
+                               const picked = meZ.hand.filter(c => selectedCardIds.includes(c.id));
+                               if (picked.length !== 2) {
+                                 addLog('请选择两张手牌', 'warning');
+                                 return;
+                               }
+                               setZhangbaPending(picked);
+                               setIsZhangbaMode(false);
+                               setIsSelectingTarget(true);
+                               setSelectedCardIds([]);
+                               setActiveSelectedId(null);
+                               addLog('请选择【杀】的目标', 'info');
+                             }}
+                             className={`px-4 py-2 rounded-lg font-ancient text-base border-2 ${selectedCardIds.length === 2
+                               ? 'bg-[#9e2b25] text-[#f7e7cf] border-[#c86b62] hover:bg-[#b0322b]'
+                               : 'bg-[#1a1512] text-[#5a5248] border-[#3a3229] cursor-not-allowed'}`}
+                           >
+                             当【杀】使用
+                           </button>
+                           <button
+                             onClick={() => {
+                               setIsZhangbaMode(false);
+                               setSelectedCardIds([]);
+                               setActiveSelectedId(null);
+                               setIsSelectingTarget(false);
+                               addLog('取消了「丈八蛇矛」', 'info');
+                             }}
+                             className="btn-ink px-4 py-2 rounded-lg font-ancient text-base"
+                           >
+                             取消
+                           </button>
+                         </>
+                       )}
+
                        {/* Diaochan's Lijian Skill Button */}
                        {players[0].hero.name === '貂蝉' && !isLijianMode && !hasUsedLijian && (
                          <button 
@@ -6739,7 +7000,7 @@ const App: React.FC = () => {
                }
 
                // When one is selected in ACTION phase (not Zhiheng mode, not Rende mode), disable others
-               const lockOthers = (phase === GamePhase.ACTION && !isAiTakeover && !isZhihengMode && !isRendeMode && selectedCardIds.length > 0);
+               const lockOthers = (phase === GamePhase.ACTION && !isAiTakeover && !isZhihengMode && !isRendeMode && !isZhangbaMode && selectedCardIds.length > 0);
 
                // 检查是否为赵云且卡牌是杀或闪，以显示技能提示
                const isZhaoyun = players[0]?.hero?.name === '赵云';

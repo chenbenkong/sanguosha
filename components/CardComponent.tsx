@@ -37,14 +37,23 @@ const CARD_THEMES: Record<string, { face: string; accent: string; ink: string }>
   // —— 装备牌 ——
   '青釭剑': { face: 'from-[#eef1f6] via-[#e3e8f1] to-[#cfd7e4]', accent: '#3c5a80', ink: '#2f4766' },
   '青龙偃月刀': { face: 'from-[#eef7f0] via-[#e0efe4] to-[#c8dfd0]', accent: '#2f6e52', ink: '#255741' },
+  '丈八蛇矛': { face: 'from-[#f4efe6] via-[#e8dfd1] to-[#d6c9b5]', accent: '#6d5a3a', ink: '#584829' },
+  '贯石斧': { face: 'from-[#f3ece4] via-[#e6dccf] to-[#d4c4b0]', accent: '#7a5a38', ink: '#63482c' },
+  '雌雄双股剑': { face: 'from-[#f6edef] via-[#ecdde1] to-[#dcc8cd]', accent: '#8a4a5a', ink: '#703b48' },
+  '寒冰剑': { face: 'from-[#eff4f7] via-[#e0eaf1] to-[#c9dae6]', accent: '#3a6280', ink: '#2e4f68' },
+  '麒麟弓': { face: 'from-[#f7f0e4] via-[#efe2cb] to-[#e0c9a5]', accent: '#8a6a2a', ink: '#70551f' },
   '方天画戟': { face: 'from-[#f6efe2] via-[#ece0cc] to-[#dcc9a8]', accent: '#8a6a2a', ink: '#70541f' },
   '诸葛连弩': { face: 'from-[#f2ece6] via-[#e7ddd2] to-[#d6c7b6]', accent: '#7a5230', ink: '#634126' },
   '八卦阵': { face: 'from-[#f1f5f2] via-[#e3ebe6] to-[#cfdad3]', accent: '#3f6b58', ink: '#325545' },
   '仁王盾': { face: 'from-[#f4f1ed] via-[#e9e4dd] to-[#d9d1c6]', accent: '#5b5148', ink: '#4a413a' },
+  '藤甲': { face: 'from-[#f1f4ec] via-[#e4ebdf] to-[#d0dbc6]', accent: '#4f6b3a', ink: '#40562e' },
+  '白银狮子': { face: 'from-[#f4f5f7] via-[#e7e9ee] to-[#d3d7de]', accent: '#6a7080', ink: '#555b6a' },
   '赤兔': { face: 'from-[#fbeeee] via-[#f4dcdc] to-[#e7c3c3]', accent: '#9a3a34', ink: '#7e2e29' },
   '大宛': { face: 'from-[#f3eefb] via-[#e8e0f4] to-[#d6c9e8]', accent: '#5b3d8f', ink: '#4a2f78' },
+  '紫骍': { face: 'from-[#f0f1f5] via-[#e3e5ec] to-[#cfd3de]', accent: '#4a5268', ink: '#3b4152' },
   '的卢': { face: 'from-[#eef2fb] via-[#e0e7f6] to-[#cbd6ea]', accent: '#3c5a90', ink: '#2f476f' },
   '绝影': { face: 'from-[#f0f1f3] via-[#e4e6ea] to-[#ced2d8]', accent: '#4a4f58', ink: '#3c4048' },
+  '爪黄飞电': { face: 'from-[#faf1e2] via-[#f0e2c8] to-[#e0cba5]', accent: '#8a6a2a', ink: '#70551f' },
 };
 
 // 卡面插画（取自开源三国杀项目 noname 的官方风格卡图）
@@ -114,9 +123,11 @@ const CardComponent: React.FC<CardProps> = ({ card, onClick, disabled, selected,
 
   const isRed = card.suit === Suit.HEART || card.suit === Suit.DIAMOND;
   const suitColor = isRed ? '#b03030' : '#26221e';
+  // 属性杀显示为「火杀 / 雷杀」，牌名与逻辑仍按【杀】处理
+  const displayName = card.attribute === 'fire' ? '火杀' : card.attribute === 'thunder' ? '雷杀' : card.name;
   const theme = CARD_THEMES[card.name] || { face: 'from-[#f5efe2] to-[#e3d5ba]', accent: '#2b2b2b', ink: '#1c1c1c' };
   const stamp = TYPE_STAMPS[card.type] || TYPE_STAMPS[CardType.BASIC];
-  const bigName = card.name.length <= 2;
+  const bigName = displayName.length <= 2;
   const art = CARD_ART[card.name];
 
   return (
@@ -128,7 +139,7 @@ const CardComponent: React.FC<CardProps> = ({ card, onClick, disabled, selected,
         }
       }}
       disabled={disabled}
-      title={`${card.name}（${card.suit} ${card.rank}）：${card.description}`}
+      title={`${displayName}（${card.suit} ${card.rank}）：${card.description}`}
       className={`
         group relative flex flex-col items-center text-left
         rounded-lg overflow-hidden transition-all duration-200
@@ -217,11 +228,11 @@ const CardComponent: React.FC<CardProps> = ({ card, onClick, disabled, selected,
           style={{ color: theme.ink, textShadow: '0 1px 0 rgba(255,255,255,0.55)' }}
         >
           {bigName ? (
-            <span className={small ? 'text-2xl' : 'text-2xl sm:text-3xl md:text-4xl'}>{card.name}</span>
+            <span className={small ? 'text-2xl' : 'text-2xl sm:text-3xl md:text-4xl'}>{displayName}</span>
           ) : (
             <span className="flex flex-col items-center leading-none">
-              <span className={small ? 'text-xl' : 'text-xl sm:text-2xl md:text-3xl'}>{card.name[0]}</span>
-              <span className={small ? 'text-base' : 'text-base sm:text-lg md:text-xl'}>{card.name.slice(1)}</span>
+              <span className={small ? 'text-xl' : 'text-xl sm:text-2xl md:text-3xl'}>{displayName[0]}</span>
+              <span className={small ? 'text-base' : 'text-base sm:text-lg md:text-xl'}>{displayName.slice(1)}</span>
             </span>
           )}
         </div>

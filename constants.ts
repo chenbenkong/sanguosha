@@ -15,15 +15,24 @@ export interface EquipMeta {
 
 export const EQUIP_META: Partial<Record<CardName, EquipMeta>> = {
   [CardName.QINGGANG]: { slot: 'weapon', range: 2, desc: '攻击范围2。你使用的【杀】无视目标防具。', face: 'from-[#eef1f6] via-[#e3e8f1] to-[#cfd7e4]', accent: '#3c5a80' },
-  [CardName.QINGLONG]: { slot: 'weapon', range: 3, desc: '攻击范围3。', face: 'from-[#eef7f0] via-[#e0efe4] to-[#c8dfd0]', accent: '#2f6e52' },
+  [CardName.QINGLONG]: { slot: 'weapon', range: 3, desc: '攻击范围3。你使用的【杀】被【闪】抵消后，可弃一张【杀】追加一击。', face: 'from-[#eef7f0] via-[#e0efe4] to-[#c8dfd0]', accent: '#2f6e52' },
   [CardName.FANGTIAN]: { slot: 'weapon', range: 4, desc: '攻击范围4。', face: 'from-[#f6efe2] via-[#ece0cc] to-[#dcc9a8]', accent: '#8a6a2a' },
   [CardName.ZHUGE]: { slot: 'weapon', range: 1, desc: '攻击范围1。出牌阶段你可以使用任意数量的【杀】。', face: 'from-[#f2ece6] via-[#e7ddd2] to-[#d6c7b6]', accent: '#7a5230' },
+  [CardName.ZHANGBA]: { slot: 'weapon', range: 3, desc: '攻击范围3。你可以将两张手牌当【杀】使用或打出。', face: 'from-[#f4efe6] via-[#e8dfd1] to-[#d6c9b5]', accent: '#6d5a3a' },
+  [CardName.GUANSHI]: { slot: 'weapon', range: 3, desc: '攻击范围3。你的【杀】被【闪】抵消时，可弃两张牌令此【杀】依然造成伤害。', face: 'from-[#f3ece4] via-[#e6dccf] to-[#d4c4b0]', accent: '#7a5a38' },
+  [CardName.CIXIONG]: { slot: 'weapon', range: 2, desc: '攻击范围2。你使用【杀】指定异性目标后，可令其弃一张手牌，或令你摸一张牌。', face: 'from-[#f6edef] via-[#ecdde1] to-[#dcc8cd]', accent: '#8a4a5a' },
+  [CardName.HANBING]: { slot: 'weapon', range: 2, desc: '攻击范围2。你的【杀】造成伤害时，可防止伤害并改为弃置目标两张牌。', face: 'from-[#eff4f7] via-[#e0eaf1] to-[#c9dae6]', accent: '#3a6280' },
+  [CardName.QILIN]: { slot: 'weapon', range: 5, desc: '攻击范围5。你的【杀】造成伤害时，可弃置目标的一匹坐骑。', face: 'from-[#f7f0e4] via-[#efe2cb] to-[#e0c9a5]', accent: '#8a6a2a' },
   [CardName.BAGUA]: { slot: 'armor', desc: '需要使用【闪】时，可进行一次判定：红色则视为你打出【闪】。', face: 'from-[#f1f5f2] via-[#e3ebe6] to-[#cfdad3]', accent: '#3f6b58' },
   [CardName.RENWANG]: { slot: 'armor', desc: '黑色的【杀】对你无效。', face: 'from-[#f4f1ed] via-[#e9e4dd] to-[#d9d1c6]', accent: '#5b5148' },
+  [CardName.TENGJIA]: { slot: 'armor', desc: '锁定技：南蛮入侵、万箭齐发与普通【杀】对你无效；你受到火焰伤害时伤害+1。', face: 'from-[#f1f4ec] via-[#e4ebdf] to-[#d0dbc6]', accent: '#4f6b3a' },
+  [CardName.BAIYIN]: { slot: 'armor', desc: '锁定技：受到大于1点的伤害时改为1点；失去此装备后回复1点体力。', face: 'from-[#f4f5f7] via-[#e7e9ee] to-[#d3d7de]', accent: '#6a7080' },
   [CardName.CHITU]: { slot: 'horseMinus', desc: '进攻马：你计算与其他角色的距离-1。', face: 'from-[#fbeeee] via-[#f4dcdc] to-[#e7c3c3]', accent: '#9a3a34' },
   [CardName.DAWAN]: { slot: 'horseMinus', desc: '进攻马：你计算与其他角色的距离-1。', face: 'from-[#f3eefb] via-[#e8e0f4] to-[#d6c9e8]', accent: '#5b3d8f' },
+  [CardName.ZIXING]: { slot: 'horseMinus', desc: '进攻马：你计算与其他角色的距离-1。', face: 'from-[#f0f1f5] via-[#e3e5ec] to-[#cfd3de]', accent: '#4a5268' },
   [CardName.DILU]: { slot: 'horsePlus', desc: '防御马：其他角色计算与你的距离+1。', face: 'from-[#eef2fb] via-[#e0e7f6] to-[#cbd6ea]', accent: '#3c5a90' },
   [CardName.JUEYING]: { slot: 'horsePlus', desc: '防御马：其他角色计算与你的距离+1。', face: 'from-[#f0f1f3] via-[#e4e6ea] to-[#ced2d8]', accent: '#4a4f58' },
+  [CardName.ZHUAHUANG]: { slot: 'horsePlus', desc: '防御马：其他角色计算与你的距离+1。', face: 'from-[#faf1e2] via-[#f0e2c8] to-[#e0cba5]', accent: '#8a6a2a' },
 };
 
 export const HEROES: Hero[] = [
@@ -354,6 +363,20 @@ const generateDeck = (): Card[] => {
 
   const addAll = (name: CardName, list: Array<[Suit, string]>) => list.forEach(([s, r]) => push(name, s, r));
   const addEquipAll = (name: CardName, list: Array<[Suit, string]>) => list.forEach(([s, r]) => pushEquip(name, s, r));
+  // 属性杀：牌名仍是【杀】，靠 attribute 标记火焰/雷电伤害
+  const addElementSha = (attribute: 'fire' | 'thunder', list: Array<[Suit, string]>) => list.forEach(([suit, rank]) => {
+    deck.push({
+      id: `card-${idCounter++}`,
+      name: CardName.SHA,
+      type: CardType.BASIC,
+      suit,
+      rank,
+      value: 0,
+      description: attribute === 'fire' ? '对攻击范围内的一名角色造成1点火焰伤害。' : '对攻击范围内的一名角色造成1点雷电伤害。',
+      imageColor: attribute === 'fire' ? 'from-orange-700 to-red-900' : 'from-indigo-700 to-purple-900',
+      attribute,
+    });
+  });
 
   const H = Suit.HEART, D = Suit.DIAMOND, S = Suit.SPADE, C = Suit.CLUB;
 
@@ -380,6 +403,9 @@ const generateDeck = (): Card[] => {
   addAll(CardName.JIU, [
     [D, '9'], [C, '9'], [S, '9'], [S, '3'], [C, '3'],
   ]);
+  // 火杀 5 / 雷杀 9（军争属性杀）
+  addElementSha('fire', [[H, '4'], [H, '7'], [H, '10'], [D, '4'], [D, '5']]);
+  addElementSha('thunder', [[S, '4'], [S, '5'], [S, '6'], [S, '7'], [S, '8'], [C, '5'], [C, '6'], [C, '7'], [C, '8']]);
 
   // ===== 锦囊牌（52）=====
   // 无中生有 8（标准 4 + 军争 4）
@@ -416,19 +442,28 @@ const generateDeck = (): Card[] => {
   // 兵粮寸断 2
   addAll(CardName.BINGLIANG, [[C, '4'], [S, '10']]);
 
-  // ===== 装备牌（12）=====
+  // ===== 装备牌（22）=====
   addEquipAll(CardName.ZHUGE, [[C, 'A'], [D, 'A']]);
   addEquipAll(CardName.QINGGANG, [[S, '6']]);
   addEquipAll(CardName.QINGLONG, [[S, '5']]);
   addEquipAll(CardName.FANGTIAN, [[D, 'Q']]);
+  addEquipAll(CardName.ZHANGBA, [[S, 'Q']]);
+  addEquipAll(CardName.GUANSHI, [[D, '5']]);
+  addEquipAll(CardName.CIXIONG, [[S, '2']]);
+  addEquipAll(CardName.HANBING, [[S, '2']]);
+  addEquipAll(CardName.QILIN, [[H, '5']]);
   addEquipAll(CardName.BAGUA, [[S, '2'], [C, '2']]);
   addEquipAll(CardName.RENWANG, [[C, '2']]);
+  addEquipAll(CardName.TENGJIA, [[S, '2'], [C, '2']]);
+  addEquipAll(CardName.BAIYIN, [[C, 'A']]);
   addEquipAll(CardName.CHITU, [[H, '5']]);
   addEquipAll(CardName.DAWAN, [[S, 'K']]);
+  addEquipAll(CardName.ZIXING, [[D, 'K']]);
   addEquipAll(CardName.DILU, [[C, '5']]);
   addEquipAll(CardName.JUEYING, [[S, '5']]);
+  addEquipAll(CardName.ZHUAHUANG, [[H, 'K']]);
 
-  // 洗切后 135 张
+  // 洗切后共 159 张（基本 85 + 锦囊 52 + 装备 22）
   return shuffle(deck);
 };
 
