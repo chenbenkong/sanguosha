@@ -2410,7 +2410,7 @@ const App: React.FC = () => {
     const finalCard = isXiaoqiao && judgmentCard.suit === Suit.DIAMOND
       ? { ...judgmentCard, suit: Suit.HEART }
       : judgmentCard;
-    const rankDisplay = judgmentCard.rank.replace(/\d+$/, '');
+    const rankDisplay = judgmentCard.rank;
     addLog(`⚖️ ${playerName} 的【${reason}】判定：${judgmentCard.suit} ${rankDisplay}（判定牌：【${judgmentCard.name}】）${isXiaoqiao && finalCard.suit !== judgmentCard.suit ? '，触发「红颜」视为红桃' : ''}`, 'warning');
     showJudgmentVisual(finalCard, playerName, reason);
     await delay(1600);

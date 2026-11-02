@@ -293,119 +293,142 @@ export const HEROES: Hero[] = [
   }
 ];
 
+// 每张牌型的类型 / 描述 / 配色（牌堆只负责花色点数）
+const CARD_META: Partial<Record<CardName, { type: CardType; desc: string; color: string }>> = {
+  [CardName.SHA]: { type: CardType.BASIC, desc: '对攻击范围内的角色造成1点伤害。', color: 'from-stone-800 to-black' },
+  [CardName.SHAN]: { type: CardType.BASIC, desc: '抵消一张【杀】的效果。', color: 'from-stone-200 to-stone-400' },
+  [CardName.TAO]: { type: CardType.BASIC, desc: '回复1点体力。', color: 'from-rose-400 to-rose-600' },
+  [CardName.JIU]: { type: CardType.BASIC, desc: '出牌阶段使用，本回合下一张【杀】伤害+1；濒死时使用，回复1点体力。', color: 'from-amber-600 to-amber-800' },
+  [CardName.WUZHONG]: { type: CardType.SCROLL, desc: '出牌阶段使用，摸两张牌。', color: 'from-yellow-600 to-yellow-800' },
+  [CardName.JUEDOU]: { type: CardType.SCROLL, desc: '对一名角色使用。轮流打出【杀】，未打出者受1点伤害。', color: 'from-purple-800 to-indigo-900' },
+  [CardName.NANMAN]: { type: CardType.SCROLL, desc: '所有其他角色需打出一张【杀】，否则受1点伤害。', color: 'from-orange-800 to-amber-900' },
+  [CardName.WUXIE]: { type: CardType.SCROLL, desc: '抵消目标锦囊牌对一名角色的效果。', color: 'from-cyan-600 to-cyan-800' },
+  [CardName.WANJIAN]: { type: CardType.SCROLL, desc: '所有其他角色需打出一张【闪】，否则受1点伤害。', color: 'from-indigo-700 to-indigo-900' },
+  [CardName.SHUNSHOU]: { type: CardType.SCROLL, desc: '对距离为1的角色使用，获得其一张手牌。', color: 'from-emerald-600 to-emerald-800' },
+  [CardName.GUOHE]: { type: CardType.SCROLL, desc: '对一名角色使用，弃置其一张手牌。', color: 'from-red-800 to-red-900' },
+  [CardName.LESI]: { type: CardType.SCROLL, desc: '出牌阶段对一名角色使用，其回合判定阶段进行判定，若不为红桃则跳过出牌阶段。', color: 'from-pink-600 to-pink-800' },
+  [CardName.HUOGONG]: { type: CardType.SCROLL, desc: '对一名有手牌的角色使用，目标需展示一张手牌，你弃置一张同花色手牌，对其造成1点火焰伤害。', color: 'from-red-600 to-orange-600' },
+  [CardName.TIESUO]: { type: CardType.SCROLL, desc: '选择1-2名角色，将其横置或重置。横置的角色受到属性伤害时，其他横置角色也会受到等量伤害。', color: 'from-stone-600 to-stone-800' },
+  [CardName.BINGLIANG]: { type: CardType.SCROLL, desc: '出牌阶段对距离为1的角色使用，其回合判定阶段进行判定，若不为梅花则跳过摸牌阶段。', color: 'from-stone-700 to-stone-900' },
+  [CardName.WUGU]: { type: CardType.SCROLL, desc: '出牌阶段使用，从牌堆顶亮出等同于存活角色数量的牌，每名角色选择并获得其中一张。', color: 'from-yellow-500 to-amber-600' },
+  [CardName.TAOYUAN]: { type: CardType.SCROLL, desc: '出牌阶段使用，所有角色回复1点体力。', color: 'from-pink-400 to-rose-600' },
+  [CardName.JIEDAO]: { type: CardType.SCROLL, desc: '对装备区里有武器牌的其他角色使用，令其对其攻击范围内你选择的另一名角色使用一张【杀】，否则将其装备区里的武器牌交给你。', color: 'from-slate-600 to-slate-800' },
+  [CardName.SHANDIAN]: { type: CardType.SCROLL, desc: '延时锦囊，出牌阶段对自己使用，将此牌横置于判定区。判定阶段进行判定：若判定结果为黑桃2-9，则目标角色受到3点雷电伤害，并将此牌置入弃牌堆；否则将此牌移动到下一个角色的判定区。', color: 'from-purple-700 to-indigo-900' },
+};
+
+// 牌堆 = 标准版 + EX + 军争篇中本作已实现的牌型，全部使用官方花色与点数。
+// 尚未实现因而未入池：火杀 / 雷杀（属性杀）、藤甲 / 白银狮子、丈八蛇矛 / 贯石斧 / 雌雄双股剑 / 寒冰剑 / 麒麟弓、爪黄飞电 / 骅骝。
 const generateDeck = (): Card[] => {
   const deck: Card[] = [];
   let idCounter = 0;
 
-  const addCard = (name: CardName, type: CardType, suit: Suit, rank: string, count: number, desc: string, color: string) => {
-    for (let i = 0; i < count; i++) {
-      // 为相同类型的牌生成唯一的显示标识，避免多张相同类型的牌显示完全相同
-      // 对于数量大于1的相同类型牌，在rank后添加序号
-      const displayRank = count > 1 ? `${rank}${i+1}` : rank;
-      
-      deck.push({
-        id: `card-${idCounter++}`,
-        name,
-        type,
-        suit,
-        rank: displayRank,
-        value: 0,
-        description: desc,
-        imageColor: color,
-      });
-    }
+  const push = (name: CardName, suit: Suit, rank: string) => {
+    const meta = CARD_META[name];
+    if (!meta) return;
+    deck.push({
+      id: `card-${idCounter++}`,
+      name,
+      type: meta.type,
+      suit,
+      rank,
+      value: 0,
+      description: meta.desc,
+      imageColor: meta.color,
+    });
   };
 
-  // 基础牌 - Expanded for 5 players
-  // 杀
-  addCard(CardName.SHA, CardType.BASIC, Suit.SPADE, '7', 8, '对攻击范围内的角色造成1点伤害。', 'from-stone-800 to-black');
-  addCard(CardName.SHA, CardType.BASIC, Suit.HEART, '10', 5, '对攻击范围内的角色造成1点伤害。', 'from-stone-800 to-black');
-  addCard(CardName.SHA, CardType.BASIC, Suit.CLUB, 'J', 6, '对攻击范围内的角色造成1点伤害。', 'from-stone-800 to-black');
-  addCard(CardName.SHA, CardType.BASIC, Suit.DIAMOND, 'K', 5, '对攻击范围内的角色造成1点伤害。', 'from-stone-800 to-black');
-
-  // 闪
-  addCard(CardName.SHAN, CardType.BASIC, Suit.DIAMOND, '2', 6, '抵消一张【杀】的效果。', 'from-stone-200 to-stone-400');
-  addCard(CardName.SHAN, CardType.BASIC, Suit.HEART, '2', 6, '抵消一张【杀】的效果。', 'from-stone-200 to-stone-400');
-
-  // 桃
-  addCard(CardName.TAO, CardType.BASIC, Suit.HEART, 'Q', 8, '回复1点体力。', 'from-rose-400 to-rose-600');
-
-  // 锦囊牌
-  // 无中生有
-  addCard(CardName.WUZHONG, CardType.SCROLL, Suit.HEART, '7', 4, '出牌阶段使用，摸两张牌。', 'from-yellow-600 to-yellow-800');
-
-  // 决斗
-  addCard(CardName.JUEDOU, CardType.SCROLL, Suit.SPADE, 'A', 3, '对一名角色使用。轮流打出【杀】，未打出者受1点伤害。', 'from-purple-800 to-indigo-900');
-  
-  // 南蛮入侵
-  addCard(CardName.NANMAN, CardType.SCROLL, Suit.CLUB, '7', 3, '所有其他角色需打出一张【杀】，否则受1点伤害。', 'from-orange-800 to-amber-900');
-  
-  // 无懈可击
-  addCard(CardName.WUXIE, CardType.SCROLL, Suit.DIAMOND, 'Q', 3, '抵消目标锦囊牌对一名角色的效果。', 'from-cyan-600 to-cyan-800');
-  addCard(CardName.WUXIE, CardType.SCROLL, Suit.SPADE, 'Q', 2, '抵消目标锦囊牌对一名角色的效果。', 'from-cyan-600 to-cyan-800');
-  
-  // 万箭齐发
-  addCard(CardName.WANJIAN, CardType.SCROLL, Suit.SPADE, 'J', 2, '所有其他角色需打出一张【闪】，否则受1点伤害。', 'from-indigo-700 to-indigo-900');
-  
-  // 顺手牵羊
-  addCard(CardName.SHUNSHOU, CardType.SCROLL, Suit.SPADE, '3', 3, '对距离为1的角色使用，获得其一张手牌。', 'from-emerald-600 to-emerald-800');
-  addCard(CardName.SHUNSHOU, CardType.SCROLL, Suit.CLUB, '4', 3, '对距离为1的角色使用，获得其一张手牌。', 'from-emerald-600 to-emerald-800');
-  
-  // 过河拆桥
-  addCard(CardName.GUOHE, CardType.SCROLL, Suit.SPADE, '5', 3, '对一名角色使用，弃置其一张手牌。', 'from-red-800 to-red-900');
-  addCard(CardName.GUOHE, CardType.SCROLL, Suit.CLUB, '6', 3, '对一名角色使用，弃置其一张手牌。', 'from-red-800 to-red-900');
-  
-  // 乐不思蜀
-  addCard(CardName.LESI, CardType.SCROLL, Suit.HEART, '6', 2, '出牌阶段对一名角色使用，其回合判定阶段进行判定，若不为红桃则跳过出牌阶段。', 'from-pink-600 to-pink-800');
-
-  // 火攻
-  addCard(CardName.HUOGONG, CardType.SCROLL, Suit.HEART, '2', 3, '对一名有手牌的角色使用，目标需展示一张手牌，你弃置一张同花色手牌，对其造成1点火焰伤害。', 'from-red-600 to-orange-600');
-  addCard(CardName.HUOGONG, CardType.SCROLL, Suit.DIAMOND, 'Q', 2, '对一名有手牌的角色使用，目标需展示一张手牌，你弃置一张同花色手牌，对其造成1点火焰伤害。', 'from-red-600 to-orange-600');
-
-  // 铁索连环
-  addCard(CardName.TIESUO, CardType.SCROLL, Suit.SPADE, 'J', 2, '选择1-2名角色，将其横置或重置。横置的角色受到属性伤害时，其他横置角色也会受到等量伤害。', 'from-stone-600 to-stone-800');
-  addCard(CardName.TIESUO, CardType.SCROLL, Suit.CLUB, '10', 2, '选择1-2名角色，将其横置或重置。横置的角色受到属性伤害时，其他横置角色也会受到等量伤害。', 'from-stone-600 to-stone-800');
-
-  // 酒
-  addCard(CardName.JIU, CardType.BASIC, Suit.SPADE, '9', 2, '出牌阶段使用，本回合下一张【杀】伤害+1；濒死时使用，回复1点体力。', 'from-amber-600 to-amber-800');
-  addCard(CardName.JIU, CardType.BASIC, Suit.CLUB, '9', 2, '出牌阶段使用，本回合下一张【杀】伤害+1；濒死时使用，回复1点体力。', 'from-amber-600 to-amber-800');
-
-  // 兵粮寸断
-  addCard(CardName.BINGLIANG, CardType.SCROLL, Suit.SPADE, '10', 2, '出牌阶段对距离为1的角色使用，其回合判定阶段进行判定，若不为梅花则跳过摸牌阶段。', 'from-stone-700 to-stone-900');
-  addCard(CardName.BINGLIANG, CardType.SCROLL, Suit.CLUB, '4', 2, '出牌阶段对距离为1的角色使用，其回合判定阶段进行判定，若不为梅花则跳过摸牌阶段。', 'from-stone-700 to-stone-900');
-
-  // 五谷丰登
-  addCard(CardName.WUGU, CardType.SCROLL, Suit.HEART, 'A', 2, '出牌阶段使用，从牌堆顶亮出等同于存活角色数量的牌，每名角色选择并获得其中一张。', 'from-yellow-500 to-amber-600');
-  addCard(CardName.WUGU, CardType.SCROLL, Suit.CLUB, 'A', 2, '出牌阶段使用，从牌堆顶亮出等同于存活角色数量的牌，每名角色选择并获得其中一张。', 'from-yellow-500 to-amber-600');
-
-  // 桃园结义
-  addCard(CardName.TAOYUAN, CardType.SCROLL, Suit.HEART, 'A', 2, '出牌阶段使用，所有角色回复1点体力。', 'from-pink-400 to-rose-600');
-
-  // 借刀杀人
-  addCard(CardName.JIEDAO, CardType.SCROLL, Suit.CLUB, 'Q', 2, '对装备区里有武器牌的其他角色使用，令其对其攻击范围内你选择的另一名角色使用一张【杀】，否则将其装备区里的武器牌交给你。', 'from-slate-600 to-slate-800');
-  addCard(CardName.JIEDAO, CardType.SCROLL, Suit.DIAMOND, 'Q', 1, '对装备区里有武器牌的其他角色使用，令其对其攻击范围内你选择的另一名角色使用一张【杀】，否则将其装备区里的武器牌交给你。', 'from-slate-600 to-slate-800');
-
-  // 闪电
-  addCard(CardName.SHANDIAN, CardType.SCROLL, Suit.SPADE, 'A', 1, '延时锦囊，出牌阶段对自己使用，将此牌横置于判定区。判定阶段进行判定：若判定结果为黑桃2-9，则目标角色受到3点雷电伤害，并将此牌置入弃牌堆；否则将此牌移动到下一个角色的判定区。', 'from-purple-700 to-indigo-900');
-
-  // —— 装备牌 ——
-  const addEquip = (name: CardName, suit: Suit, rank: string) => {
-    const meta = EQUIP_META[name]!;
-    addCard(name, CardType.EQUIPMENT, suit, rank, 1, meta.desc, meta.face);
+  const pushEquip = (name: CardName, suit: Suit, rank: string) => {
+    const meta = EQUIP_META[name];
+    if (!meta) return;
+    deck.push({
+      id: `card-${idCounter++}`,
+      name,
+      type: CardType.EQUIPMENT,
+      suit,
+      rank,
+      value: 0,
+      description: meta.desc,
+      imageColor: meta.face,
+    });
   };
-  addEquip(CardName.QINGGANG, Suit.SPADE, '6');
-  addEquip(CardName.QINGLONG, Suit.SPADE, '5');
-  addEquip(CardName.FANGTIAN, Suit.DIAMOND, 'Q');
-  addEquip(CardName.ZHUGE, Suit.CLUB, 'A');
-  addEquip(CardName.ZHUGE, Suit.DIAMOND, 'A');
-  addEquip(CardName.BAGUA, Suit.SPADE, '2');
-  addEquip(CardName.BAGUA, Suit.CLUB, '2');
-  addEquip(CardName.RENWANG, Suit.CLUB, '8');
-  addEquip(CardName.CHITU, Suit.HEART, 'K');
-  addEquip(CardName.DAWAN, Suit.DIAMOND, 'K');
-  addEquip(CardName.DILU, Suit.CLUB, 'K');
-  addEquip(CardName.JUEYING, Suit.SPADE, 'K');
 
+  const addAll = (name: CardName, list: Array<[Suit, string]>) => list.forEach(([s, r]) => push(name, s, r));
+  const addEquipAll = (name: CardName, list: Array<[Suit, string]>) => list.forEach(([s, r]) => pushEquip(name, s, r));
+
+  const H = Suit.HEART, D = Suit.DIAMOND, S = Suit.SPADE, C = Suit.CLUB;
+
+  // ===== 基本牌（71）=====
+  // 杀 30
+  addAll(CardName.SHA, [
+    [S, '7'], [S, '8'], [S, '8'], [S, '9'], [S, '9'], [S, '10'], [S, '10'],
+    [H, '10'], [H, '10'], [H, 'J'],
+    [C, '2'], [C, '3'], [C, '4'], [C, '5'], [C, '6'], [C, '7'], [C, '8'], [C, '8'], [C, '9'], [C, '9'], [C, '10'], [C, '10'], [C, 'J'], [C, 'J'],
+    [D, '6'], [D, '7'], [D, '8'], [D, '9'], [D, '10'], [D, 'K'],
+  ]);
+  // 闪 24（标准 15 + 军争 9）
+  addAll(CardName.SHAN, [
+    [H, '2'], [H, '2'], [H, 'K'],
+    [D, '2'], [D, '2'], [D, '3'], [D, '4'], [D, '5'], [D, '6'], [D, '7'], [D, '8'], [D, '9'], [D, '10'], [D, 'J'], [D, 'J'],
+    [H, '8'], [H, '9'], [H, 'J'], [H, 'Q'], [D, '6'], [D, '7'], [D, '8'], [D, '10'], [D, 'J'],
+  ]);
+  // 桃 12（标准 8 + 军争 4）
+  addAll(CardName.TAO, [
+    [H, '3'], [H, '4'], [H, '6'], [H, '7'], [H, '8'], [H, '9'], [H, 'Q'], [D, 'Q'],
+    [H, '5'], [H, '6'], [D, '2'], [D, '3'],
+  ]);
+  // 酒 5
+  addAll(CardName.JIU, [
+    [D, '9'], [C, '9'], [S, '9'], [S, '3'], [C, '3'],
+  ]);
+
+  // ===== 锦囊牌（52）=====
+  // 无中生有 8（标准 4 + 军争 4）
+  addAll(CardName.WUZHONG, [
+    [H, '7'], [H, '8'], [H, '9'], [H, 'J'],
+    [H, '7'], [H, '9'], [H, 'J'], [H, '8'],
+  ]);
+  // 决斗 3
+  addAll(CardName.JUEDOU, [[S, 'A'], [C, 'A'], [D, 'A']]);
+  // 南蛮入侵 3
+  addAll(CardName.NANMAN, [[C, '7'], [S, '7'], [S, 'K']]);
+  // 万箭齐发 1
+  addAll(CardName.WANJIAN, [[H, 'A']]);
+  // 无懈可击 7（标准 3 + EX 1 + 军争 3）
+  addAll(CardName.WUXIE, [[S, 'J'], [C, 'Q'], [C, 'K'], [D, 'Q'], [H, 'A'], [H, 'K'], [S, 'Q']]);
+  // 过河拆桥 4
+  addAll(CardName.GUOHE, [[S, '3'], [S, '4'], [C, '3'], [C, '4']]);
+  // 顺手牵羊 5
+  addAll(CardName.SHUNSHOU, [[S, '3'], [S, '4'], [S, 'J'], [D, '3'], [D, '4']]);
+  // 借刀杀人 2
+  addAll(CardName.JIEDAO, [[C, 'Q'], [C, 'K']]);
+  // 乐不思蜀 3
+  addAll(CardName.LESI, [[S, '6'], [H, '6'], [C, '6']]);
+  // 闪电 2（标准 1 + EX 1）
+  addAll(CardName.SHANDIAN, [[S, 'A'], [H, 'Q']]);
+  // 五谷丰登 2
+  addAll(CardName.WUGU, [[H, '3'], [H, '4']]);
+  // 桃园结义 1
+  addAll(CardName.TAOYUAN, [[H, 'A']]);
+  // 火攻 3
+  addAll(CardName.HUOGONG, [[H, '2'], [H, '3'], [D, 'Q']]);
+  // 铁索连环 6
+  addAll(CardName.TIESUO, [[C, '10'], [C, 'J'], [C, 'Q'], [C, 'K'], [S, 'J'], [S, 'Q']]);
+  // 兵粮寸断 2
+  addAll(CardName.BINGLIANG, [[C, '4'], [S, '10']]);
+
+  // ===== 装备牌（12）=====
+  addEquipAll(CardName.ZHUGE, [[C, 'A'], [D, 'A']]);
+  addEquipAll(CardName.QINGGANG, [[S, '6']]);
+  addEquipAll(CardName.QINGLONG, [[S, '5']]);
+  addEquipAll(CardName.FANGTIAN, [[D, 'Q']]);
+  addEquipAll(CardName.BAGUA, [[S, '2'], [C, '2']]);
+  addEquipAll(CardName.RENWANG, [[C, '2']]);
+  addEquipAll(CardName.CHITU, [[H, '5']]);
+  addEquipAll(CardName.DAWAN, [[S, 'K']]);
+  addEquipAll(CardName.DILU, [[C, '5']]);
+  addEquipAll(CardName.JUEYING, [[S, '5']]);
+
+  // 洗切后 135 张
   return shuffle(deck);
 };
 

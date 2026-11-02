@@ -128,7 +128,7 @@ const CardComponent: React.FC<CardProps> = ({ card, onClick, disabled, selected,
         }
       }}
       disabled={disabled}
-      title={`${card.name}（${card.suit} ${card.rank.replace(/\d+$/, '')}）：${card.description}`}
+      title={`${card.name}（${card.suit} ${card.rank}）：${card.description}`}
       className={`
         group relative flex flex-col items-center text-left
         rounded-lg overflow-hidden transition-all duration-200
@@ -179,7 +179,7 @@ const CardComponent: React.FC<CardProps> = ({ card, onClick, disabled, selected,
           className={`font-serif font-bold ${small ? 'text-sm' : 'text-lg md:text-xl'} tracking-tight`}
           style={{ color: suitColor, textShadow: art ? '0 1px 2px rgba(255,255,255,0.85)' : undefined }}
         >
-          {card.rank.replace(/\d+$/, '')}
+          {card.rank}
         </span>
         <span
           className={`${small ? 'text-xs' : 'text-sm md:text-base'} mt-0.5`}
@@ -227,7 +227,7 @@ const CardComponent: React.FC<CardProps> = ({ card, onClick, disabled, selected,
         </div>
         <div className="relative flex items-center gap-1 mt-0.5">
           <span className="font-serif leading-none" style={{ color: suitColor, fontSize: small ? 9 : 11 }}>{card.suit}</span>
-          <span className="leading-none" style={{ color: suitColor, fontSize: small ? 8 : 10 }}>{card.rank.replace(/\d+$/, '')}</span>
+          <span className="leading-none" style={{ color: suitColor, fontSize: small ? 8 : 10 }}>{card.rank}</span>
         </div>
         {canUseSkill && !disabled && (
           <div className="text-[8px] text-blue-700 font-bold text-center mt-0.5 animate-pulse">
