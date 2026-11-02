@@ -372,6 +372,8 @@ const App: React.FC = () => {
 
   // Skill Info Modal State
   const [showSkillModal, setShowSkillModal] = useState<boolean>(false);
+  // 点击头像查看任意角色的武将详情
+  const [inspectPlayerId, setInspectPlayerId] = useState<number | null>(null);
 
   // 玩法说明弹窗（首页）
   const [showRules, setShowRules] = useState<boolean>(false);
@@ -425,10 +427,17 @@ const App: React.FC = () => {
   const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   // 保存最新的players状态，避免闭包问题
   const playersRef = useRef<Player[]>([]);
+  // 回合状态机去重：同一「回合+阶段」只推进一次，避免 isProcessing 抖动导致 AI 重复行动
+  const turnStepRef = useRef<string>('');
+  // AI 回合节奏：1 倍速下额外放慢，2/3 倍速保持原速
+  const aiTurnActiveRef = useRef<boolean>(false);
 
   // --- Helpers ---
   // delay 受全局速度倍率控制：2x/3x 下 AI 结算节奏等比加快
-  const delay = useCallback((ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms / speedRef.current)), []);
+  const delay = useCallback((ms: number) => new Promise<void>(resolve => setTimeout(
+    resolve,
+    (ms / speedRef.current) * (aiTurnActiveRef.current && speedRef.current === 1 ? 1.45 : 1),
+  )), []);
 
   // AI 思考停顿：头像暖光呼吸 + 随机逗留后再生效，避免 AI 瞬发决策
   const aiThink = useCallback(async (playerId: number, ms?: number) => {
@@ -781,6 +790,8 @@ const App: React.FC = () => {
   const startGame = (hero: Hero) => {
     initAudio();
     isGameOverRef.current = false; // 重置结束标志，支持"再来一局"
+    turnStepRef.current = '';
+    aiTurnActiveRef.current = false;
     setAdvice(null);
     setSkillBanner(null);
     const shuffledDeck = [...INITIAL_DECK]; 
@@ -869,6 +880,8 @@ const App: React.FC = () => {
     const s = savedGame;
     initAudio();
     isGameOverRef.current = false;
+    turnStepRef.current = '';
+    aiTurnActiveRef.current = false;
 
     // 1. 结束可能挂起的人类决策，避免恢复后卡在旧 Promise 上
     if (humanReactionResolver.current) {
@@ -1145,6 +1158,11 @@ const App: React.FC = () => {
     if (checkGameOver()) return;
     if (isProcessing) return; // 如果正在处理异步效果，暂停游戏主循环推进
 
+    // 同一「回合 + 阶段」只推进一次：isProcessing 从 1 回到 0 时不再重复触发
+    const stepKey = `${screen}-${turnIndex}-${phase}-${isAiTakeover ? 'auto' : 'human'}`;
+    if (turnStepRef.current === stepKey) return;
+    turnStepRef.current = stepKey;
+
     // 更新ref中的最新状态
     playersRef.current = players;
 
@@ -1291,8 +1309,11 @@ const App: React.FC = () => {
           if (!isSaved) {
             addLog(`${latestCurrent.hero.name} 未能得到救援，死亡！`, 'danger');
             await handleDeath(latestCurrent.id);
+            setPhase(GamePhase.END);
+          } else {
+            // 救活后继续本回合，避免同一「回合+阶段」去重后停在开始阶段
+            setPhase(GamePhase.DRAW);
           }
-          // 无论是否获救，都结束当前回合
           return;
         }
         await delay(800);
@@ -1524,8 +1545,8 @@ const App: React.FC = () => {
       phase === GamePhase.ACTION &&
       !!human && !human.isDead && turnIndex === human.id &&
       !dyingState && !pendingReaction && !showSkillModal && !wuguSelection &&
-      // 看说明 / 查弃牌堆时暂停读秒，避免玩家在读规则时被自动出牌
-      !showRules && !showDiscardViewer &&
+      // 看说明 / 查弃牌堆 / 查看武将详情时暂停读秒
+      !showRules && !showDiscardViewer && inspectPlayerId === null &&
       isProcessing === 0;
     const shouldCountDiscard =
       screen === 'game' &&
@@ -1533,7 +1554,7 @@ const App: React.FC = () => {
       phase === GamePhase.DISCARD &&
       !!human && !human.isDead && turnIndex === human.id &&
       !dyingState && !pendingReaction && !wuguSelection &&
-      !showRules && !showDiscardViewer &&
+      !showRules && !showDiscardViewer && inspectPlayerId === null &&
       isProcessing === 0;
 
     if (!shouldCount && !shouldCountDiscard) {
@@ -1558,7 +1579,7 @@ const App: React.FC = () => {
       window.clearInterval(tick);
       setDecisionLeft(null);
     };
-  }, [screen, isAiTakeover, phase, turnIndex, players, dyingState, pendingReaction, showSkillModal, wuguSelection, isProcessing, showRules, showDiscardViewer]);
+  }, [screen, isAiTakeover, phase, turnIndex, players, dyingState, pendingReaction, showSkillModal, wuguSelection, isProcessing, showRules, showDiscardViewer, inspectPlayerId]);
 
   // 五谷丰登选牌同样读秒：超时自动取第一张，避免对局停在此处
   useEffect(() => {
@@ -1682,6 +1703,7 @@ const App: React.FC = () => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return;
       // 1. 弹窗优先关闭
+      if (inspectPlayerId !== null) { setInspectPlayerId(null); return; }
       if (showRules) { setShowRules(false); return; }
       if (showSkillModal) { setShowSkillModal(false); return; }
       if (showDiscardViewer) { setShowDiscardViewer(false); return; }
@@ -1728,7 +1750,7 @@ const App: React.FC = () => {
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [showRules, showSkillModal, showDiscardViewer, advice, isZhihengMode, isLijianMode, isRendeMode, isJieyinMode, isQixiMode, isZhangbaMode, zhangbaPending, isFanjianMode, isGuoseMode, isQingnangMode, isAnxuMode]);
+  }, [showRules, showSkillModal, showDiscardViewer, advice, isZhihengMode, isLijianMode, isRendeMode, isJieyinMode, isQixiMode, isZhangbaMode, zhangbaPending, isFanjianMode, isGuoseMode, isQingnangMode, isAnxuMode, inspectPlayerId]);
 
   // Clear any selection when entering reaction mode
   useEffect(() => {
@@ -1747,7 +1769,7 @@ const App: React.FC = () => {
       if (screen !== 'game') return;
       if (dyingState || pendingReaction || showSkillModal || wuguSelection || isAiTakeover) return;
       // 弹窗打开时不响应快捷键，避免关着说明弹窗也能出牌
-      if (showRules || showDiscardViewer || advice) return;
+      if (showRules || showDiscardViewer || advice || inspectPlayerId !== null) return;
       if (!players.length) return;
       const meNow = players.find(p => p.isHuman) || players[0];
       if (!meNow || meNow.isDead || turnIndex !== meNow.id) return;
@@ -1784,7 +1806,7 @@ const App: React.FC = () => {
     window.addEventListener('keydown', onHotkey);
     return () => window.removeEventListener('keydown', onHotkey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [screen, phase, turnIndex, players, selectedCardIds, dyingState, pendingReaction, showSkillModal, wuguSelection, isAiTakeover, isProcessing, showRules, showDiscardViewer, advice]);
+  }, [screen, phase, turnIndex, players, selectedCardIds, dyingState, pendingReaction, showSkillModal, wuguSelection, isAiTakeover, isProcessing, showRules, showDiscardViewer, advice, inspectPlayerId]);
 
   const clickGuard = useRef(false);
   const handleCardClick = (card: Card, e?: React.MouseEvent) => {
@@ -4500,6 +4522,7 @@ const App: React.FC = () => {
   // --- AI Logic ---
   
   const cpuAI = async (aiPlayer: Player) => {
+    aiTurnActiveRef.current = true;
     // 出牌前先「思考」：头像暖光 + 随机 300~800ms，AI 不再瞬发
     await aiThink(aiPlayer.id);
 
@@ -4859,6 +4882,7 @@ const App: React.FC = () => {
     }
     }
 
+    aiTurnActiveRef.current = false;
     setPhase(GamePhase.DISCARD);
   };
 
@@ -5243,6 +5267,7 @@ const App: React.FC = () => {
                   <h4 className="font-ancient text-xl text-[#e8cf94] mb-2">操作技巧</h4>
                   <ul className="text-sm space-y-1.5">
                     <li>点击手牌选择，点击头像指定目标；再点一次可取消</li>
+                    <li>非选目标时，点击任意武将头像可查看人物介绍、技能与装备详情</li>
                     <li>桌面端快捷键：<span className="text-[#e8cf94] font-bold">1-9</span> 选手牌 · <span className="text-[#e8cf94] font-bold">Enter</span> 出牌/确认 · <span className="text-[#e8cf94] font-bold">E</span> 结束回合 · <span className="text-[#e8cf94] font-bold">Esc</span> 取消选择</li>
                     <li>右上角 <span className="text-[#e8cf94] font-bold">⚡×N</span> 可加速 AI 结算节奏</li>
                     <li>遇到危险时别慌——弹出响应框前先看清需要什么牌</li>
@@ -5927,6 +5952,92 @@ const App: React.FC = () => {
          </div>
       )}
       
+      {/* 武将详情：点击任意头像打开（人物介绍 + 技能说明） */}
+      {inspectPlayerId !== null && (() => {
+        const p = getPlayer(inspectPlayerId);
+        if (!p) return null;
+        const knownIdentity = p.isHuman || p.isRevealed || p.identity === Identity.ZHUGONG;
+        const equipNames = [p.equipment?.weapon, p.equipment?.armor, p.equipment?.horsePlus, p.equipment?.horseMinus]
+          .filter(Boolean).map(c => c!.name);
+        return (
+          <div className="absolute inset-0 z-[100] modal-mask flex items-center justify-center p-4" onClick={() => setInspectPlayerId(null)}>
+            <div className="modal-shell max-w-xl w-[92%] max-h-[85vh] overflow-y-auto p-6 scrollbar-thin" onClick={e => e.stopPropagation()}>
+              <div className="text-center mb-5">
+                <h3 className="modal-title text-3xl font-ancient mb-2">武将详情</h3>
+                <div className="w-24 modal-divider mx-auto"></div>
+              </div>
+              <div className="flex items-center gap-4 mb-5 p-4 bg-black/30 rounded-lg border border-[#8b7355]/30">
+                <img
+                  src={p.hero.avatarUrl}
+                  alt={p.hero.name}
+                  loading="eager"
+                  decoding="async"
+                  className={`w-20 h-24 rounded-lg border-2 object-cover ${p.isDead ? 'grayscale border-stone-600 opacity-70' : 'border-[#d4af37]/50'}`}
+                  onError={(e) => {
+                    const target = e.target as HTMLImageElement;
+                    target.src = `data:image/svg+xml;utf8,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256"><rect width="256" height="256" fill="#241b14"/><text x="128" y="158" font-size="96" fill="#c8a45c" text-anchor="middle" font-family="serif">${p.hero.name}</text></svg>`)}`;
+                  }}
+                />
+                <div className="flex-1">
+                  <h4 className="text-2xl font-bold text-[#d4af37] font-ancient flex items-center gap-2">
+                    {p.hero.name}
+                    {p.isDead && <span className="text-[#c86b62] text-sm border border-[#9e2b25] px-1.5 py-0.5 rounded">阵亡</span>}
+                  </h4>
+                  <p className="text-stone-400 text-sm">{p.hero.description}</p>
+                  <div className="flex flex-wrap items-center gap-2 mt-1.5 text-sm">
+                    <span className={`px-2 py-0.5 rounded text-xs font-bold ${
+                      p.hero.kingdom === '魏' ? 'bg-blue-900/60 text-blue-200' :
+                      p.hero.kingdom === '蜀' ? 'bg-red-900/60 text-red-200' :
+                      p.hero.kingdom === '吴' ? 'bg-green-900/60 text-green-200' :
+                      'bg-stone-700/60 text-stone-200'
+                    }`}>{p.hero.kingdom}</span>
+                    <span className="text-stone-400">{p.hero.gender === 'male' ? '男' : '女'}</span>
+                    <span className={p.hp <= 1 ? 'text-[#e8a99f]' : 'text-red-400'}>♥ {p.hp}/{p.maxHp}</span>
+                    <span className="text-stone-400">手牌 {p.hand.length}</span>
+                    <span className="text-[#c8a45c]">身份 {knownIdentity ? p.identity : '未知'}</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-gradient-to-r from-[#8b4513]/30 to-transparent p-4 rounded-lg border-l-4 border-[#d4af37] mb-4">
+                <h5 className="text-xl font-bold text-[#d4af37] mb-2 font-ancient">【{p.hero.skillName}】</h5>
+                <p className="text-stone-300 leading-relaxed text-sm">{p.hero.skillDesc}</p>
+                {p.hero.lordSkillName && (
+                  <div className="mt-3 pt-3 border-t border-[#8b7355]/30">
+                    <div className="text-base font-bold text-[#e8cf94] mb-1 font-ancient">主公技【{p.hero.lordSkillName}】</div>
+                    <p className="text-stone-300 leading-relaxed text-sm">{p.hero.lordSkillDesc}</p>
+                  </div>
+                )}
+              </div>
+
+              <div className="bg-black/20 p-4 rounded-lg border border-[#8b7355]/20 text-sm space-y-2">
+                <div className="flex gap-2"><span className="text-stone-500 w-16 shrink-0">装备</span>
+                  <span className="text-stone-300">{equipNames.length ? equipNames.join('、') : '无'}</span>
+                </div>
+                {(p.isChained || p.isLeBuSiShu || p.isBingLiangCunDuan || p.isShandian) && (
+                  <div className="flex gap-2"><span className="text-stone-500 w-16 shrink-0">状态</span>
+                    <span className="text-[#e8cf94]">
+                      {[
+                        p.isChained ? '铁索横置' : '',
+                        p.isLeBuSiShu ? '乐不思蜀' : '',
+                        p.isBingLiangCunDuan ? '兵粮寸断' : '',
+                        p.isShandian ? '闪电' : '',
+                      ].filter(Boolean).join(' · ')}
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              <div className="mt-6 flex justify-center">
+                <button onClick={() => setInspectPlayerId(null)} className="px-10 py-2.5 btn-gold font-ancient text-xl rounded-lg">
+                  关闭
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
       {/* Skill Info Modal - 技能说明弹窗 */}
       {showSkillModal && (
          <div className="absolute inset-0 z-[100] modal-mask flex items-center justify-center p-4">
@@ -6587,7 +6698,16 @@ const App: React.FC = () => {
               
               {/* 玩家卡牌容器 - 统一深墨描金 */}
               <div
-                onClick={(isSelectingTarget || isLijianMode || isJieyinMode || (isRendeMode && rendeSelectedCardIds.length > 0) || (isJiedaoMode && !p.isDead)) ? () => handleTargetClick(p.id) : undefined}
+                onClick={() => {
+                  const selecting = isSelectingTarget || isLijianMode || isJieyinMode
+                    || (isRendeMode && rendeSelectedCardIds.length > 0) || (isJiedaoMode && !p.isDead);
+                  if (selecting) {
+                    handleTargetClick(p.id);
+                  } else if (!dyingState && !pendingReaction && !isProcessing) {
+                    setInspectPlayerId(p.id);
+                  }
+                }}
+                title={p.isDead ? `${p.hero.name}（已阵亡）` : `点击查看 ${p.hero.name} 的武将详情`}
                 className={`
                 relative p-1.5 md:p-2 rounded-lg border-2 kingdom-frame hero-card ${KINGDOM_CLASS[p.hero.kingdom] ?? ''}
                 ${damageAnimTarget === p.id || healAnimTarget === p.id
@@ -7125,7 +7245,10 @@ const App: React.FC = () => {
                 )}
 
                 {/* 武将头像区域 */}
-                <div className={`relative w-20 h-24 ${isCompact ? 'md:w-[76px] md:h-[90px]' : 'md:w-24 md:h-28'} ${
+                <div
+                  onClick={() => { if (!dyingState && !pendingReaction) setInspectPlayerId(me.id); }}
+                  title={`点击查看 ${me.hero.name} 的武将详情`}
+                  className={`relative w-20 h-24 cursor-pointer ${isCompact ? 'md:w-[76px] md:h-[90px]' : 'md:w-24 md:h-28'} ${
                   healAnimTarget === 0 ? 'animate-heal-glow' :
                   damageAnimTarget === 0 ? 'animate-damage-glow' : ''
                 } ${skillGlowId === 0 ? 'skill-glow' : ''} ${aiThinkingId === 0 ? 'ai-thinking' : ''}`}>
