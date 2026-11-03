@@ -53,8 +53,18 @@ export function playSkillVoice(skillName: string): boolean {
   return playFile(`audio/skill/${slug}.mp3`);
 }
 
+// 仅这些武将有本地阵亡语音（与 public/audio/die 下的实际文件一致）。
+// 未收录的武将直接返回 false，由调用方回退合成音效，避免产生 404 与控制台报错。
+const DEATH_VOICE_HEROES = new Set([
+  'bulianshi', 'caiwenji', 'caocao', 'daqiao', 'diaochan', 'ganning', 'guanyu',
+  'huangyueying', 'huangzhong', 'liubei', 'lvbu', 'lvmeng', 'simayi', 'sunquan',
+  'sunshangxiang', 'wangyi', 'xiahoudun', 'xiaoqiao', 'zhangchunhua', 'zhangfei',
+  'zhaoyun', 'zhenji', 'zhouyu', 'zhurong',
+]);
+
 /** 阵亡台词：传入武将 id */
 export function playDeathVoice(heroId: string): boolean {
+  if (!DEATH_VOICE_HEROES.has(heroId)) return false;
   return playFile(`audio/die/${heroId}.mp3`);
 }
 
