@@ -4,6 +4,7 @@ import { BackgroundCarousel } from '../components/BackgroundCarousel';
 import { BACKGROUND_IMAGES, CAROUSEL_CONFIG } from '../config/backgrounds';
 import { IconSpeaker } from '../components/Icons';
 import { WINNER_LABEL, WinnerSide } from '../game/constants';
+import { useLayoutProfile } from '../hooks/useLayoutProfile';
 
 interface GameOverScreenProps {
   players: Player[];
@@ -37,10 +38,16 @@ export const GameOverScreen: React.FC<GameOverScreenProps> = ({
   );
   const aliveCount = players.filter(p => !p.isDead).length;
   // 关键战报：只取技能发动 / 阵亡 / 关键判定这类节点，避免把流水账全搬上来
-  const keyLogs = logs.filter(l => l.type === 'danger' || l.type === 'skill' || l.type === 'success').slice(-6);
+  const keyLogs = logs.filter(l => l.type === 'danger' || l.type === 'skill' || l.type === 'success').slice(-3);
+  // 结算页也按可视高度收敛标题：860 高的笔记本上要保证「身份全员 + 战报 + 按钮」一屏可见
+  const { layoutDensity } = useLayoutProfile();
+  const compact = layoutDensity === 'compact' || layoutDensity === 'tight' || layoutDensity === 'ultra';
+  const titleClass = layoutDensity === 'ultra'
+    ? 'text-3xl md:text-4xl'
+    : compact ? 'text-4xl md:text-5xl' : 'text-6xl md:text-8xl';
 
   return (
-    <div data-motion={motionOn ? 'on' : 'off'} className={`min-h-screen w-full flex flex-col items-center justify-center text-center p-4 pb-28 relative overflow-y-auto ${theme === 'light' ? 'parchment-bg' : 'bg-black'}`}>
+    <div data-density={layoutDensity} data-motion={motionOn ? 'on' : 'off'} className={`min-h-screen w-full flex flex-col items-center justify-center text-center p-4 pb-28 relative overflow-y-auto ${theme === 'light' ? 'parchment-bg' : 'bg-black'}`}>
       {/* 背景轮播 - 白天模式显示 */}
       {theme === 'light' && (
         <BackgroundCarousel
@@ -111,7 +118,7 @@ export const GameOverScreen: React.FC<GameOverScreenProps> = ({
       <div className={`absolute bottom-1/3 right-1/4 w-96 h-96 rounded-full blur-[120px] ${theme === 'dark' ? 'bg-yellow-900/10' : 'bg-amber-500/5'}`}></div>
 
       {/* 胜负判定横幅 */}
-      <div className={`z-20 mb-6 px-10 py-3 rounded-lg border-2 font-ancient text-3xl md:text-4xl tracking-[0.3em] shadow-[0_10px_40px_rgba(0,0,0,0.5)] animate-fade-in-scale ${
+      <div className={`z-20 mb-4 px-8 py-2.5 rounded-lg border-2 font-ancient ${compact ? 'text-2xl md:text-3xl' : 'text-3xl md:text-4xl'} tracking-[0.3em] shadow-[0_10px_40px_rgba(0,0,0,0.5)] animate-fade-in-scale ${
         isVictory
           ? 'bg-gradient-to-b from-[#c9a227] to-[#9a7a1a] text-[#fff8e0] border-[#f4d03f] shadow-[0_0_40px_rgba(212,175,55,0.4)]'
           : 'bg-gradient-to-b from-stone-700 to-stone-900 text-stone-300 border-stone-500'
@@ -119,22 +126,24 @@ export const GameOverScreen: React.FC<GameOverScreenProps> = ({
         {isVictory ? '大 获 全 胜' : '败 走 麦 城'}
       </div>
 
-      <h1 className={`font-ancient text-6xl md:text-8xl mb-4 z-10 drop-shadow-2xl relative ${theme === 'light' ? 'text-[#8b6914]' : 'text-[#d9b85c]'}`}>
+      <h1 className={`font-ancient ${titleClass} mb-3 z-10 drop-shadow-2xl relative ${theme === 'light' ? 'text-[#8b6914]' : 'text-[#d9b85c]'}`}>
         游戏结束
         <span className="absolute -inset-4 bg-yellow-600/10 blur-xl rounded-lg"></span>
       </h1>
-      <h2 className={`text-3xl md:text-4xl font-ancient mb-6 z-10 border-b pb-3 ${theme === 'dark' ? 'text-stone-200 border-[#8b7355]/50' : 'text-[#2d2a26] border-[#c4a77d]'}`}>
+      <h2 className={`text-2xl md:text-4xl font-ancient mb-4 z-10 border-b pb-3 ${theme === 'dark' ? 'text-stone-200 border-[#8b7355]/50' : 'text-[#2d2a26] border-[#c4a77d]'}`}>
         获胜方：<span className={theme === 'dark' ? 'text-[#e0705f]' : 'text-[#9e2b25]'}>{winnerSide ? WINNER_LABEL[winnerSide] : ''}</span>
       </h2>
 
-      <div className="z-10 modal-shell rounded-xl p-5 md:p-6 mb-6 max-w-3xl w-full">
+      {/* 面板高度跟随视口收缩：矮屏（如 1600×860 / 1366×620）在面板内部滚动，
+          保证底部「再来一局 / 返回主页」永远不被内容压住 */}
+      <div className="z-10 modal-shell rounded-xl p-4 md:p-5 mb-3 max-w-3xl w-full max-h-[calc(100dvh-355px)] min-h-[160px] overflow-y-auto scrollbar-thin">
         <h3 className="modal-title text-2xl font-ancient mb-1 text-center">玩家身份</h3>
-        <div className="modal-divider mb-4" />
-        <div className="flex flex-wrap justify-center gap-3">
+        <div className="modal-divider mb-3" />
+        <div className="flex flex-wrap justify-center gap-2.5">
           {players.map((player, idx) => (
             <div
               key={player.id}
-              className={`reveal-card flex flex-col items-center p-3 rounded-xl border transition-all duration-300 w-24
+              className={`reveal-card flex flex-col items-center p-2.5 rounded-xl border transition-all duration-300 w-[86px]
                 ${player.isDead
                   ? 'bg-black/45 border-[#9e2b25]/60 opacity-70 grayscale'
                   : 'bg-black/25 border-[#8b7355]/35 hover:border-[#c8a45c]/70 hover:bg-black/35'
@@ -142,11 +151,11 @@ export const GameOverScreen: React.FC<GameOverScreenProps> = ({
               `}
               style={{ animationDelay: `${idx * 90}ms` }}
             >
-              <img src={player.hero.avatarUrl} alt={player.hero.name} loading="lazy" decoding="async" className={`w-16 h-16 rounded-full mb-3 border-2 object-cover ${player.isDead ? 'border-[#9e2b25]/60 grayscale' : 'border-[#c8a45c]/55'}`} />
-              <div className="text-lg modal-text font-bold mb-2">
+              <img src={player.hero.avatarUrl} alt={player.hero.name} loading="lazy" decoding="async" className={`w-14 h-14 rounded-full mb-2 border-2 object-cover ${player.isDead ? 'border-[#9e2b25]/60 grayscale' : 'border-[#c8a45c]/55'}`} />
+              <div className="text-base modal-text font-bold mb-1">
                 {player.hero.name}
               </div>
-              <div className={`text-base font-ancient px-3 py-1 rounded-full
+              <div className={`text-sm font-ancient px-2.5 py-0.5 rounded-full
                 ${player.isDead
                   ? 'bg-red-900/60 text-red-300'
                   : player.identity === Identity.ZHUGONG ? 'bg-yellow-700/60 text-yellow-300' :
@@ -157,7 +166,7 @@ export const GameOverScreen: React.FC<GameOverScreenProps> = ({
               `}>
                 {player.isRevealed ? player.identity : '未知'}
               </div>
-              <div className={`text-sm mt-2 ${player.isDead ? 'text-red-500' : 'text-green-500'}`}>
+              <div className={`text-xs mt-1.5 ${player.isDead ? 'text-red-500' : 'text-green-500'}`}>
                 {player.isDead ? '阵亡' : '存活'}
               </div>
             </div>
@@ -203,7 +212,7 @@ export const GameOverScreen: React.FC<GameOverScreenProps> = ({
               <span className="font-ancient text-[#e8cf94] tracking-[0.12em]">本局战报</span>
               <span className="text-[11px] text-[#8f806a]">最近 {keyLogs.length} 条关键事件</span>
             </div>
-            <ul className="space-y-1 max-h-32 overflow-y-auto scrollbar-thin pr-1">
+            <ul className="space-y-1 max-h-24 overflow-y-auto scrollbar-thin pr-1">
               {keyLogs.map((l) => (
                 <li key={l.id} className="flex items-start gap-2 text-[12px] leading-relaxed">
                   <span className={`mt-1.5 w-1.5 h-1.5 rounded-full shrink-0 ${
@@ -212,8 +221,7 @@ export const GameOverScreen: React.FC<GameOverScreenProps> = ({
                   <span className="modal-text-dim">{l.text}</span>
                 </li>
               ))}
-            </ul>
-          </div>
+            </ul>          </div>
         )}
       </div>
 
