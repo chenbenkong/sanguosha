@@ -90,6 +90,16 @@ const IconDice: React.FC = () => (
   </svg>
 );
 
+// 动效开关图标：三道风线；关闭时加斜杠
+const IconMotion: React.FC<{ off?: boolean }> = ({ off }) => (
+  <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" aria-hidden="true">
+    <path d="M4 8h9.5a2.5 2.5 0 1 0-2.4-3.2" />
+    <path d="M4 12.5h13.5a2.5 2.5 0 1 1-2.4 3.2" />
+    <path d="M4 17h6.5" />
+    {off && <path d="M3 21L21 3" strokeWidth="2" />}
+  </svg>
+);
+
 const IconArrowLeft: React.FC = () => (
   <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
     <path d="M19 12H5M11 6l-6 6 6 6" />
@@ -103,6 +113,7 @@ const ThemeIcon: React.FC<{ theme: 'dark' | 'light' }> = ({ theme }) => theme ==
 // 不会重复摸牌、重复发动回合开始技能
 const SAVE_KEY = 'sgs-save-v1';
 const SAVE_VERSION = 1;
+let saveRejected = false;
 
 interface GameSave {
   v: number;
@@ -115,6 +126,19 @@ interface GameSave {
   logs: LogEntry[];
 }
 
+// 存档是否已经是「已结束」状态：人类阵亡、主公阵亡、或反贼清空且内奸阵亡
+// 这类存档不应该再出现在首页「继续上一局」，否则会进入一局无人可控的 AI 自走棋
+const isSaveFinished = (s: GameSave): boolean => {
+  const human = s.players.find(p => p?.isHuman);
+  if (!human || human.isDead) return true;
+  const lord = s.players.find(p => p.identity === Identity.ZHUGONG);
+  if (!lord || lord.isDead) return true;
+  const aliveRebels = s.players.filter(p => p.identity === Identity.FANZEI && !p.isDead);
+  const spy = s.players.find(p => p.identity === Identity.NEIJIAN);
+  if (aliveRebels.length === 0 && (!spy || spy.isDead)) return true;
+  return false;
+};
+
 const readSave = (): GameSave | null => {
   try {
     const raw = localStorage.getItem(SAVE_KEY);
@@ -124,10 +148,23 @@ const readSave = (): GameSave | null => {
     if (!Array.isArray(s.players) || s.players.length < 5) return null;
     if (!s.players.some(p => p?.isHuman) || !Array.isArray(s.deck)) return null;
     if (typeof s.turnIndex !== 'number' || s.turnIndex < 0 || s.turnIndex >= s.players.length) return null;
+    // 已结束的局直接清掉，避免结算后仍能续上一局
+    if (isSaveFinished(s)) {
+      try { localStorage.removeItem(SAVE_KEY); } catch { /* ignore */ }
+      saveRejected = true;
+      return null;
+    }
     return s;
   } catch {
     return null;
   }
+};
+
+// 供首页提示「上一局已结束」：只消费一次
+export const consumeSaveRejected = () => {
+  const v = saveRejected;
+  saveRejected = false;
+  return v;
 };
 
 const writeSave = (s: GameSave) => {
@@ -209,9 +246,10 @@ const App: React.FC = () => {
     };
   }, []);
 
-  // 小屏手机（如 375×667、320×568）按比例缩放整页，保证手牌、按钮与首页 CTA 都在视口内
-  const uiScale = viewport.w > 0 && viewport.w <= 640 && viewport.h > 0 && viewport.h < 740
-    ? Math.max(0.7, Math.min(1, viewport.h / 820))
+  // 手机端仅在较矮视口（<720）做整页缩放兜底；≥720 的常规手机交给密度分档，
+  // 保证 390×844 这类主流尺寸的触控热区不被缩小
+  const uiScale = viewport.w > 0 && viewport.w < 768 && viewport.h > 0 && viewport.h < 720
+    ? Math.max(0.68, Math.min(1, viewport.h / 840))
     : 1;
   const scaleStyle: React.CSSProperties | undefined = uiScale < 1 ? {
     // fixed 让缩放后的元素脱离文档流，避免 body 被撑高后出现「越滚越空」的空白区
@@ -223,6 +261,18 @@ const App: React.FC = () => {
     transform: `scale(${uiScale})`,
     transformOrigin: 'top left',
   } : undefined;
+
+  // 按可视高度分档控制关键区域尺寸（不再依赖全局缩放）：
+  // ultra <660 / tight <760 / compact <860 / normal <960 / roomy ≥960
+  const layoutDensity: 'ultra' | 'tight' | 'compact' | 'normal' | 'roomy' =
+    viewport.h > 0 && viewport.h < 660 ? 'ultra'
+      : viewport.h < 760 ? 'tight'
+        : viewport.h < 860 ? 'compact'
+          : viewport.h < 960 ? 'normal'
+            : 'roomy';
+  // 宽屏分档：高分屏/大显示器上放大核心区，避免 1600+ 视口出现「字小如蚁」
+  const sizeTier: 'md' | 'lg' | 'xl' =
+    viewport.w >= 1800 ? 'xl' : viewport.w >= 1440 ? 'lg' : 'md';
 
 
   // --- Game State ---
@@ -319,6 +369,8 @@ const App: React.FC = () => {
   const [checkpoint, setCheckpoint] = useState<{ turnIndex: number, id: number } | null>(null);
   useEffect(() => {
     if (!checkpoint) return;
+    // 已结束/已退出：绝不能再写存档，否则首页会重新出现「继续上一局」
+    if (isGameOverRef.current) return;
     const snap: GameSave = {
       v: SAVE_VERSION,
       ts: Date.now(),
@@ -451,6 +503,23 @@ const App: React.FC = () => {
 
   // 玩法说明弹窗（首页）
   const [showRules, setShowRules] = useState<boolean>(false);
+  // 对局中退出确认 / 首页提示（如：上一局已结束）
+  const [showExitConfirm, setShowExitConfirm] = useState<boolean>(false);
+  const [homeNotice, setHomeNotice] = useState<string | null>(null);
+  // 防止结算页「再来一局」被连点开两局
+  const startGuardRef = useRef<number>(0);
+
+  // 首页提示自动消失，避免长期占位
+  useEffect(() => {
+    if (!homeNotice) return;
+    const t = setTimeout(() => setHomeNotice(null), 5000);
+    return () => clearTimeout(t);
+  }, [homeNotice]);
+
+  // 启动时如果发现存档已结束（被 readSave 拒绝），明确提示而不是静默消失
+  useEffect(() => {
+    if (consumeSaveRejected()) setHomeNotice('上一局已结束，请重新开始一局');
+  }, []);
 
   // 五谷丰登选择状态
   const [wuguSelection, setWuguSelection] = useState<{
@@ -488,10 +557,20 @@ const App: React.FC = () => {
   // 弃牌堆查看器
   const [showDiscardViewer, setShowDiscardViewer] = useState<boolean>(false);
 
-  // Audio
-  const [isMuted, setIsMuted] = useState<boolean>(false);
-  const isMutedRef = useRef<boolean>(false);
+  // Audio：静音与动效开关都持久化，刷新后保持一致
+  const [isMuted, setIsMuted] = useState<boolean>(() => {
+    try { return localStorage.getItem('sgs-muted') === '1'; } catch { return false; }
+  });
+  const isMutedRef = useRef<boolean>(isMuted);
   useEffect(() => { isMutedRef.current = isMuted; }, [isMuted]);
+  const [motionOn, setMotionOn] = useState<boolean>(() => {
+    try { return localStorage.getItem('sgs-motion') !== '0'; } catch { return true; }
+  });
+  const toggleMotion = () => {
+    const next = !motionOn;
+    setMotionOn(next);
+    try { localStorage.setItem('sgs-motion', next ? '1' : '0'); } catch { /* ignore */ }
+  };
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const bgmModeRef = useRef<'start' | 'battle' | 'climax'>('start');
   const audioReadyRef = useRef<boolean>(false);
@@ -859,6 +938,7 @@ const App: React.FC = () => {
     const newMuted = !isMuted;
     setIsMuted(newMuted);
     isMutedRef.current = newMuted; // 立即同步，playBgm 需要立刻读到
+    try { localStorage.setItem('sgs-muted', newMuted ? '1' : '0'); } catch { /* ignore */ }
     if (newMuted) {
       // 静音即断开音频：不要让 BGM 在后台继续下载
       releaseAudio(audioRef.current);
@@ -976,6 +1056,13 @@ const App: React.FC = () => {
   const resumeGame = () => {
     if (!savedGame) return;
     const s = savedGame;
+    // 防御：即使入口条件意外放行，也拒绝恢复已结束的局（人类阵亡/主公阵亡/胜负已定）
+    if (isSaveFinished(s)) {
+      clearSave();
+      setSavedGame(null);
+      setHomeNotice('上一局已结束，请重新开始一局');
+      return;
+    }
     initAudio();
     isGameOverRef.current = false;
     turnStepRef.current = '';
@@ -1254,6 +1341,8 @@ const App: React.FC = () => {
   // Main Loop Effect
   useEffect(() => {
     if (screen !== 'game') return;
+    // 结算/退出后立即停止推进：避免结算 3 秒内继续开新回合、写存档、开下一局
+    if (isGameOverRef.current) return;
     if (checkGameOver()) return;
     if (isProcessing) return; // 如果正在处理异步效果，暂停游戏主循环推进
 
@@ -1871,6 +1960,12 @@ const App: React.FC = () => {
   // 桌面端键盘快捷键：1-9 选手牌，Enter 确认出牌，E 结束回合
   useEffect(() => {
     const onHotkey = (e: KeyboardEvent) => {
+      // ?：任意界面都能打开玩法说明
+      if (e.key === '?') {
+        e.preventDefault();
+        setShowRules(true);
+        return;
+      }
       if (screen !== 'game') return;
       if (dyingState || pendingReaction || showSkillModal || wuguSelection || isAiTakeover) return;
       // 弹窗打开时不响应快捷键，避免关着说明弹窗也能出牌
@@ -4682,14 +4777,17 @@ const App: React.FC = () => {
     }
 
     // 0. 装备优先：空槽直接上装，武器仅替换为攻击范围更大的
-    const equipCandidates = aiPlayer.hand.filter(c => c.type === CardType.EQUIPMENT && EQUIP_META[c.name]);
+    // 注意：用最新状态判断装备槽，避免传进来的 aiPlayer 快照装备信息过期，
+    // 导致重复装备同一件防具（日志里会出现「弃置旧装备【白银狮子】→ 又装备白银狮子」）
+    const equipLive = getPlayer(aiPlayer.id) ?? aiPlayer;
+    const equipCandidates = equipLive.hand.filter(c => c.type === CardType.EQUIPMENT && EQUIP_META[c.name]);
     if (equipCandidates.length > 0) {
       const pick = equipCandidates.sort((a, b) => (EQUIP_META[b.name]?.range ?? 0) - (EQUIP_META[a.name]?.range ?? 0))[0];
       const slot = EQUIP_META[pick.name]!.slot;
-      const current = aiPlayer.equipment?.[slot];
+      const current = equipLive.equipment?.[slot];
       const betterWeapon = slot === 'weapon' && (!current || (EQUIP_META[pick.name]?.range ?? 0) > (EQUIP_META[current.name]?.range ?? 0));
       if (!current || betterWeapon) {
-        equipCard(aiPlayer.id, pick);
+        equipCard(equipLive.id, pick);
         await delay(900);
       }
     }
@@ -5045,6 +5143,38 @@ const App: React.FC = () => {
     }
   };
 
+  // 主动退出对局：清存档、结束所有挂起交互、停止主循环并回首页
+  const exitToHome = (notice = '已退出对局，存档已清除') => {
+    clearSave();
+    setSavedGame(null);
+    isGameOverRef.current = true; // 阻止旧回合继续推进/写档
+    turnStepRef.current = '';
+    aiTurnActiveRef.current = false;
+    if (humanReactionResolver.current) {
+      humanReactionResolver.current({ played: false, isWuxie: false });
+      humanReactionResolver.current = null;
+    }
+    if (dyingResolver.current) {
+      dyingResolver.current(false);
+      dyingResolver.current = null;
+    }
+    setPendingReaction(null);
+    setDyingState(null);
+    setWuguSelection(null);
+    setWuguSelectedCard(null);
+    setSelectedCardIds([]);
+    setActiveSelectedId(null);
+    setIsSelectingTarget(false);
+    setIsAiTakeover(false);
+    setShowExitConfirm(false);
+    setShowRules(false);
+    setShowDiscardViewer(false);
+    setInspectPlayerId(null);
+    setWinnerSide(null);
+    setScreen('start');
+    setHomeNotice(notice);
+  };
+
   // 超时自动弃牌：保留关键牌，优先弃置低价值牌（与 AI 弃牌策略一致）
   const autoDiscardLowestCards = () => {
     const self = playersRef.current.find(p => p.isHuman) || players[0];
@@ -5099,6 +5229,9 @@ const App: React.FC = () => {
   if (screen === 'start') {
     return (
       <div
+        data-density={layoutDensity}
+        data-size-tier={sizeTier}
+        data-motion={motionOn ? 'on' : 'off'}
         className={`h-screen w-full flex flex-col items-center justify-center p-4 relative overflow-hidden ${theme === 'light' ? 'parchment-bg' : ''}`}
         style={scaleStyle}
       >
@@ -5149,6 +5282,14 @@ const App: React.FC = () => {
             aria-label={isMuted ? '开启音乐' : '静音'}
           >
             <IconSpeaker muted={isMuted} />
+          </button>
+          <button
+            onClick={toggleMotion}
+            className="ui-icon-btn"
+            title={motionOn ? '关闭动效' : '开启动效'}
+            aria-label={motionOn ? '关闭动效' : '开启动效'}
+          >
+            <IconMotion off={!motionOn} />
           </button>
           <button
             onClick={toggleTheme}
@@ -5258,6 +5399,12 @@ const App: React.FC = () => {
                 <IconBook />
                 <span>玩法说明</span>
               </button>
+
+              {homeNotice && (
+                <div role="status" className="mt-1 px-4 py-2 rounded-lg border border-[#c8a45c]/45 bg-[#1b1510]/90 text-[12px] text-[#e8cf94]">
+                  {homeNotice}
+                </div>
+              )}
             </div>
           </div>
 
@@ -5350,7 +5497,8 @@ const App: React.FC = () => {
                   <ul className="text-sm space-y-1.5">
                     <li>点击手牌选择，点击头像指定目标；再点一次可取消</li>
                     <li>非选目标时，点击任意武将头像可查看人物介绍、技能与装备详情</li>
-                    <li>桌面端快捷键：<span className="text-[#e8cf94] font-bold">1-9</span> 选手牌 · <span className="text-[#e8cf94] font-bold">Enter</span> 出牌/确认 · <span className="text-[#e8cf94] font-bold">E</span> 结束回合 · <span className="text-[#e8cf94] font-bold">Esc</span> 取消选择</li>
+                    <li>桌面端快捷键：<span className="text-[#e8cf94] font-bold">1-9</span> 选手牌 · <span className="text-[#e8cf94] font-bold">Enter</span> 出牌/确认 · <span className="text-[#e8cf94] font-bold">E</span> 结束回合 · <span className="text-[#e8cf94] font-bold">Esc</span> 取消选择 · <span className="text-[#e8cf94] font-bold">?</span> 帮助</li>
+                    <li>右上角可切换 <span className="text-[#e8cf94] font-bold">速度 / 动效 / 主题 / 静音</span>，设置会记住到下次打开</li>
                     <li>右上角 <span className="text-[#e8cf94] font-bold">⚡×N</span> 可加速 AI 结算节奏</li>
                     <li>遇到危险时别慌——弹出响应框前先看清需要什么牌</li>
                   </ul>
@@ -5449,6 +5597,9 @@ const App: React.FC = () => {
             <div className="absolute right-0 top-1/2 -translate-y-1/2 flex items-center gap-2">
               <button onClick={toggleMute} className="ui-icon-btn" title={isMuted ? '开启音乐' : '静音'} aria-label={isMuted ? '开启音乐' : '静音'}>
                 <IconSpeaker muted={isMuted} />
+              </button>
+              <button onClick={toggleMotion} className="ui-icon-btn" title={motionOn ? '关闭动效' : '开启动效'} aria-label={motionOn ? '关闭动效' : '开启动效'}>
+                <IconMotion off={!motionOn} />
               </button>
               <button onClick={toggleTheme} className="ui-icon-btn" title={theme === 'dark' ? '切换到白天模式' : '切换到黑夜模式'} aria-label={theme === 'dark' ? '切换到白天模式' : '切换到黑夜模式'}>
                 <ThemeIcon theme={theme} />
@@ -5577,7 +5728,7 @@ const App: React.FC = () => {
 
   if (screen === 'gameover') {
     return (
-      <div className={`h-screen w-full flex flex-col items-center justify-center text-center p-4 relative overflow-hidden ${theme === 'light' ? 'parchment-bg' : 'bg-black'}`}>
+      <div data-motion={motionOn ? 'on' : 'off'} className={`min-h-screen w-full flex flex-col items-center justify-center text-center p-4 pb-28 relative overflow-y-auto ${theme === 'light' ? 'parchment-bg' : 'bg-black'}`}>
          {/* 背景轮播 - 白天模式显示 */}
          {theme === 'light' && (
            <BackgroundCarousel 
@@ -5727,21 +5878,24 @@ const App: React.FC = () => {
            </div>
          </div>
 
-         <div className="z-10 flex gap-4">
+         <div className={`fixed inset-x-0 bottom-0 z-30 w-full flex flex-wrap justify-center gap-3 px-4 py-4 bg-gradient-to-t ${theme === 'dark' ? 'from-black/90 via-black/70 to-transparent' : 'from-[#f5f0eb]/95 via-[#f5f0eb]/80 to-transparent'}`}>
            <button
             onClick={() => {
+              // 连点「再来一局」只生效一次，避免一次开出两局
+              if (Date.now() - startGuardRef.current < 600) return;
+              startGuardRef.current = Date.now();
               const myHero = players.find(p => p.isHuman)?.hero;
               if (myHero) startGame(myHero);
             }}
-            className="btn-gold z-10 px-10 py-4 font-ancient text-2xl rounded-lg"
+            className="btn-gold z-10 px-8 py-3 min-h-[48px] font-ancient text-xl md:text-2xl rounded-lg"
           >
             再来一局
           </button>
            <button
-            onClick={() => setScreen('start')}
-            className="btn-ink z-10 px-10 py-4 font-ancient text-2xl rounded-lg"
+            onClick={() => exitToHome('已返回主页')}
+            className="btn-ink z-10 px-8 py-3 min-h-[48px] font-ancient text-xl md:text-2xl rounded-lg"
           >
-            返回主营
+            返回主页
           </button>
          </div>
       </div>
@@ -5762,13 +5916,16 @@ const App: React.FC = () => {
   );
 
   // --- 对局面板自适应 ---
-  const isCompact = viewport.h > 0 && viewport.h < 780;
-  // 桌面端 1366×768 / 1440×900 等较矮屏幕：只缩小手牌，避免底部手牌被裁切
-  const isDesktopShort = viewport.w >= 768 && viewport.h > 0 && viewport.h < 960;
-  const compactHand = isCompact || isDesktopShort;
+  // 高度不足 roomy 时手牌统一用小卡；roomy（≥960）才使用大卡，避免矮屏手牌被裁
+  const compactHand = layoutDensity !== 'roomy';
+  // 大屏 + 高视口：手牌再放大一档，避免高分屏上核心区显得空洞
+  const handLarge = layoutDensity === 'roomy' && sizeTier !== 'md';
 
   return (
     <div
+      data-density={layoutDensity}
+      data-size-tier={sizeTier}
+      data-motion={motionOn ? 'on' : 'off'}
       className={`h-screen w-full flex flex-col overflow-hidden relative ${theme === 'light' ? 'parchment-bg' : 'bg-[#1c1c1c]'}`}
       style={scaleStyle}
     >
@@ -6661,7 +6818,7 @@ const App: React.FC = () => {
       )}
 
       {/* 常驻托管开关：z-index 高于所有弹窗，响应求闪 / 五谷丰登等弹窗期间也能直接点 */}
-      <div className="absolute top-2 left-2 z-[230]">
+      <div className="absolute top-2 left-2 z-[230] flex items-center gap-2">
         <button
           onClick={() => setIsAiTakeover(!isAiTakeover)}
           title={isAiTakeover ? '关闭托管，亲自操作' : '开启托管，由 AI 代打（弹窗期间点击也会立即接管）'}
@@ -6671,10 +6828,19 @@ const App: React.FC = () => {
           <span className={`w-1.5 h-1.5 rounded-full ${isAiTakeover ? 'bg-[#f2a79c]' : 'bg-[#c8a45c]/70'}`} />
           <span className="text-xs font-bold tracking-[0.16em]">{isAiTakeover ? '托管中' : '托管'}</span>
         </button>
+        <button
+          onClick={() => setShowExitConfirm(true)}
+          title="退出本局（会清除本局存档）"
+          aria-label="退出对局"
+          className="ui-icon-btn gap-1.5 px-2 md:px-3"
+        >
+          <IconArrowLeft />
+          <span className="hidden md:inline text-xs font-bold tracking-[0.16em]">退出</span>
+        </button>
       </div>
 
       {/* 手机端紧凑阶段指示：放在顶部控制区中间的空档，避免压住牌桌与战报 */}
-      <div className="md:hidden absolute top-2 left-[78px] z-[230]">
+      <div className="md:hidden absolute top-2 left-[156px] z-[230]">
         <div className="ui-panel relative overflow-hidden flex items-center gap-1.5 h-10 px-2.5 whitespace-nowrap">
           <span className={`text-[11px] font-bold font-ancient tracking-[0.12em] ${theme === 'dark' ? 'text-[#e8cf94]' : 'text-[#6b4a1a]'}`}>
             {phase.replace('回合', '').replace('阶段', '')}
@@ -6702,7 +6868,7 @@ const App: React.FC = () => {
         <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-transparent via-yellow-700/50 to-transparent"></div>
 
         {/* 右上角控制组：速度 / 主题 / 静音 */}
-        <div className="absolute top-2 right-3 z-50 flex items-center gap-2">
+        <div data-region="top-controls" className="absolute top-2 right-3 z-50 flex items-center gap-2">
           <button
             onClick={() => setSpeedLevel(speedLevel === 1 ? 2 : speedLevel === 2 ? 3 : 1)}
             className="ui-icon-btn font-bold text-sm tracking-wider"
@@ -6714,7 +6880,7 @@ const App: React.FC = () => {
           </button>
           <button
             onClick={toggleTheme}
-            className="ui-icon-btn"
+            className="ui-icon-btn game-settings-hide"
             title={theme === 'dark' ? '切换到白天模式' : '切换到黑夜模式'}
             aria-label={theme === 'dark' ? '切换到白天模式' : '切换到黑夜模式'}
           >
@@ -6728,10 +6894,18 @@ const App: React.FC = () => {
           >
             <IconSpeaker muted={isMuted} />
           </button>
+          <button
+            onClick={toggleMotion}
+            className="ui-icon-btn game-settings-hide"
+            title={motionOn ? '关闭动效' : '开启动效'}
+            aria-label={motionOn ? '关闭动效' : '开启动效'}
+          >
+            <IconMotion off={!motionOn} />
+          </button>
         </div>
 
         {/* 环形座位布局 */}
-        <div className={`relative w-full flex items-start justify-center gap-1 overflow-x-auto md:block ${isCompact ? 'md:h-[200px]' : 'md:h-[288px]'} md:gap-0 md:overflow-visible py-1 md:py-0 px-1 md:px-0 scrollbar-hide`}>
+      <div data-region="seats" className={`relative w-full flex items-start justify-center gap-1 overflow-x-auto md:block md:h-[var(--seat-h)] md:gap-0 md:overflow-visible py-1 md:py-0 px-1 md:px-0 scrollbar-hide`}>
           {enemies.map((p, index) => {
             // 计算环形位置
             const totalEnemies = enemies.length;
@@ -6864,7 +7038,7 @@ const App: React.FC = () => {
                 )}
 
                 {/* 武将头像区域 */}
-                <div className={`relative w-[74px] h-[92px] ${isCompact ? 'md:w-[56px] md:h-[68px]' : 'md:w-24 md:h-28'} mb-2 ${
+                <div className={`seat-avatar relative w-[74px] h-[92px] mb-2 ${
                   healAnimTarget === p.id ? 'animate-heal-glow' :
                   damageAnimTarget === p.id ? 'animate-damage-glow' : ''
                 } ${skillGlowId === p.id ? 'skill-glow' : ''} ${aiThinkingId === p.id ? 'ai-thinking' : ''}`}>
@@ -7019,7 +7193,7 @@ const App: React.FC = () => {
       <div className="flex-1 relative flex items-center justify-center w-full">
         
         {/* Logs - 左侧日志区域 - 可滚动 - 优化位置和大小 */}
-        <div className="absolute left-2 top-0 bottom-4 w-64 min-[1280px]:w-72 hidden md:block z-10">
+        <div data-region="log" className="absolute left-2 top-0 bottom-4 w-64 min-[1280px]:w-72 hidden md:block z-10">
            <div className="log-panel h-full flex flex-col overflow-hidden">
              {/* 标题栏 */}
              <div className="flex-none px-3 py-2 border-b border-[#8b7355]/25 bg-black/25">
@@ -7110,7 +7284,7 @@ const App: React.FC = () => {
         </div>
 
         {/* Phase Indicator - 五阶段进度轨（桌面端；手机端由顶部紧凑读秒替代） */}
-        <div className="hidden md:block ui-panel absolute right-3 top-4 px-4 py-2.5 z-10">
+        <div className="hidden md:block ui-panel absolute right-3 bottom-3 px-4 py-2.5 z-10">
           <div className={`hidden md:block text-[10px] mb-1.5 tracking-[0.24em] ${theme === 'dark' ? 'text-[#9a8b74]' : 'text-[#8a7a60]'}`}>当前阶段</div>
           <div className="flex items-center gap-1">
             {[GamePhase.START, GamePhase.DRAW, GamePhase.ACTION, GamePhase.DISCARD, GamePhase.END].map((ph, i) => {
@@ -7156,7 +7330,7 @@ const App: React.FC = () => {
         </div>
 
         {/* 中央牌桌：静态椭圆绒面，给牌堆与结算一个视觉落点 */}
-        <div className="table-felt z-0" aria-hidden="true" />
+        <div data-region="felt" className="table-felt z-0" aria-hidden="true" />
         {/* 桌面水印：极淡的「殺」字，补足中央留白但不抢牌堆 */}
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-0" aria-hidden="true">
           <span className={`font-ancient select-none leading-none text-[110px] md:text-[150px] ${theme === 'dark' ? 'text-[#c8a45c]/[0.045]' : 'text-[#8b6914]/[0.07]'}`}>殺</span>
@@ -7286,12 +7460,12 @@ const App: React.FC = () => {
       </div>
 
       {/* Bottom: Player Controls & Hand - 原版三国杀风格 */}
-      <div className={`flex-none z-20 pb-2 pt-3 relative ${theme === 'dark' ? 'bg-gradient-to-t from-[#050505] via-[#0f0f0f] to-transparent' : 'bg-gradient-to-t from-[#f5f0eb]/60 via-transparent to-transparent'}`}>
+      <div data-region="bottom" className={`bottom-bar flex-none z-20 pb-2 pt-3 relative ${theme === 'dark' ? 'bg-gradient-to-t from-[#050505] via-[#0f0f0f] to-transparent' : 'bg-gradient-to-t from-[#f5f0eb]/60 via-transparent to-transparent'}`}>
         {/* 底部装饰线 */}
         <div className={`absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent ${theme === 'dark' ? 'via-yellow-700/30' : 'via-[#c4a77d]/30'} to-transparent`}></div>
         
         {/* 玩家信息栏：桌面端居中，与上方环形座位形成「自己在牌桌下首」的构图 */}
-        <div className="flex flex-col md:flex-row md:justify-center md:items-center gap-1 md:gap-7 px-2 md:px-4 mb-1 md:mb-3">
+        <div data-region="player-info" className="player-info-row flex flex-col md:flex-row md:justify-center md:items-center gap-1 md:gap-7 px-2 md:px-4 mb-1 md:mb-3">
           {/* 玩家头像和信息 - 原版三国杀风格 */}
           <div className="flex items-center gap-4">
             <div className="relative">
@@ -7353,7 +7527,7 @@ const App: React.FC = () => {
                     if (!dyingState && !pendingReaction) setInspectPlayerId(me.id);
                   }}
                   title={`点击查看 ${me.hero.name} 的武将详情`}
-                  className={`relative w-20 h-24 cursor-pointer ${isCompact ? 'md:w-[76px] md:h-[90px]' : 'md:w-24 md:h-28'} ${
+                  className={`player-avatar relative w-20 h-24 cursor-pointer ${
                   healAnimTarget === 0 ? 'animate-heal-glow' :
                   damageAnimTarget === 0 ? 'animate-damage-glow' : ''
                 } ${skillGlowId === 0 ? 'skill-glow' : ''} ${aiThinkingId === 0 ? 'ai-thinking' : ''}`}>
@@ -7423,7 +7597,7 @@ const App: React.FC = () => {
             </div>
             
             {/* 玩家详细信息面板 */}
-            <div className="ui-panel px-4 py-3 w-[280px] md:w-[320px]">
+            <div className="player-info-panel ui-panel px-4 py-3 w-[280px] md:w-[320px]">
               <div className={`font-ancient text-lg mb-2 ${theme === 'dark' ? 'text-[#e8dcc8]' : 'text-[#3a332a]'}`}>{me.hero.name}</div>
               
               {/* 体力值 - 朱红勾玉 */}
@@ -7518,7 +7692,7 @@ const App: React.FC = () => {
           </div>
             
             {/* Control Buttons - 操作按钮：托管已统一放在左上角，避免重复入口 */}
-            <div className="flex flex-wrap gap-2 md:gap-3 items-center relative z-40">
+            <div className="action-bar flex flex-wrap gap-2 md:gap-3 items-center relative z-40">
               <div className="ui-panel flex flex-wrap items-center gap-2 p-2">
                 {/* Action Buttons */}
                 {isMyTurn && phase === GamePhase.ACTION && !isAiTakeover && (
@@ -8124,7 +8298,7 @@ const App: React.FC = () => {
          {/* Hand Cards Area - 手牌区域
              内层 w-max + mx-auto：牌少时居中，牌多时从左侧完整展示并可横向滚动，
              避免 justify-center 在内容超宽时把最左边一张裁掉 */}
-         <div className={`w-full overflow-x-auto overflow-y-visible px-2 sm:px-4 pb-1 scrollbar-hide flex relative ${compactHand ? 'pt-3 min-h-0' : 'pt-4 sm:pt-5 min-h-[128px] sm:min-h-[158px]'}`} style={{ zIndex: 10 }}>
+         <div data-region="hand" className={`w-full overflow-x-auto overflow-y-visible px-2 sm:px-4 pb-1 scrollbar-hide flex relative ${compactHand ? 'pt-3' : 'pt-4 sm:pt-5'}`} style={{ zIndex: 10, minHeight: 'var(--hand-min)' }}>
            {/* 手牌背景 - 白天模式移除遮罩 */}
            {theme === 'dark' && (
              <div className="absolute inset-x-4 bottom-0 h-32 rounded-t-2xl pointer-events-none bg-gradient-to-t from-[#0c0906]/85 to-transparent"></div>
@@ -8208,6 +8382,7 @@ const App: React.FC = () => {
                       canUseSkill={canUseLongdan}
                       skillName="龙胆"
                       small={compactHand}
+                      large={handLarge}
                     />
                   </div>
                 </div>
@@ -8216,8 +8391,22 @@ const App: React.FC = () => {
            </div>
          </div>
       </div>
-    </div>
-  );
+
+      {/* 退出对局确认：明确告知会清档，避免误触后无法恢复 */}
+      {showExitConfirm && (
+        <div className="absolute inset-0 z-[260] modal-mask flex items-center justify-center p-4" onClick={() => setShowExitConfirm(false)}>
+          <div className="modal-shell rounded-xl p-6 w-full max-w-md" onClick={(e) => e.stopPropagation()}>
+            <h3 className="modal-title font-ancient text-2xl mb-2">退出本局？</h3>
+            <p className="modal-text-dim text-sm mb-5">退出会清除本局存档，当前进度无法恢复。</p>
+            <div className="flex flex-wrap justify-end gap-3">
+              <button onClick={() => setShowExitConfirm(false)} className="btn-ink px-5 py-2.5 rounded-lg">继续对局</button>
+              <button onClick={() => exitToHome()} className="btn-gold px-5 py-2.5 rounded-lg">退出并回首页</button>
+            </div>
+          </div>
+        </div>
+      )}
+   </div>
+ );
 };
 
 export default App;
