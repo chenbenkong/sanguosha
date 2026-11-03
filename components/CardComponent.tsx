@@ -92,6 +92,30 @@ const CARD_ART: Record<string, string> = {
 };
 
 const CARD_BACK = 'images/cards/card-back.webp';
+const CARD_BACK_2X = 'images/cards/2x/card-back.webp';
+
+/**
+ * 卡面锐化滤镜（全局只渲染一份）
+ * 源图仅 120×120，dPR≥2 时会被浏览器放大；3×3 反锐化卷积核在不引入新素材的前提下
+ * 恢复插画边缘对比度，卷积核权重和为 1，不改变整体亮度。
+ */
+export const CardArtFilters: React.FC = () => (
+  <svg width="0" height="0" aria-hidden="true" focusable="false" style={{ position: 'absolute' }}>
+    <defs>
+      <filter id="sgs-card-sharpen" x="0" y="0" width="100%" height="100%" colorInterpolationFilters="sRGB">
+        <feConvolveMatrix
+          order="3"
+          divisor="1"
+          bias="0"
+          preserveAlpha="true"
+          edgeMode="duplicate"
+          kernelMatrix="0 -0.7 0 -0.7 3.8 -0.7 0 -0.7 0"
+        />
+      </filter>
+    </defs>
+  </svg>
+);
+
 
 const TYPE_STAMPS: Record<CardType, { label: string; color: string; border: string }> = {
   [CardType.BASIC]: { label: '基', color: '#8a4a2a', border: '#8a4a2a' },
@@ -113,10 +137,13 @@ const CardComponent: React.FC<CardProps> = ({ card, onClick, disabled, selected,
       >
         <img
           src={CARD_BACK}
+          srcSet={`${CARD_BACK} 1x, ${CARD_BACK_2X} 2x`}
           alt="牌背"
           loading="lazy"
+          decoding="async"
           draggable={false}
           className="w-full h-full object-cover select-none"
+          style={{ filter: 'url(#sgs-card-sharpen) contrast(1.02)' }}
         />
         <div className="absolute inset-0 bg-black/10 pointer-events-none" />
       </div>
@@ -131,6 +158,8 @@ const CardComponent: React.FC<CardProps> = ({ card, onClick, disabled, selected,
   const stamp = TYPE_STAMPS[card.type] || TYPE_STAMPS[CardType.BASIC];
   const bigName = displayName.length <= 2;
   const art = CARD_ART[card.name];
+  // @2x 素材与原图同名，放在 images/cards/2x/ 下；浏览器按 dPR 自动选择
+  const art2x = art ? art.replace('images/cards/', 'images/cards/2x/') : '';
 
   return (
     <button
@@ -155,23 +184,51 @@ const CardComponent: React.FC<CardProps> = ({ card, onClick, disabled, selected,
         ${canUseSkill && !disabled ? 'ring-2 ring-blue-500 animate-pulse' : ''}
       `}
     >
-      {/* 插画区 */}
+      {/* 插画区：满幅画带 + 矢量细节
+          源图为 120×120，这里同时给出 @2x 素材（240×240，本地高质量放大 + 反锐化），
+          dPR≥2 时浏览器按 2x 图采样，不再把 120 图硬放大 2~2.5 倍 */}
       {art && (
-        <div className={`relative w-full ${small ? 'h-[54%]' : 'h-[56%]'} overflow-hidden shrink-0`}>
-          <img
-            src={art}
-            alt={card.name}
-            loading="lazy"
-            draggable={false}
-            className="w-full h-full object-cover select-none transition-transform duration-300 group-hover:scale-[1.06]"
+        <div className={`card-art-band relative w-full ${small ? 'h-[54%]' : 'h-[56%]'} shrink-0 flex items-center justify-center`}>
+          {/* 画心按「高度=宽度」渲染：152 CSS 宽的牌面上画心约 116 CSS，
+              在 dPR2 下正好贴合 240×240 的 @2x 素材（≈1:1 采样，不再放大） */}
+          <div className="relative h-full aspect-square overflow-hidden">
+            <img
+              src={art}
+              srcSet={`${art} 1x, ${art2x} 2x`}
+              alt={card.name}
+              loading="lazy"
+              decoding="async"
+              draggable={false}
+              width={120}
+              height={120}
+              className="w-full h-full object-cover select-none transition-transform duration-300 group-hover:scale-[1.06]"
+              style={{
+                filter: 'url(#sgs-card-sharpen) contrast(1.03) saturate(1.04)',
+                WebkitMaskImage: 'linear-gradient(90deg, transparent 0%, #000 12%, #000 88%, transparent 100%)',
+                maskImage: 'linear-gradient(90deg, transparent 0%, #000 12%, #000 88%, transparent 100%)',
+              }}
+            />
+            {/* 上缘压暗，保证左上角点数可读 */}
+            <div className="absolute inset-0 bg-gradient-to-b from-black/28 via-transparent to-transparent pointer-events-none" />
+          </div>
+          {/* 织物纹样：1px 交叉线，矢量绘制，任何 dPR 都不糊 */}
+          <div
+            className="absolute inset-0 pointer-events-none opacity-40"
+            style={{
+              backgroundImage:
+                'repeating-linear-gradient(45deg, rgba(255,255,255,0.13) 0 1px, transparent 1px 4px),'
+                + 'repeating-linear-gradient(-45deg, rgba(0,0,0,0.15) 0 1px, transparent 1px 4px)',
+              mixBlendMode: 'overlay',
+              WebkitMaskImage: 'linear-gradient(90deg, transparent 0%, #000 12%, #000 88%, transparent 100%)',
+              maskImage: 'linear-gradient(90deg, transparent 0%, #000 12%, #000 88%, transparent 100%)',
+            }}
           />
-          {/* 上缘压暗，保证左上角点数可读 */}
-          <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-transparent to-transparent pointer-events-none" />
-          {/* 下缘融入牌面 */}
+          {/* 下缘融入牌面 + 金线分隔（矢量，1px 也清晰） */}
           <div
             className="absolute inset-x-0 bottom-0 h-1/2 pointer-events-none"
-            style={{ background: 'linear-gradient(180deg, rgba(255,250,240,0) 0%, rgba(255,250,240,0.30) 70%, rgba(255,250,240,0.62) 100%)' }}
+            style={{ background: 'linear-gradient(180deg, rgba(255,250,240,0) 0%, rgba(255,250,240,0.26) 72%, rgba(255,250,240,0.58) 100%)' }}
           />
+          <div className="absolute inset-x-0 bottom-0 h-px bg-[#c8a45c]/45 pointer-events-none" />
         </div>
       )}
 
