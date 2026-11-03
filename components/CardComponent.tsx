@@ -9,6 +9,8 @@ interface CardProps {
   selected?: boolean;
   isHidden?: boolean;
   small?: boolean;
+  /** 大屏（宽 ≥1440 且可视高度 ≥1020）使用更大的牌面，避免高密度屏显得空洞 */
+  large?: boolean;
   canUseSkill?: boolean;
   skillName?: string;
 }
@@ -97,7 +99,7 @@ const TYPE_STAMPS: Record<CardType, { label: string; color: string; border: stri
   [CardType.EQUIPMENT]: { label: '装', color: '#2f6e52', border: '#2f6e52' },
 };
 
-const CardComponent: React.FC<CardProps> = ({ card, onClick, disabled, selected, isHidden, small, canUseSkill = false, skillName = '' }) => {
+const CardComponent: React.FC<CardProps> = ({ card, onClick, disabled, selected, isHidden, small, large, canUseSkill = false, skillName = '' }) => {
   // ===== 牌背：真实牌背图 =====
   if (isHidden) {
     return (
@@ -105,7 +107,7 @@ const CardComponent: React.FC<CardProps> = ({ card, onClick, disabled, selected,
         className={`
           relative rounded-lg overflow-hidden card-shadow
           border-2 border-[#8b7355]/70
-          ${small ? 'w-12 h-18' : 'w-20 h-28 md:w-24 md:h-36'}
+          ${small ? 'w-12 h-18' : large ? 'w-28 h-40 md:w-36 md:h-52' : 'w-20 h-28 md:w-24 md:h-36'}
           transition-transform duration-200
         `}
       >
@@ -144,7 +146,7 @@ const CardComponent: React.FC<CardProps> = ({ card, onClick, disabled, selected,
         group relative flex flex-col items-center text-left
         rounded-lg overflow-hidden transition-all duration-200
         bg-gradient-to-br ${theme.face}
-        ${small ? 'w-16 h-24' : 'w-[76px] h-[114px] sm:w-24 sm:h-36 md:w-28 md:h-44'}
+        ${small ? 'w-16 h-24' : large ? 'w-24 h-36 md:w-36 md:h-52' : 'w-[76px] h-[114px] sm:w-24 sm:h-36 md:w-28 md:h-44'}
         mx-1 mb-2
         ${selected
           ? 'ring-4 ring-yellow-500 z-30 shadow-[0_10px_30px_rgba(0,0,0,0.55),0_0_20px_rgba(234,179,8,0.45)]'

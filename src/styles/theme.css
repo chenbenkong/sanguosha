@@ -1247,3 +1247,128 @@
     scroll-behavior: auto !important;
   }
 }
+
+/* ===== 对局布局分档 =====
+   依据 CSS 可视高度（innerHeight）分档，而不是物理分辨率：
+   ultra <660 / tight <760 / compact <860 / normal <960 / roomy ≥960
+   各区域各自让位：座位高度、头像、手牌最小高度、牌桌椭圆、底部面板密度。
+   这样 100% 浏览器缩放下不会再把底部手牌挤出视口。 */
+[data-density="roomy"] {
+  --seat-h: 300px;
+  --seat-aw: 112px;
+  --seat-ah: 132px;
+  --hand-min: 200px;
+  --felt-w: min(720px, 52vw);
+  --felt-h: min(290px, 30vh);
+}
+[data-density="normal"] {
+  --seat-h: 260px;
+  --seat-aw: 96px;
+  --seat-ah: 112px;
+  --hand-min: 184px;
+  --felt-w: min(620px, 52vw);
+  --felt-h: min(250px, 30vh);
+}
+[data-density="compact"] {
+  --seat-h: 200px;
+  --seat-aw: 74px;
+  --seat-ah: 88px;
+  --hand-min: 118px;
+  --felt-w: min(560px, 50vw);
+  --felt-h: min(220px, 28vh);
+}
+[data-density="tight"] {
+  --seat-h: 176px;
+  --seat-aw: 62px;
+  --seat-ah: 74px;
+  --hand-min: 104px;
+  --felt-w: min(520px, 46vw);
+  --felt-h: min(190px, 26vh);
+}
+[data-density="ultra"] {
+  --seat-h: 150px;
+  --seat-aw: 52px;
+  --seat-ah: 62px;
+  --hand-min: 92px;
+  --felt-w: min(470px, 42vw);
+  --felt-h: min(155px, 22vh);
+}
+
+/* 大尺寸视口放大核心区，避免 1600+ 宽出现「字小如蚁」 */
+[data-density="roomy"][data-size-tier="lg"] {
+  --hand-min: 220px;
+}
+[data-density="roomy"][data-size-tier="xl"] {
+  --seat-h: 340px;
+  --seat-aw: 132px;
+  --seat-ah: 152px;
+  --hand-min: 240px;
+  --felt-w: min(900px, 50vw);
+  --felt-h: min(340px, 28vh);
+}
+[data-density="compact"][data-size-tier="lg"] {
+  --seat-aw: 80px;
+  --seat-ah: 96px;
+}
+[data-size-tier="xl"] .ui-icon-btn {
+  height: 44px;
+  min-width: 44px;
+}
+[data-size-tier="xl"] [data-region="log"] { width: 340px; }
+[data-size-tier="xl"] .player-info-panel { width: 360px; }
+[data-size-tier="xl"] .log-panel .text-xs { font-size: 13px; }
+
+.seat-avatar { width: 74px; height: 92px; }
+.player-avatar { width: 80px; height: 96px; }
+
+@media (min-width: 768px) {
+  .seat-avatar { width: var(--seat-aw); height: var(--seat-ah); }
+  .player-avatar { width: calc(var(--seat-aw) + 8px); height: calc(var(--seat-ah) + 12px); }
+  .table-felt { width: var(--felt-w); height: var(--felt-h); }
+}
+
+/* 底部区域：超紧凑/紧凑档收紧内边距与按钮，给手牌留出固定空间 */
+[data-density="ultra"] .bottom-bar { padding-top: 0; padding-bottom: 0; }
+[data-density="ultra"] [data-region="hand"] { padding-top: 6px; }
+[data-density="ultra"] .player-info-panel { width: 236px; padding: 4px 10px; }
+[data-density="tight"] .bottom-bar { padding-top: 6px; padding-bottom: 6px; }
+[data-density="compact"] .bottom-bar { padding-top: 8px; padding-bottom: 6px; }
+[data-density="ultra"] .player-info-row,
+[data-density="tight"] .player-info-row { margin-bottom: 2px; }
+[data-density="ultra"] .player-info-panel { width: 236px; padding: 4px 10px; }
+[data-density="tight"] .player-info-panel { width: 268px; padding: 8px 12px; }
+[data-density="ultra"] .player-info-panel .mb-2 { margin-bottom: 4px; }
+[data-density="ultra"] .action-bar .ui-panel { padding: 4px; gap: 4px; }
+[data-density="ultra"] .action-bar .btn-gold,
+[data-density="ultra"] .action-bar .btn-ink { padding: 6px 14px; font-size: 15px; }
+[data-density="tight"] .action-bar .btn-gold,
+[data-density="tight"] .action-bar .btn-ink { padding: 8px 18px; font-size: 17px; }
+
+/* 手动「关闭动效」开关：与 prefers-reduced-motion 同策略 */
+[data-motion="off"] *,
+[data-motion="off"] *::before,
+[data-motion="off"] *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+  scroll-behavior: auto !important;
+}
+
+/* 移动端触控热区：图标按钮与主按钮不小于 44×44 */
+@media (max-width: 767px) {
+  .ui-icon-btn { height: 44px; min-width: 44px; }
+  .ui-tile { min-height: 44px; }
+  .btn-ink, .btn-gold, .skill-btn { min-height: 44px; }
+  .ui-cta { min-height: 48px; }
+  /* 手机顶部空间有限：主题/动效开关留在首页，对局中只保留速度/静音/退出 */
+  .game-settings-hide { display: none !important; }
+}
+
+/* 键盘焦点：所有可交互元素都有清晰可见的焦点环 */
+button:focus-visible,
+[role="button"]:focus-visible,
+a:focus-visible {
+  outline: 2px solid rgba(232, 207, 148, 0.85);
+  outline-offset: 2px;
+}
+
