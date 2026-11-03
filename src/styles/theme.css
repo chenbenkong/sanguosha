@@ -981,6 +981,8 @@
   font-size: 18px;
   letter-spacing: 0.12em;
   line-height: 1.4;
+  /* 中文按钮在窄屏 flex 中会被压缩到逐字换行，统一禁止折行 */
+  white-space: nowrap;
   transition: color 0.16s ease, border-color 0.16s ease, background-color 0.16s ease, box-shadow 0.16s ease;
 }
 .ui-tile:hover {
@@ -1232,5 +1234,16 @@
 
 @media (max-width: 640px) {
   .ui-cta { padding: 11px 36px; font-size: 22px; padding-left: calc(36px + 0.28em); }
+  .ui-tile { min-width: 56px; padding: 8px 10px; font-size: 16px; }
   .table-felt { width: 94vw; height: 34vh; }
+}
+
+/* 尊重系统「减少动效」设置，避免晕动敏感用户被大量动画困扰 */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

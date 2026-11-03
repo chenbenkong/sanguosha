@@ -209,6 +209,18 @@ const App: React.FC = () => {
     };
   }, []);
 
+  // 小屏手机（如 375×667、320×568）按比例缩放整页，保证手牌、按钮与首页 CTA 都在视口内
+  const uiScale = viewport.w > 0 && viewport.w <= 640 && viewport.h > 0 && viewport.h < 740
+    ? Math.max(0.7, Math.min(1, viewport.h / 820))
+    : 1;
+  const scaleStyle: React.CSSProperties | undefined = uiScale < 1 ? {
+    width: `${Math.round(viewport.w / uiScale)}px`,
+    height: `${Math.round(viewport.h / uiScale)}px`,
+    transform: `scale(${uiScale})`,
+    transformOrigin: 'top left',
+  } : undefined;
+
+
   // --- Game State ---
   const [deck, setDeck] = useState<Card[]>([]);
   const deckRef = useRef<Card[]>([]); // 用于获取最新的牌堆状态
@@ -5012,7 +5024,10 @@ const App: React.FC = () => {
 
   if (screen === 'start') {
     return (
-      <div className={`h-screen w-full flex flex-col items-center justify-center p-4 relative overflow-hidden ${theme === 'light' ? 'parchment-bg' : ''}`}>
+      <div
+        className={`h-screen w-full flex flex-col items-center justify-center p-4 relative overflow-hidden ${theme === 'light' ? 'parchment-bg' : ''}`}
+        style={scaleStyle}
+      >
         {/* 背景轮播 */}
         <BackgroundCarousel 
           images={BACKGROUND_IMAGES}
@@ -5072,7 +5087,7 @@ const App: React.FC = () => {
         </div>
 
         {/* 主内容：标题 + 出征面板 + 战绩，全部在一屏内 */}
-        <div className="relative z-10 flex min-h-screen w-full flex-col items-center justify-center px-5 py-16">
+        <div className="relative z-10 flex min-h-full w-full flex-col items-center justify-center px-5 py-16">
           <div className="relative text-center">
             {/* 朱印 */}
             <div className={`absolute -top-5 right-1 md:-right-12 rotate-6 w-11 h-11 md:w-14 md:h-14 rounded-[5px] flex items-center justify-center border shadow-[0_6px_20px_rgba(0,0,0,0.5)] ${
@@ -5091,12 +5106,12 @@ const App: React.FC = () => {
               三国杀
             </h1>
 
-            <div className="mt-3 flex items-center justify-center gap-4">
-              <span className={`h-px w-14 md:w-20 ${theme === 'dark' ? 'bg-gradient-to-r from-transparent to-[#c8a45c]/60' : 'bg-gradient-to-r from-transparent to-[#8b6914]/45'}`} />
-              <span className={`text-[13px] md:text-sm tracking-[0.42em] pl-[0.42em] font-ancient ${theme === 'dark' ? 'text-[#d9c49a]' : 'text-[#6b4a1a]'}`}>
+            <div className="mt-3 flex items-center justify-center gap-2 md:gap-4">
+              <span className={`h-px w-6 sm:w-14 md:w-20 ${theme === 'dark' ? 'bg-gradient-to-r from-transparent to-[#c8a45c]/60' : 'bg-gradient-to-r from-transparent to-[#8b6914]/45'}`} />
+              <span className={`text-[13px] md:text-sm tracking-[0.24em] md:tracking-[0.42em] pl-[0.24em] md:pl-[0.42em] font-ancient whitespace-nowrap ${theme === 'dark' ? 'text-[#d9c49a]' : 'text-[#6b4a1a]'}`}>
                 群雄逐鹿 · {playerCount}人军争
               </span>
-              <span className={`h-px w-14 md:w-20 ${theme === 'dark' ? 'bg-gradient-to-l from-transparent to-[#c8a45c]/60' : 'bg-gradient-to-l from-transparent to-[#8b6914]/45'}`} />
+              <span className={`h-px w-6 sm:w-14 md:w-20 ${theme === 'dark' ? 'bg-gradient-to-l from-transparent to-[#c8a45c]/60' : 'bg-gradient-to-l from-transparent to-[#8b6914]/45'}`} />
             </div>
             <div className={`mt-2 text-[10px] tracking-[0.52em] pl-[0.52em] ${theme === 'dark' ? 'text-[#8f7c5e]' : 'text-[#9b8a6c]'}`}>
               SANGUOSHA · IDENTITY
@@ -5104,7 +5119,7 @@ const App: React.FC = () => {
           </div>
 
           <div className="ui-panel mt-9 w-full max-w-[600px] px-6 py-6 md:px-8">
-            <div className="grid grid-cols-[76px_1fr] items-center gap-y-5 gap-x-4">
+            <div className="grid grid-cols-1 sm:grid-cols-[76px_1fr] items-center gap-y-3 sm:gap-y-5 gap-x-4">
               <span className="section-caption">对局人数</span>
               <div className="flex gap-2" role="group" aria-label="对局人数">
                 <button className="ui-tile" aria-pressed={playerCount === 5} onClick={() => setPlayerCount(5)}>五人局</button>
@@ -5121,7 +5136,7 @@ const App: React.FC = () => {
                   ] as const).map(item => (
                     <button
                       key={item.key}
-                      className="ui-tile !text-base !px-4 !py-1.5"
+                      className="ui-tile !text-base !px-2.5 sm:!px-4 !py-1.5"
                       aria-pressed={aiDifficulty === item.key}
                       onClick={() => setAiDifficulty(item.key)}
                       title={item.hint}
@@ -5351,7 +5366,7 @@ const App: React.FC = () => {
             </button>
 
             <div className="text-center">
-              <h2 className={`font-ancient text-4xl md:text-5xl ${theme === 'dark' ? 'text-[#e8cf94]' : 'text-[#6b4a1a]'}`}>选择您的武将</h2>
+              <h2 className={`font-ancient text-3xl md:text-5xl ${theme === 'dark' ? 'text-[#e8cf94]' : 'text-[#6b4a1a]'}`}>选择您的武将</h2>
               <div className={`mt-1.5 text-[10px] tracking-[0.42em] pl-[0.42em] ${theme === 'dark' ? 'text-[#8f7c5e]' : 'text-[#9b8a6c]'}`}>
                 CHOOSE YOUR GENERAL · {HEROES.length} 名
               </div>
@@ -5425,45 +5440,48 @@ const App: React.FC = () => {
           </div>
         </div>
 
-        {/* 底部详情条：始终存在，未选将时提示并可直接天命随机 */}
+        {/* 底部详情条：始终存在，未选将时提示并可直接天命随机
+            手机端按钮换行到下一行，避免把武将名/技能挤成竖排 */}
         <div className="pick-detail flex-none z-30 px-4 py-2.5">
-          <div className="max-w-[1440px] mx-auto flex items-center gap-3 md:gap-4">
-            {selectedHero ? (
-              <>
-                <img
-                  src={selectedHero.avatarUrl}
-                  alt={selectedHero.name}
-                  loading="eager"
-                  decoding="async"
-                  className="w-12 h-12 rounded-md object-cover object-top border border-[#c8a45c]/60 flex-none"
-                />
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-baseline gap-2">
-                    <h3 className={`font-ancient text-2xl ${theme === 'dark' ? 'text-[#e8cf94]' : 'text-[#6b4a1a]'}`}>{selectedHero.name}</h3>
-                    <span className={`text-[11px] tracking-wider ${theme === 'dark' ? 'text-[#9a8b74]' : 'text-[#8a7a60]'}`}>
-                      {selectedHero.kingdom} · {selectedHero.maxHp} 体力 · 【{selectedHero.skillName}】
-                    </span>
+          <div className="max-w-[1440px] mx-auto flex flex-col md:flex-row md:items-center gap-2 md:gap-4">
+            <div className="flex items-center gap-3 min-w-0 w-full md:flex-1">
+              {selectedHero ? (
+                <>
+                  <img
+                    src={selectedHero.avatarUrl}
+                    alt={selectedHero.name}
+                    loading="eager"
+                    decoding="async"
+                    className="w-12 h-12 rounded-md object-cover object-top border border-[#c8a45c]/60 flex-none"
+                  />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-baseline gap-2">
+                      <h3 className={`font-ancient text-2xl ${theme === 'dark' ? 'text-[#e8cf94]' : 'text-[#6b4a1a]'}`}>{selectedHero.name}</h3>
+                      <span className={`text-[11px] tracking-wider ${theme === 'dark' ? 'text-[#9a8b74]' : 'text-[#8a7a60]'}`}>
+                        {selectedHero.kingdom} · {selectedHero.maxHp} 体力 · 【{selectedHero.skillName}】
+                      </span>
+                    </div>
+                    <p className={`mt-0.5 text-xs leading-relaxed truncate ${theme === 'dark' ? 'text-[#c8bda8]' : 'text-[#5a4c38]'}`}>
+                      {selectedHero.skillDesc}
+                      {selectedHero.lordSkillName && <span className={`ml-2 ${theme === 'dark' ? 'text-[#d9b46a]' : 'text-[#8b6914]'}`}>主公技【{selectedHero.lordSkillName}】{selectedHero.lordSkillDesc}</span>}
+                    </p>
                   </div>
-                  <p className={`mt-0.5 text-xs leading-relaxed truncate ${theme === 'dark' ? 'text-[#c8bda8]' : 'text-[#5a4c38]'}`}>
-                    {selectedHero.skillDesc}
-                    {selectedHero.lordSkillName && <span className={`ml-2 ${theme === 'dark' ? 'text-[#d9b46a]' : 'text-[#8b6914]'}`}>主公技【{selectedHero.lordSkillName}】{selectedHero.lordSkillDesc}</span>}
-                  </p>
+                </>
+              ) : (
+                <div className={`flex-1 text-center text-xs md:text-sm ${theme === 'dark' ? 'text-[#9a8b74]' : 'text-[#8a7a60]'}`}>
+                  滚动浏览 {HEROES.length} 名武将 · 点选查看技能，确认后出战
                 </div>
-              </>
-            ) : (
-              <div className={`flex-1 text-center text-sm ${theme === 'dark' ? 'text-[#9a8b74]' : 'text-[#8a7a60]'}`}>
-                滚动浏览 {HEROES.length} 名武将 · 点选查看技能，确认后出战
-              </div>
-            )}
+              )}
+            </div>
 
-            <div className="flex items-center gap-2 flex-none">
+            <div className="flex items-center gap-2 flex-none w-full md:w-auto">
               <button
                 onClick={() => {
                   const pool = HEROES.filter(h => h.id !== selectedHero?.id);
                   const pick = pool[Math.floor(Math.random() * pool.length)];
                   startGame(pick);
                 }}
-                className="btn-ink flex items-center gap-1.5 px-4 py-2 rounded-lg font-ancient text-base tracking-wider"
+                className="btn-ink flex-1 md:flex-none flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg font-ancient text-base tracking-wider"
                 title="随机挑选一名武将立即出战"
               >
                 <IconDice />
@@ -5472,7 +5490,7 @@ const App: React.FC = () => {
               <button
                 onClick={() => selectedHero && startGame(selectedHero)}
                 disabled={!selectedHero}
-                className="btn-gold px-7 py-2.5 rounded-lg font-ancient text-lg tracking-[0.18em]"
+                className="btn-gold flex-1 md:flex-none px-7 py-2.5 rounded-lg font-ancient text-lg tracking-[0.18em]"
               >
                 确认出战
               </button>
@@ -5671,9 +5689,15 @@ const App: React.FC = () => {
 
   // --- 对局面板自适应 ---
   const isCompact = viewport.h > 0 && viewport.h < 780;
+  // 桌面端 1366×768 / 1440×900 等较矮屏幕：只缩小手牌，避免底部手牌被裁切
+  const isDesktopShort = viewport.w >= 768 && viewport.h > 0 && viewport.h < 960;
+  const compactHand = isCompact || isDesktopShort;
 
   return (
-    <div className={`h-screen w-full flex flex-col overflow-hidden relative ${theme === 'light' ? 'parchment-bg' : 'bg-[#1c1c1c]'}`}>
+    <div
+      className={`h-screen w-full flex flex-col overflow-hidden relative ${theme === 'light' ? 'parchment-bg' : 'bg-[#1c1c1c]'}`}
+      style={scaleStyle}
+    >
       {/* 背景轮播 - 白天模式显示 - 放在最底层 */}
       {theme === 'light' && (
         <div className="absolute inset-0" style={{ zIndex: -10 }}>
@@ -6575,8 +6599,31 @@ const App: React.FC = () => {
         </button>
       </div>
 
-      {/* Top Area: Enemies - 原版三国杀环形布局 */}
-      <div className="flex-none pt-3 pb-2 z-10 relative">
+      {/* 手机端紧凑阶段指示：放在顶部控制区中间的空档，避免压住牌桌与战报 */}
+      <div className="md:hidden absolute top-2 left-[78px] z-[230]">
+        <div className="ui-panel relative overflow-hidden flex items-center gap-1.5 h-10 px-2.5 whitespace-nowrap">
+          <span className={`text-[11px] font-bold font-ancient tracking-[0.12em] ${theme === 'dark' ? 'text-[#e8cf94]' : 'text-[#6b4a1a]'}`}>
+            {phase.replace('回合', '').replace('阶段', '')}
+          </span>
+          {decisionLeft !== null && (
+            <span className={`text-[11px] font-bold tabular-nums ${decisionLeft <= 5 ? 'text-[#e0705f] animate-pulse' : theme === 'dark' ? 'text-[#c8a45c]' : 'text-[#8b6914]'}`}>
+              {decisionLeft}s
+            </span>
+          )}
+          {decisionLeft !== null && (
+            <span className="absolute bottom-0 left-0 right-0 h-[2px] bg-white/10">
+              <span
+                className={`block h-full transition-[width] duration-200 ease-linear ${decisionLeft <= 5 ? 'bg-[#e0705f]' : 'bg-[#c8a45c]'}`}
+                style={{ width: `${Math.max(0, Math.min(100, (decisionLeft / DECISION_SECONDS) * 100))}%` }}
+              />
+            </span>
+          )}
+        </div>
+      </div>
+
+      {/* Top Area: Enemies - 原版三国杀环形布局
+          手机端顶部悬浮着托管/速度/主题按钮，座位区需让出高度，避免压住敌方武将 */}
+      <div className="flex-none pt-[52px] md:pt-3 pb-2 z-10 relative">
         {/* 顶部装饰条 */}
         <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-transparent via-yellow-700/50 to-transparent"></div>
 
@@ -6855,8 +6902,8 @@ const App: React.FC = () => {
                   {(p.equipment?.weapon || p.equipment?.armor || p.equipment?.horsePlus || p.equipment?.horseMinus) && (
                     <div className="flex items-center justify-center gap-1 mb-1 flex-wrap max-w-[120px] mx-auto">
                       {p.equipment?.weapon && (
-                        <span className="px-1 py-0.5 rounded-[3px] bg-[#2b3a2b]/80 border border-[#6a8a6a]/50 text-[#cfe8cf] text-[10px] leading-none" title={`武器：${p.equipment.weapon.name}`}>
-                          {p.equipment.weapon.name.length > 3 ? p.equipment.weapon.name.slice(0, 3) : p.equipment.weapon.name}
+                        <span className="px-1 py-0.5 rounded-[3px] bg-[#2b3a2b]/80 border border-[#6a8a6a]/50 text-[#cfe8cf] text-[10px] leading-none whitespace-nowrap" title={`武器：${p.equipment.weapon.name}`}>
+                          {p.equipment.weapon.name}
                         </span>
                       )}
                       {p.equipment?.armor && (
@@ -6988,9 +7035,9 @@ const App: React.FC = () => {
            ))}
         </div>
 
-        {/* Phase Indicator - 五阶段进度轨 */}
-        <div className="ui-panel absolute top-4 right-3 px-4 py-2.5 z-10">
-          <div className={`text-[10px] mb-1.5 tracking-[0.24em] ${theme === 'dark' ? 'text-[#9a8b74]' : 'text-[#8a7a60]'}`}>当前阶段</div>
+        {/* Phase Indicator - 五阶段进度轨（桌面端；手机端由顶部紧凑读秒替代） */}
+        <div className="hidden md:block ui-panel absolute right-3 top-4 px-4 py-2.5 z-10">
+          <div className={`hidden md:block text-[10px] mb-1.5 tracking-[0.24em] ${theme === 'dark' ? 'text-[#9a8b74]' : 'text-[#8a7a60]'}`}>当前阶段</div>
           <div className="flex items-center gap-1">
             {[GamePhase.START, GamePhase.DRAW, GamePhase.ACTION, GamePhase.DISCARD, GamePhase.END].map((ph, i) => {
               const phIndex = [GamePhase.START, GamePhase.DRAW, GamePhase.ACTION, GamePhase.DISCARD, GamePhase.END].indexOf(phase);
@@ -7170,7 +7217,7 @@ const App: React.FC = () => {
         <div className={`absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent ${theme === 'dark' ? 'via-yellow-700/30' : 'via-[#c4a77d]/30'} to-transparent`}></div>
         
         {/* 玩家信息栏：桌面端居中，与上方环形座位形成「自己在牌桌下首」的构图 */}
-        <div className="flex flex-col md:flex-row md:justify-center md:items-center gap-2 md:gap-7 px-2 md:px-4 mb-2 md:mb-3">
+        <div className="flex flex-col md:flex-row md:justify-center md:items-center gap-1 md:gap-7 px-2 md:px-4 mb-1 md:mb-3">
           {/* 玩家头像和信息 - 原版三国杀风格 */}
           <div className="flex items-center gap-4">
             <div className="relative">
@@ -8000,8 +8047,10 @@ const App: React.FC = () => {
             </div>
          </div>
 
-         {/* Hand Cards Area - 手牌区域 */}
-         <div className={`w-full overflow-x-auto overflow-y-visible px-2 sm:px-4 pb-1 scrollbar-hide flex justify-center relative ${isCompact ? 'pt-3 min-h-0' : 'pt-5 min-h-[132px] sm:min-h-[158px]'}`} style={{ zIndex: 10 }}>
+         {/* Hand Cards Area - 手牌区域
+             内层 w-max + mx-auto：牌少时居中，牌多时从左侧完整展示并可横向滚动，
+             避免 justify-center 在内容超宽时把最左边一张裁掉 */}
+         <div className={`w-full overflow-x-auto overflow-y-visible px-2 sm:px-4 pb-1 scrollbar-hide flex relative ${compactHand ? 'pt-3 min-h-0' : 'pt-4 sm:pt-5 min-h-[128px] sm:min-h-[158px]'}`} style={{ zIndex: 10 }}>
            {/* 手牌背景 - 白天模式移除遮罩 */}
            {theme === 'dark' && (
              <div className="absolute inset-x-4 bottom-0 h-32 rounded-t-2xl pointer-events-none bg-gradient-to-t from-[#0c0906]/85 to-transparent"></div>
@@ -8012,7 +8061,7 @@ const App: React.FC = () => {
              <span className={`font-ancient text-lg leading-none ${theme === 'dark' ? 'text-[#e8cf94]' : 'text-[#8b6914]'}`}>{me.hand.length}</span>
            </div>
 
-           <div className="flex -space-x-2 sm:space-x-1 md:space-x-2 items-end px-4 pb-2 relative">
+           <div className="flex -space-x-2 sm:space-x-1 md:space-x-2 items-end px-4 pb-2 relative mx-auto shrink-0 w-max">
              {me.hand.map((card, index) => {
                // Selection Logic
                const isSelected = (phase === GamePhase.DISCARD || isZhihengMode || (isLijianMode && lijianSelectedCardId === card.id) || isRendeMode)
@@ -8084,7 +8133,7 @@ const App: React.FC = () => {
                       onClick={dispatchCardClick}
                       canUseSkill={canUseLongdan}
                       skillName="龙胆"
-                      small={isCompact}
+                      small={compactHand}
                     />
                   </div>
                 </div>
