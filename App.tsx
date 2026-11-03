@@ -3,8 +3,15 @@ import { Hero, Player, Card, GamePhase, CardName, LogEntry, Identity, Suit, Card
 import { HEROES, INITIAL_DECK, EQUIP_META } from './constants';
 import { playSfx, SFX_FOR_NAME } from './src/audio/sfx';
 import { playCardVoice, playSkillVoice, playDeathVoice, hasCardVoice } from './src/audio/voice';
-import CardComponent from './components/CardComponent';
+import CardComponent, { CardArtFilters } from './components/CardComponent';
+import TutorialOverlay, { TUTORIAL_STORAGE_KEY } from './src/components/TutorialOverlay';
+import { GameSave, SAVE_VERSION, readSave, writeSave, clearSave, consumeSaveRejected, isSaveFinished } from './src/game/save';
+import { shuffle, rankValue, wuguKeepPriority } from './src/game/utils';
+import { IconSpeaker, IconSun, IconMoon, IconBolt, IconBook, IconDice, IconMotion, IconArrowLeft, ThemeIcon } from './src/components/Icons';
+import { useLayoutProfile } from './src/hooks/useLayoutProfile';
+import GameOverScreen from './src/components/GameOverScreen';
 import { useTheme } from './src/contexts/ThemeContext';
+import { WINNER_LABEL, WinnerSide, APP_VERSION, KINGDOM_CLASS } from './src/game/constants';
 import { BackgroundCarousel } from './src/components/BackgroundCarousel';
 import { BACKGROUND_IMAGES, CAROUSEL_CONFIG } from './src/config/backgrounds';
 
@@ -23,174 +30,7 @@ const BGM_TRACKS: Record<'start' | 'battle' | 'climax', string> = {
   climax: OPUS_OK ? 'audio/bgm/climax.ogg' : 'audio/bgm/climax.mp3',
 };
 
-// 胜利阵营：以阵营枚举为唯一判定依据，显示文案单独映射
-// （此前直接用 '反贼 (起义军)' 字符串与 Identity.FANZEI='反贼' 全等比较，永远不成立）
-type WinnerSide = 'lord' | 'rebel' | 'spy';
-const WINNER_LABEL: Record<WinnerSide, string> = {
-  lord: '主公 & 忠臣 (朝廷)',
-  rebel: '反贼 (起义军)',
-  spy: '内奸 (野心家)',
-};
-
-// 版本号统一维护：首页页脚、README 与发布记录都以此为准
-const APP_VERSION = 'v3.30';
-
-// 势力色：魏蓝 / 蜀红 / 吴绿 / 群金（对应 theme.css 中的 --k-main）
-const KINGDOM_CLASS: Record<string, string> = {
-  魏: 'kingdom-wei',
-  蜀: 'kingdom-shu',
-  吴: 'kingdom-wu',
-  群: 'kingdom-qun',
-};
-
-// ===== 界面图标：内联 SVG，避免各屏使用风格不一的 emoji =====
-const IconSpeaker: React.FC<{ muted?: boolean }> = ({ muted }) => (
-  <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-    <path d="M4 9.5h3.2L12 5.5v13l-4.8-4H4z" />
-    {muted
-      ? <><path d="M16.5 9.5l4.5 5" /><path d="M21 9.5l-4.5 5" /></>
-      : <><path d="M15.5 8.6a5.2 5.2 0 0 1 0 6.8" /><path d="M18.5 6a9 9 0 0 1 0 12" /></>}
-  </svg>
-);
-
-const IconSun: React.FC = () => (
-  <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" aria-hidden="true">
-    <circle cx="12" cy="12" r="4.2" />
-    <path d="M12 2.6v2.2M12 19.2v2.2M2.6 12h2.2M19.2 12h2.2M5.4 5.4l1.6 1.6M17 17l1.6 1.6M18.6 5.4L17 7M7 17L5.4 18.6" />
-  </svg>
-);
-
-const IconMoon: React.FC = () => (
-  <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-    <path d="M20.4 14.2A8.6 8.6 0 0 1 9.8 3.6 8.6 8.6 0 1 0 20.4 14.2z" />
-  </svg>
-);
-
-const IconBolt: React.FC = () => (
-  <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-    <path d="M13.5 2.5L5 14h6.2L10 21.5 19 10h-6.2z" />
-  </svg>
-);
-
-const IconBook: React.FC = () => (
-  <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-    <path d="M4.5 4.5h9a3 3 0 0 1 3 3v12a2.5 2.5 0 0 0-2.5-2.5h-9.5z" />
-    <path d="M19 19.5a2.5 2.5 0 0 0-2.5-2.5H4.5V4.5" />
-  </svg>
-);
-
-const IconDice: React.FC = () => (
-  <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" aria-hidden="true">
-    <rect x="3.5" y="3.5" width="17" height="17" rx="3" />
-    <circle cx="8.4" cy="8.4" r="1.15" fill="currentColor" stroke="none" />
-    <circle cx="15.6" cy="8.4" r="1.15" fill="currentColor" stroke="none" />
-    <circle cx="12" cy="12" r="1.15" fill="currentColor" stroke="none" />
-    <circle cx="8.4" cy="15.6" r="1.15" fill="currentColor" stroke="none" />
-    <circle cx="15.6" cy="15.6" r="1.15" fill="currentColor" stroke="none" />
-  </svg>
-);
-
-// 动效开关图标：三道风线；关闭时加斜杠
-const IconMotion: React.FC<{ off?: boolean }> = ({ off }) => (
-  <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" aria-hidden="true">
-    <path d="M4 8h9.5a2.5 2.5 0 1 0-2.4-3.2" />
-    <path d="M4 12.5h13.5a2.5 2.5 0 1 1-2.4 3.2" />
-    <path d="M4 17h6.5" />
-    {off && <path d="M3 21L21 3" strokeWidth="2" />}
-  </svg>
-);
-
-const IconArrowLeft: React.FC = () => (
-  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-    <path d="M19 12H5M11 6l-6 6 6 6" />
-  </svg>
-);
-
-const ThemeIcon: React.FC<{ theme: 'dark' | 'light' }> = ({ theme }) => theme === 'dark' ? <IconSun /> : <IconMoon />;
-
-// ===== 对局存档 =====
-// 只在「回合开始」这类安全节点落盘：恢复时从该回合开头重放，
-// 不会重复摸牌、重复发动回合开始技能
-const SAVE_KEY = 'sgs-save-v1';
-const SAVE_VERSION = 1;
-let saveRejected = false;
-
-interface GameSave {
-  v: number;
-  ts: number;
-  playerCount: 5 | 7;
-  players: Player[];
-  deck: Card[];
-  discardPile: Card[];
-  turnIndex: number;
-  logs: LogEntry[];
-}
-
-// 存档是否已经是「已结束」状态：人类阵亡、主公阵亡、或反贼清空且内奸阵亡
-// 这类存档不应该再出现在首页「继续上一局」，否则会进入一局无人可控的 AI 自走棋
-const isSaveFinished = (s: GameSave): boolean => {
-  const human = s.players.find(p => p?.isHuman);
-  if (!human || human.isDead) return true;
-  const lord = s.players.find(p => p.identity === Identity.ZHUGONG);
-  if (!lord || lord.isDead) return true;
-  const aliveRebels = s.players.filter(p => p.identity === Identity.FANZEI && !p.isDead);
-  const spy = s.players.find(p => p.identity === Identity.NEIJIAN);
-  if (aliveRebels.length === 0 && (!spy || spy.isDead)) return true;
-  return false;
-};
-
-const readSave = (): GameSave | null => {
-  try {
-    const raw = localStorage.getItem(SAVE_KEY);
-    if (!raw) return null;
-    const s = JSON.parse(raw) as GameSave;
-    if (s?.v !== SAVE_VERSION) return null;
-    if (!Array.isArray(s.players) || s.players.length < 5) return null;
-    if (!s.players.some(p => p?.isHuman) || !Array.isArray(s.deck)) return null;
-    if (typeof s.turnIndex !== 'number' || s.turnIndex < 0 || s.turnIndex >= s.players.length) return null;
-    // 已结束的局直接清掉，避免结算后仍能续上一局
-    if (isSaveFinished(s)) {
-      try { localStorage.removeItem(SAVE_KEY); } catch { /* ignore */ }
-      saveRejected = true;
-      return null;
-    }
-    return s;
-  } catch {
-    return null;
-  }
-};
-
-// 供首页提示「上一局已结束」：只消费一次
-export const consumeSaveRejected = () => {
-  const v = saveRejected;
-  saveRejected = false;
-  return v;
-};
-
-const writeSave = (s: GameSave) => {
-  try {
-    localStorage.setItem(SAVE_KEY, JSON.stringify(s));
-    return true;
-  } catch {
-    return false;
-  }
-};
-
-const clearSave = () => {
-  try { localStorage.removeItem(SAVE_KEY); } catch { /* ignore */ }
-};
-
-// 五谷丰登取牌优先级（数值越小越优先）
-const wuguKeepPriority = (c: Card): number => {
-  switch (c.name) {
-    case CardName.TAO: return 0;
-    case CardName.WUZHONG: return 1;
-    case CardName.SHAN: return 2;
-    case CardName.SHA: return 3;
-    case CardName.JIU: return 4;
-    default: return c.type === CardType.EQUIPMENT ? 6 : 5;
-  }
-};
+// 界面图标已拆分到 src/components/Icons.tsx
 
 // 全局类型声明
 declare global {
@@ -201,27 +41,6 @@ declare global {
 }
 
 
-// Fisher-Yates shuffle
-function shuffle<T>(array: T[]): T[] {
-  const shuffled = [...array];
-  let currentIndex = shuffled.length, randomIndex;
-  while (currentIndex !== 0) {
-    randomIndex = Math.floor(Math.random() * currentIndex);
-    currentIndex--;
-    [shuffled[currentIndex], shuffled[randomIndex]] = [shuffled[randomIndex], shuffled[currentIndex]];
-  }
-  return shuffled;
-}
-
-// 拼点用点数大小
-const rankValue = (rank: string): number => {
-  if (rank === 'A') return 1;
-  if (rank === 'J') return 11;
-  if (rank === 'Q') return 12;
-  if (rank === 'K') return 13;
-  return parseInt(rank, 10) || 0;
-};
-
 const App: React.FC = () => {
   // --- Theme ---
   const { theme, toggleTheme } = useTheme();
@@ -231,48 +50,8 @@ const App: React.FC = () => {
   const [selectedHero, setSelectedHero] = useState<Hero | null>(null);
   const [playerCount, setPlayerCount] = useState<5 | 7>(5); // 游戏人数选择
   
-  // 牌桌设计高度：对局界面按此高度排布，视口更矮时整体等比缩放，保证单页完整可见
-  const [viewport, setViewport] = useState(() => ({
-    w: typeof window === 'undefined' ? 0 : window.innerWidth,
-    h: typeof window === 'undefined' ? 0 : window.innerHeight,
-  }));
-  useEffect(() => {
-    const update = () => setViewport({ w: window.innerWidth, h: window.innerHeight });
-    window.addEventListener('resize', update);
-    window.addEventListener('orientationchange', update);
-    return () => {
-      window.removeEventListener('resize', update);
-      window.removeEventListener('orientationchange', update);
-    };
-  }, []);
-
-  // 手机端仅在较矮视口（<720）做整页缩放兜底；≥720 的常规手机交给密度分档，
-  // 保证 390×844 这类主流尺寸的触控热区不被缩小
-  const uiScale = viewport.w > 0 && viewport.w < 768 && viewport.h > 0 && viewport.h < 720
-    ? Math.max(0.68, Math.min(1, viewport.h / 840))
-    : 1;
-  const scaleStyle: React.CSSProperties | undefined = uiScale < 1 ? {
-    // fixed 让缩放后的元素脱离文档流，避免 body 被撑高后出现「越滚越空」的空白区
-    position: 'fixed',
-    top: 0,
-    left: 0,
-    width: `${Math.round(viewport.w / uiScale)}px`,
-    height: `${Math.round(viewport.h / uiScale)}px`,
-    transform: `scale(${uiScale})`,
-    transformOrigin: 'top left',
-  } : undefined;
-
-  // 按可视高度分档控制关键区域尺寸（不再依赖全局缩放）：
-  // ultra <660 / tight <760 / compact <860 / normal <960 / roomy ≥960
-  const layoutDensity: 'ultra' | 'tight' | 'compact' | 'normal' | 'roomy' =
-    viewport.h > 0 && viewport.h < 660 ? 'ultra'
-      : viewport.h < 760 ? 'tight'
-        : viewport.h < 860 ? 'compact'
-          : viewport.h < 960 ? 'normal'
-            : 'roomy';
-  // 宽屏分档：高分屏/大显示器上放大核心区，避免 1600+ 视口出现「字小如蚁」
-  const sizeTier: 'md' | 'lg' | 'xl' =
-    viewport.w >= 1800 ? 'xl' : viewport.w >= 1440 ? 'lg' : 'md';
+  // 视口分档（CSS 像素）：高分屏换算、密度档、宽屏档统一在 useLayoutProfile 里维护
+  const { viewport, uiScale, scaleStyle, layoutDensity, sizeTier } = useLayoutProfile();
 
 
   // --- Game State ---
@@ -508,6 +287,11 @@ const App: React.FC = () => {
   const [homeNotice, setHomeNotice] = useState<string | null>(null);
   // 防止结算页「再来一局」被连点开两局
   const startGuardRef = useRef<number>(0);
+
+  // --- 新手引导 ---
+  // 引导期间冻结主循环与读秒，只高亮真实控件，不改变任何对局数据
+  const [tutorialActive, setTutorialActive] = useState<boolean>(false);
+  const tutorialHeroRef = useRef<Hero | null>(null);
 
   // 首页提示自动消失，避免长期占位
   useEffect(() => {
@@ -949,7 +733,8 @@ const App: React.FC = () => {
     }
   };
 
-  const startGame = (hero: Hero) => {
+  const startGame = (hero: Hero, opts?: { playerCount?: 5 | 7; tutorial?: boolean }) => {
+    const totalPlayers: 5 | 7 = opts?.playerCount ?? playerCount;
     initAudio();
     isGameOverRef.current = false; // 重置结束标志，支持"再来一局"
     turnStepRef.current = '';
@@ -976,7 +761,7 @@ const App: React.FC = () => {
     
     // 根据人数分配身份
     let identities: Identity[];
-    if (playerCount === 5) {
+    if (totalPlayers === 5) {
       // 5人局: 1主公, 1忠臣, 2反贼, 1内奸
       identities = [Identity.ZHUGONG, Identity.ZHONGCHEN, Identity.FANZEI, Identity.FANZEI, Identity.NEIJIAN];
     } else {
@@ -990,11 +775,19 @@ const App: React.FC = () => {
       [identities[i], identities[j]] = [identities[j], identities[i]];
     }
 
+    // 新手引导固定人类主公：保证开局就是「我的回合」，且文案与实际身份一致
+    if (opts?.tutorial) {
+      const lordIdx = identities.indexOf(Identity.ZHUGONG);
+      if (lordIdx > 0) {
+        [identities[0], identities[lordIdx]] = [identities[lordIdx], identities[0]];
+      }
+    }
+
     // Heroes
     const otherHeroes = HEROES.filter(h => h.id !== hero.id).sort(() => Math.random() - 0.5);
     const newPlayers: Player[] = [];
 
-    for (let i = 0; i < playerCount; i++) {
+    for (let i = 0; i < totalPlayers; i++) {
       const isHuman = i === 0;
       const assignedHero = isHuman ? hero : otherHeroes[i - 1];
       const identity = identities[i];
@@ -1033,7 +826,7 @@ const App: React.FC = () => {
     const lordIndex = newPlayers.findIndex(p => p.identity === Identity.ZHUGONG);
     setTurnIndex(lordIndex);
     
-    const initLogs: LogEntry[] = [{ id: 'init', text: `${playerCount}人军争模式启动！主公已现身，请各方势力准备。`, type: 'info' }];
+    const initLogs: LogEntry[] = [{ id: 'init', text: `${totalPlayers}人军争模式启动！主公已现身，请各方势力准备。`, type: 'info' }];
     setLogs(initLogs);
     setPhase(GamePhase.START);
     setScreen('game');
@@ -1042,7 +835,7 @@ const App: React.FC = () => {
     const snap: GameSave = {
       v: SAVE_VERSION,
       ts: Date.now(),
-      playerCount,
+      playerCount: totalPlayers,
       players: newPlayers,
       deck: shuffledDeck,
       discardPile: [],
@@ -1150,6 +943,53 @@ const App: React.FC = () => {
     setPhase(GamePhase.START);
     setScreen('game');
   };
+
+  // --- 新手引导 ---
+  // 引导不是「假界面」：直接开一局真实对局，由浮层高亮真实控件；主循环与读秒在此期间冻结
+  const screenRef = useRef(screen);
+  useEffect(() => {
+    screenRef.current = screen;
+  }, [screen]);
+
+  const startTutorial = () => {
+    const hero = HEROES.find(h => h.name === '刘备') || HEROES[0];
+    tutorialHeroRef.current = hero;
+    setTutorialActive(true);
+    startGame(hero, { playerCount: 5, tutorial: true });
+  };
+
+  // 看完：记录「已看过」，并重开一局干净对局，避免引导期间的任何状态残留
+  const finishTutorial = () => {
+    try { localStorage.setItem(TUTORIAL_STORAGE_KEY, '1'); } catch { /* ignore */ }
+    setTutorialActive(false);
+    startGame(tutorialHeroRef.current || HEROES[0], { playerCount: 5 });
+  };
+
+  // 跳过：记录「已看过」，退出引导局并回到首页（不留存档）
+  const skipTutorial = () => {
+    try { localStorage.setItem(TUTORIAL_STORAGE_KEY, '1'); } catch { /* ignore */ }
+    setTutorialActive(false);
+    exitToHome('已跳过新手引导，可随时在首页重新打开');
+  };
+
+  // 首次进入自动走一遍；已看过 / 有战绩 / 有存档时不再打扰
+  // 注意：StrictMode 会「执行→清理→再执行」effect，所以这里不能用 ref 去重，
+  // 否则第二次执行会被 ref 挡掉、定时器也被第一次的清理取消，导致引导永远不启动
+  useEffect(() => {
+    let seen = true;
+    try { seen = localStorage.getItem(TUTORIAL_STORAGE_KEY) === '1'; } catch { /* ignore */ }
+    if (seen || savedGame) return;
+    let hasStats = false;
+    try { hasStats = !!localStorage.getItem('sgs-stats'); } catch { /* ignore */ }
+    if (hasStats) return;
+    const t = window.setTimeout(() => {
+      // 玩家已经自己点进选将/对局时不再抢焦点
+      if (screenRef.current !== 'start') return;
+      startTutorial();
+    }, 900);
+    return () => window.clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // --- Core Game Functions ---
 
@@ -1343,6 +1183,8 @@ const App: React.FC = () => {
     if (screen !== 'game') return;
     // 结算/退出后立即停止推进：避免结算 3 秒内继续开新回合、写存档、开下一局
     if (isGameOverRef.current) return;
+    // 新手引导期间冻结对局：只高亮界面，不让 AI/阶段推进偷偷改变状态
+    if (tutorialActive) return;
     if (checkGameOver()) return;
     if (isProcessing) return; // 如果正在处理异步效果，暂停游戏主循环推进
 
@@ -1728,13 +1570,14 @@ const App: React.FC = () => {
       setPhase(GamePhase.END);
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phase, turnIndex, screen, isAiTakeover, isProcessing]); 
+  }, [phase, turnIndex, screen, isAiTakeover, isProcessing, tutorialActive]); 
 
   // 人类决策读秒：出牌 / 弃牌阶段 20 秒未操作则自动处理，避免对局永久卡住
   useEffect(() => {
     const human = players.find(p => p.isHuman);
     const shouldCount =
       screen === 'game' &&
+      !tutorialActive &&
       !isAiTakeover &&
       phase === GamePhase.ACTION &&
       !!human && !human.isDead && turnIndex === human.id &&
@@ -1744,6 +1587,7 @@ const App: React.FC = () => {
       isProcessing === 0;
     const shouldCountDiscard =
       screen === 'game' &&
+      !tutorialActive &&
       !isAiTakeover &&
       phase === GamePhase.DISCARD &&
       !!human && !human.isDead && turnIndex === human.id &&
@@ -1773,7 +1617,7 @@ const App: React.FC = () => {
       window.clearInterval(tick);
       setDecisionLeft(null);
     };
-  }, [screen, isAiTakeover, phase, turnIndex, players, dyingState, pendingReaction, showSkillModal, wuguSelection, isProcessing, showRules, showDiscardViewer, inspectPlayerId]);
+  }, [screen, isAiTakeover, phase, turnIndex, players, dyingState, pendingReaction, showSkillModal, wuguSelection, isProcessing, showRules, showDiscardViewer, inspectPlayerId, tutorialActive]);
 
   // 五谷丰登选牌同样读秒：超时自动取第一张，避免对局停在此处
   useEffect(() => {
@@ -1967,6 +1811,8 @@ const App: React.FC = () => {
         return;
       }
       if (screen !== 'game') return;
+      // 新手引导浮层接管键盘（Enter/Esc 用于引导本身），不再驱动对局
+      if (tutorialActive) return;
       if (dyingState || pendingReaction || showSkillModal || wuguSelection || isAiTakeover) return;
       // 弹窗打开时不响应快捷键，避免关着说明弹窗也能出牌
       if (showRules || showDiscardViewer || advice || inspectPlayerId !== null) return;
@@ -2006,7 +1852,7 @@ const App: React.FC = () => {
     window.addEventListener('keydown', onHotkey);
     return () => window.removeEventListener('keydown', onHotkey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [screen, phase, turnIndex, players, selectedCardIds, dyingState, pendingReaction, showSkillModal, wuguSelection, isAiTakeover, isProcessing, showRules, showDiscardViewer, advice, inspectPlayerId]);
+  }, [screen, phase, turnIndex, players, selectedCardIds, dyingState, pendingReaction, showSkillModal, wuguSelection, isAiTakeover, isProcessing, showRules, showDiscardViewer, advice, inspectPlayerId, tutorialActive]);
 
   const clickGuard = useRef(false);
   const handleCardClick = (card: Card, e?: React.MouseEvent) => {
@@ -5166,6 +5012,7 @@ const App: React.FC = () => {
     setActiveSelectedId(null);
     setIsSelectingTarget(false);
     setIsAiTakeover(false);
+    setTutorialActive(false);
     setShowExitConfirm(false);
     setShowRules(false);
     setShowDiscardViewer(false);
@@ -5394,6 +5241,11 @@ const App: React.FC = () => {
                   </button>
                 );
               })()}
+
+              <button onClick={startTutorial} className="ui-text-btn">
+                <IconDice />
+                <span>新手教学</span>
+              </button>
 
               <button onClick={() => setShowRules(true)} className="ui-text-btn">
                 <IconBook />
@@ -5728,177 +5580,26 @@ const App: React.FC = () => {
 
   if (screen === 'gameover') {
     return (
-      <div data-motion={motionOn ? 'on' : 'off'} className={`min-h-screen w-full flex flex-col items-center justify-center text-center p-4 pb-28 relative overflow-y-auto ${theme === 'light' ? 'parchment-bg' : 'bg-black'}`}>
-         {/* 背景轮播 - 白天模式显示 */}
-         {theme === 'light' && (
-           <BackgroundCarousel 
-             images={BACKGROUND_IMAGES}
-             interval={CAROUSEL_CONFIG.interval}
-           />
-         )}
-         
-         {/* Background Effects - 根据主题切换 */}
-         {theme === 'dark' ? (
-           <>
-             {/* 羊皮纸纹理层 */}
-             <div className="absolute inset-0 bg-gradient-to-br from-[#1a1410] via-[#2d2418] to-[#1a1410]"></div>
-             
-             <div 
-               className="absolute inset-0 opacity-40"
-               style={{
-                 backgroundImage: `url("data:image/svg+xml,%3Csvg width='400' height='400' viewBox='0 0 400 400' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E")`,
-                 mixBlendMode: 'overlay'
-               }}
-             ></div>
-             
-             {/* 古风纹理图案 */}
-             <div 
-               className="absolute inset-0 opacity-20"
-               style={{
-                 backgroundImage: `url("data:image/svg+xml,%3Csvg width='100' height='100' viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M20,20 Q40,5 60,20 T100,20 M20,50 Q40,35 60,50 T100,50 M20,80 Q40,65 60,80 T100,80' stroke='%23d4af37' stroke-width='0.5' fill='none' opacity='0.3'/%3E%3C/svg%3E")`
-               }}
-             ></div>
-             
-             {/* 原版三国杀风格边框装饰 */}
-             <div className="absolute inset-4 border-2 border-[#8b7355]/30 rounded-lg pointer-events-none"></div>
-             <div className="absolute inset-6 border border-[#8b7355]/20 rounded-lg pointer-events-none"></div>
-             
-             {/* 四角装饰 */}
-             <div className="absolute top-4 left-4 w-16 h-16 border-l-2 border-t-2 border-[#d4af37]/50 rounded-tl-lg pointer-events-none"></div>
-             <div className="absolute top-4 right-4 w-16 h-16 border-r-2 border-t-2 border-[#d4af37]/50 rounded-tr-lg pointer-events-none"></div>
-             <div className="absolute bottom-4 left-4 w-16 h-16 border-l-2 border-b-2 border-[#d4af37]/50 rounded-bl-lg pointer-events-none"></div>
-             <div className="absolute bottom-4 right-4 w-16 h-16 border-r-2 border-b-2 border-[#d4af37]/50 rounded-br-lg pointer-events-none"></div>
-           </>
-         ) : (
-           <>
-             {/* 白天模式装饰边框 */}
-             <div className="absolute inset-4 border-2 border-[#c4a77d]/30 rounded-lg pointer-events-none z-10"></div>
-             <div className="absolute inset-6 border border-[#c4a77d]/20 rounded-lg pointer-events-none z-10"></div>
-             
-             {/* 四角装饰 */}
-             <div className="absolute top-4 left-4 w-16 h-16 border-l-2 border-t-2 border-[#c4a77d]/40 rounded-tl-lg pointer-events-none z-10"></div>
-             <div className="absolute top-4 right-4 w-16 h-16 border-r-2 border-t-2 border-[#c4a77d]/40 rounded-tr-lg pointer-events-none z-10"></div>
-             <div className="absolute bottom-4 left-4 w-16 h-16 border-l-2 border-b-2 border-[#c4a77d]/40 rounded-bl-lg pointer-events-none z-10"></div>
-             <div className="absolute bottom-4 right-4 w-16 h-16 border-r-2 border-b-2 border-[#c4a77d]/40 rounded-br-lg pointer-events-none z-10"></div>
-           </>
-         )}
-
-         {/* 音乐控制按钮 */}
-         <div className="absolute top-4 right-4 z-50">
-           <button
-             onClick={toggleMute}
-             className="ui-icon-btn"
-             title={isMuted ? '开启音乐' : '静音'}
-             aria-label={isMuted ? '开启音乐' : '静音'}
-           >
-             <IconSpeaker muted={isMuted} />
-           </button>
-         </div>
-
-         <div className={`absolute top-1/3 left-1/4 w-96 h-96 rounded-full blur-[120px] ${theme === 'dark' ? 'bg-red-900/10' : 'bg-red-500/5'}`}></div>
-         <div className={`absolute bottom-1/3 right-1/4 w-96 h-96 rounded-full blur-[120px] ${theme === 'dark' ? 'bg-yellow-900/10' : 'bg-amber-500/5'}`}></div>
-
-         {/* 胜负判定横幅 */}
-         {(() => {
-           const myIdentity = players.find(p => p.isHuman)?.identity;
-           const isVictory = winnerSide !== null && myIdentity !== undefined && (
-             (winnerSide === 'rebel' && myIdentity === Identity.FANZEI) ||
-             (winnerSide === 'lord' && (myIdentity === Identity.ZHUGONG || myIdentity === Identity.ZHONGCHEN)) ||
-             (winnerSide === 'spy' && myIdentity === Identity.NEIJIAN)
-           );
-           return (
-             <div className={`z-20 mb-6 px-10 py-3 rounded-lg border-2 font-ancient text-3xl md:text-4xl tracking-[0.3em] shadow-[0_10px_40px_rgba(0,0,0,0.5)] animate-fade-in-scale ${
-               isVictory
-                 ? 'bg-gradient-to-b from-[#c9a227] to-[#9a7a1a] text-[#fff8e0] border-[#f4d03f] shadow-[0_0_40px_rgba(212,175,55,0.4)]'
-                 : 'bg-gradient-to-b from-stone-700 to-stone-900 text-stone-300 border-stone-500'
-             }`}>
-               {isVictory ? '大 获 全 胜' : '败 走 麦 城'}
-             </div>
-           );
-         })()}
-
-         <h1 className={`font-ancient text-6xl md:text-8xl mb-4 z-10 drop-shadow-2xl relative ${theme === 'light' ? 'text-[#8b6914]' : 'text-[#d9b85c]'}`}>
-           游戏结束
-           <span className="absolute -inset-4 bg-yellow-600/10 blur-xl rounded-lg"></span>
-         </h1>
-         <h2 className={`text-3xl md:text-4xl font-ancient mb-6 z-10 border-b pb-3 ${theme === 'dark' ? 'text-stone-200 border-[#8b7355]/50' : 'text-[#2d2a26] border-[#c4a77d]'}`}>
-           获胜方：<span className={theme === 'dark' ? 'text-[#e0705f]' : 'text-[#9e2b25]'}>{winnerSide ? WINNER_LABEL[winnerSide] : ''}</span>
-         </h2>
-         
-         <div className="z-10 modal-shell rounded-xl p-5 md:p-6 mb-6 max-w-3xl w-full">
-           <h3 className="modal-title text-2xl font-ancient mb-1 text-center">玩家身份</h3>
-           <div className="modal-divider mb-4" />
-           <div className="flex flex-wrap justify-center gap-3">
-             {players.map((player, idx) => (
-               <div
-                 key={player.id}
-                 className={`reveal-card flex flex-col items-center p-3 rounded-xl border transition-all duration-300 w-24
-                   ${player.isDead
-                     ? 'bg-black/45 border-[#9e2b25]/60 opacity-70 grayscale'
-                     : 'bg-black/25 border-[#8b7355]/35 hover:border-[#c8a45c]/70 hover:bg-black/35'
-                   }
-                 `}
-                 style={{ animationDelay: `${idx * 90}ms` }}
-               >
-                 <img src={player.hero.avatarUrl} alt={player.hero.name} loading="lazy" decoding="async" className={`w-16 h-16 rounded-full mb-3 border-2 object-cover ${player.isDead ? 'border-[#9e2b25]/60 grayscale' : 'border-[#c8a45c]/55'}`} />
-                 <div className="text-lg modal-text font-bold mb-2">
-                   {player.hero.name}
-                 </div>
-                 <div className={`text-base font-ancient px-3 py-1 rounded-full
-                   ${player.isDead
-                     ? 'bg-red-900/60 text-red-300'
-                     : player.identity === Identity.ZHUGONG ? 'bg-yellow-700/60 text-yellow-300' :
-                       player.identity === Identity.ZHONGCHEN ? 'bg-blue-800/60 text-blue-300' :
-                       player.identity === Identity.FANZEI ? 'bg-red-800/60 text-red-300' :
-                       'bg-purple-800/60 text-purple-300'
-                   }
-                 `}>
-                   {player.isRevealed ? player.identity : '未知'}
-                 </div>
-                 <div className={`text-sm mt-2 ${player.isDead ? 'text-red-500' : 'text-green-500'}`}>
-                   {player.isDead ? '阵亡' : '存活'}
-                 </div>
-               </div>
-             ))}
-           </div>
-
-           {/* 结算收尾：牌堆与弃牌堆余量，用牌背小方块延续牌堆视觉 */}
-           <div className="mt-6 pt-4 border-t border-[#8b7355]/30 flex flex-wrap items-center justify-center gap-x-10 gap-y-3 text-sm">
-             <span className="flex items-center gap-2">
-               <span
-                 className="w-4 h-6 rounded-[2px] border border-[#8b7355]/60 shadow-[0_2px_6px_rgba(0,0,0,0.5)]"
-                 style={{ background: 'linear-gradient(155deg,#2b2320 0%,#221b18 55%,#151110 100%)' }}
-               />
-               <span className="modal-text-dim">牌堆剩余 <b className="font-ancient text-[#e8cf94] text-base">{deck.length}</b> 张</span>
-             </span>
-             <span className="flex items-center gap-2">
-               <span className="w-4 h-6 rounded-[2px] border border-[#6a5642]/60 bg-[#221b16] shadow-[0_2px_6px_rgba(0,0,0,0.4)]" />
-               <span className="modal-text-dim">弃牌堆 <b className="font-ancient text-[#e8cf94] text-base">{discardPile.length}</b> 张</span>
-             </span>
-           </div>
-         </div>
-
-         <div className={`fixed inset-x-0 bottom-0 z-30 w-full flex flex-wrap justify-center gap-3 px-4 py-4 bg-gradient-to-t ${theme === 'dark' ? 'from-black/90 via-black/70 to-transparent' : 'from-[#f5f0eb]/95 via-[#f5f0eb]/80 to-transparent'}`}>
-           <button
-            onClick={() => {
-              // 连点「再来一局」只生效一次，避免一次开出两局
-              if (Date.now() - startGuardRef.current < 600) return;
-              startGuardRef.current = Date.now();
-              const myHero = players.find(p => p.isHuman)?.hero;
-              if (myHero) startGame(myHero);
-            }}
-            className="btn-gold z-10 px-8 py-3 min-h-[48px] font-ancient text-xl md:text-2xl rounded-lg"
-          >
-            再来一局
-          </button>
-           <button
-            onClick={() => exitToHome('已返回主页')}
-            className="btn-ink z-10 px-8 py-3 min-h-[48px] font-ancient text-xl md:text-2xl rounded-lg"
-          >
-            返回主页
-          </button>
-         </div>
-      </div>
+      <GameOverScreen
+        players={players}
+        winnerSide={winnerSide}
+        deckCount={deck.length}
+        discardCount={discardPile.length}
+        logs={logs}
+        stats={stats}
+        theme={theme}
+        isMuted={isMuted}
+        toggleMute={toggleMute}
+        motionOn={motionOn}
+        onRestart={() => {
+          // 连点「再来一局」只生效一次，避免一次开出两局
+          if (Date.now() - startGuardRef.current < 600) return;
+          startGuardRef.current = Date.now();
+          const myHero = players.find(p => p.isHuman)?.hero;
+          if (myHero) startGame(myHero);
+        }}
+        onHome={() => exitToHome('已返回主页')}
+      />
     );
   }
 
@@ -5929,6 +5630,9 @@ const App: React.FC = () => {
       className={`h-screen w-full flex flex-col overflow-hidden relative ${theme === 'light' ? 'parchment-bg' : 'bg-[#1c1c1c]'}`}
       style={scaleStyle}
     >
+      {/* 卡面锐化滤镜：全局只挂一份，供所有 CardComponent 引用 */}
+      <CardArtFilters />
+
       {/* 背景轮播 - 白天模式显示 - 放在最底层 */}
       {theme === 'light' && (
         <div className="absolute inset-0" style={{ zIndex: -10 }}>
@@ -6820,6 +6524,7 @@ const App: React.FC = () => {
       {/* 常驻托管开关：z-index 高于所有弹窗，响应求闪 / 五谷丰登等弹窗期间也能直接点 */}
       <div className="absolute top-2 left-2 z-[230] flex items-center gap-2">
         <button
+          data-tour="takeover"
           onClick={() => setIsAiTakeover(!isAiTakeover)}
           title={isAiTakeover ? '关闭托管，亲自操作' : '开启托管，由 AI 代打（弹窗期间点击也会立即接管）'}
           aria-pressed={isAiTakeover}
@@ -7570,7 +7275,7 @@ const App: React.FC = () => {
                   </div>
                   
                   {/* 身份标识：朱印方章 */}
-                  <div className={`
+                  <div data-tour="identity" className={`
                     absolute -bottom-2 -right-2 w-7 h-7 flex items-center justify-center rounded-[4px] rotate-3 font-bold text-[11px] border shadow-md
                     ${me.identity === Identity.ZHUGONG ? 'bg-[#c8a45c] border-[#e8cf94] text-[#2a1f14]' :
                       me.identity === Identity.ZHONGCHEN ? 'bg-[#8a5a20] border-[#c8a45c]/70 text-[#f7e7cf]' :
@@ -7587,7 +7292,7 @@ const App: React.FC = () => {
                 
                 {/* 回合指示器 */}
                 {isMyTurn && (
-                  <div className="absolute -top-4 left-1/2 -translate-x-1/2 z-30">
+                  <div data-tour="turn" className="absolute -top-4 left-1/2 -translate-x-1/2 z-30">
                     <div className="bg-[#9e2b25] text-[#f7e7cf] text-[11px] px-4 py-0.5 rounded-full font-bold shadow-[0_2px_12px_rgba(158,43,37,0.55)] border border-[#c86b62]/70 whitespace-nowrap tracking-widest">
                       我的回合
                     </div>
@@ -7665,7 +7370,7 @@ const App: React.FC = () => {
               </div>
 
               {/* 我的装备区 */}
-              <div className="flex items-center gap-1.5 mt-2 flex-wrap">
+              <div data-tour="equipment" className="flex items-center gap-1.5 mt-2 flex-wrap">
                 <span className={`text-xs ${theme === 'dark' ? 'text-[#8f806a]' : 'text-[#8a7a60]'}`}>装备</span>
                 {me.equipment?.weapon ? (
                   <span className="px-2 py-0.5 rounded-[4px] bg-[#2b3a2b]/80 border border-[#6a8a6a]/60 text-[#cfe8cf] text-[11px] font-bold" title={EQUIP_META[me.equipment.weapon.name]?.desc}>
@@ -7692,7 +7397,7 @@ const App: React.FC = () => {
           </div>
             
             {/* Control Buttons - 操作按钮：托管已统一放在左上角，避免重复入口 */}
-            <div className="action-bar flex flex-wrap gap-2 md:gap-3 items-center relative z-40">
+            <div data-tour="action-bar" className="action-bar flex flex-wrap gap-2 md:gap-3 items-center relative z-40">
               <div className="ui-panel flex flex-wrap items-center gap-2 p-2">
                 {/* Action Buttons */}
                 {isMyTurn && phase === GamePhase.ACTION && !isAiTakeover && (
@@ -8230,6 +7935,7 @@ const App: React.FC = () => {
                        
                        {/* End Turn - 结束回合按钮 */}
                       <button 
+                        data-tour="end-turn"
                         onClick={endTurn}
                         disabled={!!dyingState || isProcessing}
                         className={`btn-ink px-6 py-2 rounded-lg text-lg font-ancient tracking-[0.1em] border
@@ -8391,6 +8097,11 @@ const App: React.FC = () => {
            </div>
          </div>
       </div>
+
+      {/* 新手引导：高亮真实控件，不改变对局状态 */}
+      {tutorialActive && (
+        <TutorialOverlay onFinish={finishTutorial} onSkip={skipTutorial} />
+      )}
 
       {/* 退出对局确认：明确告知会清档，避免误触后无法恢复 */}
       {showExitConfirm && (
