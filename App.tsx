@@ -214,6 +214,10 @@ const App: React.FC = () => {
     ? Math.max(0.7, Math.min(1, viewport.h / 820))
     : 1;
   const scaleStyle: React.CSSProperties | undefined = uiScale < 1 ? {
+    // fixed 让缩放后的元素脱离文档流，避免 body 被撑高后出现「越滚越空」的空白区
+    position: 'fixed',
+    top: 0,
+    left: 0,
     width: `${Math.round(viewport.w / uiScale)}px`,
     height: `${Math.round(viewport.h / uiScale)}px`,
     transform: `scale(${uiScale})`,
@@ -501,6 +505,8 @@ const App: React.FC = () => {
   const turnStepRef = useRef<string>('');
   // AI 回合节奏：1 倍速下额外放慢，2/3 倍速保持原速
   const aiTurnActiveRef = useRef<boolean>(false);
+  // 铁索连环当前传导波次已结算的角色 id（见 takeDamage 注释）
+  const chainWaveRef = useRef<Set<number> | null>(null);
 
   // --- Helpers ---
   // delay 受全局速度倍率控制：2x/3x 下 AI 结算节奏等比加快
@@ -587,7 +593,10 @@ const App: React.FC = () => {
   const mutateHand = useCallback((id: number, fn: (hand: Card[]) => Card[]) => {
     setPlayers(prev => {
       const target = prev.find(p => p.id === id);
-      const nextHand = target ? fn(target.hand) : [];
+      const rawHand = target ? fn(target.hand) : [];
+      // 防御性去重：同一张牌（同 id）不应在一手牌里出现两次，否则会重复渲染/重复出牌
+      const seen = new Set<string>();
+      const nextHand = rawHand.filter(c => (seen.has(c.id) ? false : (seen.add(c.id), true)));
       const lostLast = !!target && target.hero.name === '陆逊' && !target.isDead
         && target.hand.length > 0 && nextHand.length === 0;
       const updated = prev.map(p => p.id === id ? { ...p, hand: nextHand } : p);
@@ -712,7 +721,10 @@ const App: React.FC = () => {
     setPlayers(prev => {
       const updated = prev.map(p => {
         if (p.id === playerId) {
-          return { ...p, hand: [...p.hand, ...drawn] };
+          // 防御性去重：牌堆若因历史存档/异常路径出现同 id 卡牌，不让它进入手牌两次
+          const seen = new Set(p.hand.map(c => c.id));
+          const fresh = drawn.filter(c => (seen.has(c.id) ? false : (seen.add(c.id), true)));
+          return { ...p, hand: [...p.hand, ...fresh] };
         }
         return p;
       });
@@ -862,6 +874,22 @@ const App: React.FC = () => {
     isGameOverRef.current = false; // 重置结束标志，支持"再来一局"
     turnStepRef.current = '';
     aiTurnActiveRef.current = false;
+    chainWaveRef.current = null;
+    // 开新局前结束所有挂起的旧交互，避免上一局的 Promise/弹窗残留到新局
+    if (humanReactionResolver.current) {
+      humanReactionResolver.current({ played: false, isWuxie: false });
+      humanReactionResolver.current = null;
+    }
+    if (dyingResolver.current) {
+      dyingResolver.current(false);
+      dyingResolver.current = null;
+    }
+    setPendingReaction(null);
+    setDyingState(null);
+    setWuguSelection(null);
+    setWuguSelectedCard(null);
+    setSelectedCardIds([]);
+    setWinnerSide(null);
     setAdvice(null);
     setSkillBanner(null);
     const shuffledDeck = [...INITIAL_DECK]; 
@@ -1116,7 +1144,8 @@ const App: React.FC = () => {
     // 延迟3秒后切换到结束画面，确保状态已更新
     setTimeout(() => {
       setScreen('gameover');
-      isGameOverRef.current = false; // 重置标志，允许重新开始游戏
+      // 这里不再重置 isGameOverRef：结算期间仍可能有异步死亡结算，
+      // 重置会导致同一次对局重复结算/重复记战绩；只有 startGame 才允许开新局
     }, 3000);
   };
 
@@ -1602,7 +1631,13 @@ const App: React.FC = () => {
       }
     };
 
-    runTurn();
+    // 兜底：阶段结算抛出异常时不要让主循环永久卡死，记录后跳过本阶段
+    runTurn().catch((err) => {
+      console.error('[runTurn] phase error', err);
+      setIsProcessing(0);
+      addLog('本阶段结算出现异常，已自动跳到结束阶段', 'danger');
+      setPhase(GamePhase.END);
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase, turnIndex, screen, isAiTakeover, isProcessing]); 
 
@@ -2820,10 +2855,18 @@ const App: React.FC = () => {
     let currentAttackerId = attackerId;
     let currentDefenderId = defenderId;
     let duelOver = false;
+    let exchanges = 0;
 
     addLog(`决斗开始！`, 'danger');
 
     while (!duelOver) {
+      // 兜底：正常决斗每轮都会消耗一张【杀】，不可能超过 40 轮；防止异常状态下死循环
+      if (++exchanges > 40) {
+        addLog('决斗回合异常，判定中止', 'warning');
+        break;
+      }
+      // 让出一次宏任务，确保上一轮的出牌/体力更新已提交后再询问
+      await delay(250);
       // 检查双方是否存活
       const attacker = getPlayer(currentAttackerId);
       const defender = getPlayer(currentDefenderId);
@@ -2888,7 +2931,9 @@ const App: React.FC = () => {
 
     if (newHp <= 0 && !victim.isDead) {
       addLog(`${victim.hero.name} 进入濒死状态！`, 'danger');
-      await askForPeaches(victimId);
+      const saved = await askForPeaches(victimId);
+      // 求桃失败必须立即结算阵亡，否则 0 体力角色会继续留在场上、胜负判定也会被推迟
+      if (!saved) await handleDeath(victimId, sourceId);
     }
   };
 
@@ -4013,14 +4058,23 @@ const App: React.FC = () => {
       // 顺序：濒死者 -> 下家 -> 下下家... -> 上家
       const allPlayers = playersRef.current.filter(p => !p.isDead);
       const playerCount = playersRef.current.length;
+      // 只记 id：每轮都用 getPlayer 取最新手牌，避免用快照里的旧桃反复“救援”
       const order = allPlayers
-        .sort((a, b) => ((a.id - victimId + playerCount) % playerCount) - ((b.id - victimId + playerCount) % playerCount));
+        .sort((a, b) => ((a.id - victimId + playerCount) % playerCount) - ((b.id - victimId + playerCount) % playerCount))
+        .map(p => p.id);
 
-      // 循环询问，直到有人出桃或者所有人都放弃
-      while (getPlayer(victimId)!.hp <= 0) {
+      // 循环询问，直到有人出桃或者所有人都放弃（最多 12 轮兜底，防止状态异常时死循环）
+      let rounds = 0;
+      while (getPlayer(victimId)?.hp <= 0) {
+        if (++rounds > 12) {
+          addLog(`求桃轮次异常（${rounds}），按无人救援处理`, 'warning');
+          return false;
+        }
         let someoneSaved = false;
 
-        for (const player of order) {
+        for (const pid of order) {
+          const player = getPlayer(pid);
+          if (!player || player.isDead) continue;
           const currentVictim = getPlayer(victimId)!;
           if (currentVictim.hp > 0) {
             setDyingState(null);
@@ -4171,6 +4225,8 @@ const App: React.FC = () => {
           setDyingState(null);
           return false;
         }
+        // 有人出桃但体力仍未回正：让出一次宏任务，等体力更新提交后再继续询问
+        await delay(150);
       }
 
       setDyingState(null);
@@ -4364,6 +4420,10 @@ const App: React.FC = () => {
     nature?: 'fire' | 'thunder',
   ) => {
     setIsProcessing(p => p + 1);
+    // 铁索连环传导波次：同一波内每名角色只吃一次传导伤害。
+    // 不能只靠 updatePlayer 重置 isChained —— React 尚未提交时 getPlayer 仍会读到旧值，
+    // 递归传导会出现 A→B→A 的无限循环（3 倍速下曾导致页面卡死、内存暴涨）。
+    let ownsChainWave = false;
     try {
       // 伤害属性：显式传入优先，其次看伤害牌（火杀 / 雷杀）
       const dmgNature: 'normal' | 'fire' | 'thunder' = nature ?? damageCard?.attribute ?? 'normal';
@@ -4455,14 +4515,23 @@ const App: React.FC = () => {
         }
       }
 
-      // 铁索连环：属性伤害传导（先统一重置，避免递归传导）
+      // 铁索连环：属性伤害传导（同一波次内每个角色只传导一次，避免状态未提交时递归打回自己）
       let chainOthers: Player[] = [];
       if (dmgNature !== 'normal' && victim.isChained) {
-        const chained = playersRef.current.filter(p => p.isChained && !p.isDead);
-        if (chained.length > 1) {
+        const wave = chainWaveRef.current ?? new Set<number>();
+        if (!chainWaveRef.current) {
+          chainWaveRef.current = wave;
+          ownsChainWave = true;
+        }
+        wave.add(victimId);
+        const chained = playersRef.current.filter(p => p.isChained && !p.isDead && !wave.has(p.id));
+        if (chained.length > 0) {
           addLog(`🔗【铁索连环】传导！${natureLabel}伤害波及 ${chained.map(p => p.hero.name).join('、')}`, 'danger');
-          chained.forEach(cp => updatePlayer(cp.id, { isChained: false }));
-          chainOthers = chained.filter(p => p.id !== victimId);
+          chained.forEach(cp => {
+            wave.add(cp.id);
+            updatePlayer(cp.id, { isChained: false });
+          });
+          chainOthers = chained;
         }
       }
 
@@ -4532,19 +4601,21 @@ const App: React.FC = () => {
 
       // 曹操的「奸雄」技能：受到伤害后，你可以获得造成伤害的牌
       if (victim.hero.name === '曹操' && damageCard) {
-        // 曹操受到伤害，获得造成伤害的牌
-        setPlayers(prev => {
-          const updated = prev.map(p => {
-            if (p.id === victimId) {
-              return { ...p, hand: [...p.hand, damageCard] };
-            }
-            return p;
-          });
-          playersRef.current = updated;
-          return updated;
+        const me = getPlayer(victimId);
+        const alreadyHas = !!me?.hand.some(c => c.id === damageCard.id);
+        // 同一张牌不能在「手牌 + 弃牌堆」同时存在，否则洗回牌堆后会出现重复卡（React 也会报重复 key）
+        setDiscardPile(prev => {
+          const next = prev.filter(c => c.id !== damageCard.id);
+          discardPileRef.current = next;
+          return next;
         });
-        addLog(`${victim.hero.name} 使用技能「奸雄」，获得了【${damageCard.name}】！`, 'skill');
-        showSkillBanner(victim.hero.name, '奸雄');
+        if (me && !alreadyHas) {
+          mutateHand(victimId, hand => [...hand, damageCard]);
+          addLog(`${victim.hero.name} 使用技能「奸雄」，获得了【${damageCard.name}】！`, 'skill');
+          showSkillBanner(victim.hero.name, '奸雄');
+        } else {
+          addLog(`${victim.hero.name} 的「奸雄」发动，但【${damageCard.name}】已在其手牌中`, 'info');
+        }
       }
 
       // 当体力值小于等于0时，进入濒死状态
@@ -4582,9 +4653,12 @@ const App: React.FC = () => {
       // 铁索连环传导：结算完当前目标后，依次传导给其他横置角色
       for (const cp of chainOthers) {
         if (getPlayer(cp.id)?.isDead) continue;
+        // 每次传导让出一次宏任务，确保此前的 hp / isChained 更新已提交
+        await delay(250);
         await takeDamage(cp.id, sourceId, amount, damageCard, dmgNature === 'normal' ? undefined : dmgNature);
       }
     } finally {
+      if (ownsChainWave) chainWaveRef.current = null;
       setIsProcessing(p => Math.max(0, p - 1));
     }
   };
