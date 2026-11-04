@@ -13,6 +13,8 @@ interface GameOverScreenProps {
   discardCount: number;
   logs: LogEntry[];
   stats: { games: number; wins: number; losses: number } | null;
+  /** 本局用时（毫秒），首页续局等场景可能为 0，此时不显示 */
+  durationMs?: number;
   theme: 'dark' | 'light';
   isMuted: boolean;
   toggleMute: () => void;
@@ -27,7 +29,7 @@ interface GameOverScreenProps {
  * 让玩家在结算时有「这局发生了什么」的回顾，而不是只有一个结果横幅。
  */
 export const GameOverScreen: React.FC<GameOverScreenProps> = ({
-  players, winnerSide, deckCount, discardCount, logs, stats,
+  players, winnerSide, deckCount, discardCount, logs, stats, durationMs,
   theme, isMuted, toggleMute, motionOn, onRestart, onHome,
 }) => {
   const myIdentity = players.find(p => p.isHuman)?.identity;
@@ -38,7 +40,10 @@ export const GameOverScreen: React.FC<GameOverScreenProps> = ({
   );
   const aliveCount = players.filter(p => !p.isDead).length;
   // 关键战报：只取技能发动 / 阵亡 / 关键判定这类节点，避免把流水账全搬上来
-  const keyLogs = logs.filter(l => l.type === 'danger' || l.type === 'skill' || l.type === 'success').slice(-3);
+  const keyLogs = logs.filter(l => l.type === 'danger' || l.type === 'skill' || l.type === 'success').slice(-5);
+  const durationText = durationMs && durationMs > 0
+    ? `${Math.floor(durationMs / 60000)} 分 ${String(Math.floor((durationMs % 60000) / 1000)).padStart(2, '0')} 秒`
+    : null;
   // 结算页也按可视高度收敛标题：860 高的笔记本上要保证「身份全员 + 战报 + 按钮」一屏可见
   const { layoutDensity } = useLayoutProfile();
   const compact = layoutDensity === 'compact' || layoutDensity === 'tight' || layoutDensity === 'ultra';
@@ -179,6 +184,11 @@ export const GameOverScreen: React.FC<GameOverScreenProps> = ({
             存活 <b className="font-ancient text-[#e8cf94] text-base">{aliveCount}</b>
             <span className="text-[#8f806a]"> / {players.length} 人</span>
           </span>
+          {durationText && (
+            <span className="modal-text-dim">
+              用时 <b className="font-ancient text-[#e8cf94] text-base">{durationText}</b>
+            </span>
+          )}
           {stats && (
             <span className="modal-text-dim">
               第 <b className="font-ancient text-[#e8cf94] text-base">{stats.games}</b> 局

@@ -1,7 +1,8 @@
 // 本地合成音效：使用 WebAudio 实时合成，不依赖外部 CDN，离线可用且无版权问题
 export type SfxKind =
   | 'slash' | 'whoosh' | 'heal' | 'clash' | 'drum' | 'mystery' | 'counter'
-  | 'arrows' | 'sneak' | 'destroy' | 'imprison' | 'fire' | 'wine' | 'damage' | 'death';
+  | 'arrows' | 'sneak' | 'destroy' | 'imprison' | 'fire' | 'wine' | 'damage' | 'death'
+  | 'flip' | 'button' | 'turn' | 'victory' | 'defeat';
 
 let ctx: AudioContext | null = null;
 
@@ -144,6 +145,37 @@ export function playSfx(kind: SfxKind) {
       tone(ac, { freq: 300, to: 90, dur: 0.9, gain: 0.2 });
       tone(ac, { freq: 200, to: 60, dur: 1.1, gain: 0.14, delay: 0.1 });
       noise(ac, { dur: 0.6, gain: 0.1, filter: 'lowpass', freq: 500, delay: 0.05 });
+      break;
+    // 判定翻牌：木牌翻面的短促脆响
+    case 'flip':
+      noise(ac, { dur: 0.1, gain: 0.18, filter: 'bandpass', freq: 1800, to: 900, q: 1.4 });
+      tone(ac, { freq: 620, to: 380, dur: 0.1, type: 'triangle', gain: 0.1, delay: 0.03 });
+      break;
+    // 按钮点击：极轻的木质回弹，不喧宾夺主
+    case 'button':
+      tone(ac, { freq: 760, to: 520, dur: 0.06, type: 'sine', gain: 0.07 });
+      noise(ac, { dur: 0.04, gain: 0.04, filter: 'highpass', freq: 3200 });
+      break;
+    // 回合交接：一声低鼓 + 一声磬
+    case 'turn':
+      tone(ac, { freq: 120, to: 70, dur: 0.36, gain: 0.2 });
+      tone(ac, { freq: 880, dur: 0.7, gain: 0.05, delay: 0.12 });
+      noise(ac, { dur: 0.18, gain: 0.1, filter: 'lowpass', freq: 500, delay: 0.02 });
+      break;
+    // 胜利：上行五声 + 锣
+    case 'victory':
+      [523, 587, 659, 784, 1046].forEach((f, i) => {
+        tone(ac, { freq: f, dur: 0.28, type: 'triangle', gain: 0.1, delay: i * 0.12 });
+      });
+      tone(ac, { freq: 98, to: 60, dur: 1.1, gain: 0.22, delay: 0.55 });
+      noise(ac, { dur: 0.5, gain: 0.1, filter: 'lowpass', freq: 700, delay: 0.6 });
+      break;
+    // 失败：下行三声 + 闷鼓
+    case 'defeat':
+      [392, 330, 262].forEach((f, i) => {
+        tone(ac, { freq: f, to: f * 0.92, dur: 0.5, type: 'sine', gain: 0.12, delay: i * 0.24 });
+      });
+      tone(ac, { freq: 90, to: 55, dur: 1.2, gain: 0.18, delay: 0.3 });
       break;
   }
 }

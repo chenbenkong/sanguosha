@@ -2,7 +2,7 @@
 import { Hero, Player, Card, GamePhase, CardName, LogEntry, Identity, Suit, CardType } from './types';
 import { HEROES, INITIAL_DECK, EQUIP_META } from './constants';
 import { playSfx, SFX_FOR_NAME } from './src/audio/sfx';
-import { playCardVoice, playSkillVoice, playDeathVoice, hasCardVoice } from './src/audio/voice';
+import { playCardVoice, playSkillVoice, playDeathVoice, playEnterVoice, hasCardVoice } from './src/audio/voice';
 import CardComponent, { CardArtFilters } from './components/CardComponent';
 import TutorialOverlay from './src/components/TutorialOverlay';
 import RulesDialog from './src/components/RulesDialog';
@@ -102,6 +102,7 @@ const App: React.FC = () => {
   const [winnerSide, setWinnerSide] = useState<WinnerSide | null>(null);
   const [isProcessing, setIsProcessing] = useState(0); // 全局状态锁计数，防止结算期间进行其他操作
   const isGameOverRef = useRef<boolean>(false); // 游戏结束标志，防止重复触发
+  const gameStartedAtRef = useRef<number>(0); // 本局开始时间，用于结算页「用时」
 
   // --- 人类决策读秒 ---
   // 出牌 / 弃牌阶段超时未操作：已选牌则自动出牌，未选牌则自动跳过
@@ -217,9 +218,13 @@ const App: React.FC = () => {
 
   // 出牌阶段【杀】的使用次数（有诸葛连弩则不限）
   const slashUsageRef = useRef<Record<number, number>>({});
-  // 新武将的每回合限一次标记（在回合开始处重置，见 Game Loop）
-  const huxiaoUsedRef = useRef<boolean>(false);   // 关银屏「虎啸」
-  const fuHelpUsedRef = useRef<boolean>(false);   // 伏皇后「求援」
+  // 张星彩「枪舞」：出牌阶段限一次的判定结果（点数），以及本回合是否已发动
+  const qiangwuUsedRef = useRef<boolean>(false);
+  const qiangwuPointRef = useRef<number | null>(null);
+  const [qiangwuPoint, setQiangwuPoint] = useState<number | null>(null);
+  const [hasUsedQiangwu, setHasUsedQiangwu] = useState<boolean>(false);
+  // 卞夫人「挽危」：每回合限一次
+  const wanweiUsedRef = useRef<boolean>(false);
 
   // 孙尚香「结姻」技能状态
   const [isJieyinMode, setIsJieyinMode] = useState<boolean>(false);
@@ -434,8 +439,19 @@ const App: React.FC = () => {
     next.preload = 'metadata'; // 先只取头部，播放时按需缓冲
     next.src = BGM_TRACKS[mode];
     next.loop = true;
-    next.volume = 0.3;
+    next.volume = 0;
     next.play().catch(() => { /* 等待用户交互 */ });
+    // 首次交互后淡入，避免音乐「啪」地一下切入
+    let fv = 0;
+    const fadeIn = setInterval(() => {
+      fv += 0.025;
+      if (fv >= 0.3) {
+        next.volume = 0.3;
+        clearInterval(fadeIn);
+      } else {
+        next.volume = fv;
+      }
+    }, 90);
     audioRef.current = next;
     if (prev) {
       let v = prev.volume;
@@ -451,6 +467,25 @@ const App: React.FC = () => {
     }
   }, []);
 
+  // 首次用户交互：解锁自动播放策略、淡入当前 BGM，并为所有按钮补一层轻点击音
+  useEffect(() => {
+    const onFirst = (e: Event) => {
+      if (!audioReadyRef.current) {
+        audioReadyRef.current = true;
+        playBgm(bgmModeRef.current);
+      }
+      const el = e.target as HTMLElement | null;
+      if (el && el.closest('button, [role="button"]') && !isMutedRef.current) playSfx('button');
+    };
+    const opts: AddEventListenerOptions = { capture: true };
+    window.addEventListener('pointerdown', onFirst, opts);
+    window.addEventListener('keydown', onFirst, opts);
+    return () => {
+      window.removeEventListener('pointerdown', onFirst, opts);
+      window.removeEventListener('keydown', onFirst, opts);
+    };
+  }, [playBgm]);
+
   // 从ref中获取最新的玩家信息
   const getPlayer = (id: number) => playersRef.current.find(p => p.id === id);
   // 供 mutateHand 的延时回调使用，避免在 drawCards 声明前引用它
@@ -464,18 +499,17 @@ const App: React.FC = () => {
       // 防御性去重：同一张牌（同 id）不应在一手牌里出现两次，否则会重复渲染/重复出牌
       const seen = new Set<string>();
       const nextHand = rawHand.filter(c => (seen.has(c.id) ? false : (seen.add(c.id), true)));
-      const lostLast = !!target && (target.hero.name === '陆逊' || target.hero.name === '卞夫人') && !target.isDead
+      const lostLast = !!target && target.hero.name === '陆逊' && !target.isDead
         && target.hand.length > 0 && nextHand.length === 0;
       const updated = prev.map(p => p.id === id ? { ...p, hand: nextHand } : p);
       playersRef.current = updated;
-      // 陆逊「连营」/ 卞夫人「挽危」：失去最后一张手牌时补一张
+      // 陆逊「连营」：失去最后一张手牌时补一张
       if (lostLast) {
         setTimeout(() => {
           const live = playersRef.current.find(p => p.id === id);
           if (!live || live.isDead || live.hand.length > 0) return;
-          const sk = live.hero.name === '卞夫人' ? '挽危' : '连营';
-          addLog(`${live.hero.name} 发动「${sk}」，摸一张牌`, 'skill');
-          showSkillBanner(live.hero.name, sk);
+          addLog(`${live.hero.name} 发动「连营」，摸一张牌`, 'skill');
+          showSkillBanner(live.hero.name, '连营');
           drawCardsRef.current?.(id, 1);
         }, 0);
       }
@@ -657,12 +691,16 @@ const App: React.FC = () => {
 
   const canReach = useCallback((from: Player, to: Player) => getDistance(from.id, to.id) <= getAttackRange(from), [getDistance, getAttackRange]);
 
-  // 本回合是否还能使用【杀】（张飞「咆哮」、诸葛连弩不限；张星彩「枪舞」可额外一张）
-  const canPlaySlash = useCallback((p: Player) => {
+  // 本回合是否还能使用这张【杀】（张飞「咆哮」、诸葛连弩不限；
+  // 张星彩「枪舞」：点数大于判定结果的【杀】不计入次数）
+  const canPlaySlash = useCallback((p: Player, card?: Card) => {
     if (p.equipment?.weapon?.name === CardName.ZHUGE) return true;
     if (p.hero.name === '张飞') return true;
-    if (p.hero.name === '张星彩') return (slashUsageRef.current[p.id] ?? 0) < 2;
-    return (slashUsageRef.current[p.id] ?? 0) < 1;
+    const used = slashUsageRef.current[p.id] ?? 0;
+    if (used < 1) return true;
+    if (card && p.hero.name === '张星彩' && qiangwuPointRef.current !== null
+      && rankValue(card.rank) > qiangwuPointRef.current) return true;
+    return false;
   }, []);
 
   // 失去装备后的结算：白银狮子离场回复 1 点体力
@@ -700,6 +738,23 @@ const App: React.FC = () => {
     }
     playSound(card.name, player.hero.gender);
     addLog(`${player.hero.name} 装备了【${card.name}】${meta.range ? `（攻击范围 ${meta.range}）` : ''}`, 'success');
+
+    // 诸葛果「祈禳」（原版）：装备牌置入装备区后，从牌堆获得一张锦囊牌；没有则摸一张
+    if (player.hero.name === '诸葛果') {
+      const nextDeck = [...deckRef.current];
+      const trickIdx = nextDeck.findIndex(c => c.type === CardType.SCROLL);
+      if (trickIdx >= 0) {
+        const trick = nextDeck.splice(trickIdx, 1)[0];
+        setDeck(nextDeck);
+        deckRef.current = nextDeck;
+        mutateHand(playerId, h => [...h, trick]);
+        addLog(`${player.hero.name} 发动「祈禳」，从牌堆获得锦囊牌【${trick.name}】`, 'skill');
+      } else {
+        addLog(`${player.hero.name} 发动「祈禳」，牌堆无锦囊牌，改为摸一张牌`, 'skill');
+        drawCardsRef.current?.(playerId, 1);
+      }
+      showSkillBanner(player.hero.name, '祈禳');
+    }
     return true;
   }, [getPlayer, mutateHand, updatePlayer, triggerXiaoji, onEquipLost]);
 
@@ -846,6 +901,11 @@ const App: React.FC = () => {
     setLogs(initLogs);
     setPhase(GamePhase.START);
     setScreen('game');
+    gameStartedAtRef.current = Date.now();
+    // 出战台词：人类武将登场时播一句（TTS 合成或真实素材，均在本地）
+    if (!isMutedRef.current) {
+      setTimeout(() => { playEnterVoice(hero.id); }, 450);
+    }
 
     // 开局即落一次存档：中途刷新也能从本回合开头恢复
     const snap: GameSave = {
@@ -874,6 +934,7 @@ const App: React.FC = () => {
       return;
     }
     initAudio();
+    gameStartedAtRef.current = Date.now();
     isGameOverRef.current = false;
     turnStepRef.current = '';
     aiTurnActiveRef.current = false;
@@ -1052,6 +1113,7 @@ const App: React.FC = () => {
       (side === 'lord' && (myIdentity === Identity.ZHUGONG || myIdentity === Identity.ZHONGCHEN)) ||
       (side === 'spy' && myIdentity === Identity.NEIJIAN)
     );
+    if (!isMuted) playSfx(isVictory ? 'victory' : 'defeat');
     setStats(prev => {
       const next = {
         games: prev.games + 1,
@@ -1213,8 +1275,11 @@ const App: React.FC = () => {
  
         setHasUsedLijian(false); // 重置貂蝉离间技能使用状态
         slashUsageRef.current[currentPlayer.id] = 0; // 重置本回合【杀】使用次数
-    huxiaoUsedRef.current = false; // 重置「虎啸」
-    fuHelpUsedRef.current = false; // 重置「求援」
+    qiangwuUsedRef.current = false; // 重置「枪舞」
+    qiangwuPointRef.current = null;
+    setQiangwuPoint(null);
+    setHasUsedQiangwu(false);
+    wanweiUsedRef.current = false; // 重置「挽危」
         setIsJiedaoMode(false); // 重置借刀杀人模式
         setJiedaoWeaponTarget(null); // 重置借刀目标
         setJiedaoVictimTarget(null); // 重置被攻击目标
@@ -1512,17 +1577,26 @@ const App: React.FC = () => {
           drawCards(endingPlayer.id, 1);
         }
 
-        // 曹节「惠民」：结束阶段，令至多两名手牌最少的其他角色各摸一张牌
+        // 曹节「惠民」（原版）：结束阶段摸 X 张牌（X 为手牌数小于体力值的角色数），
+        // 然后依次把手牌交给这些角色各一张（自动从手牌最少者开始）
         if (endingPlayer && !endingPlayer.isDead && endingPlayer.hero.name === '曹节') {
-          const allies = playersRef.current
-            .filter(p => !p.isDead && p.id !== endingPlayer.id)
-            .sort((a, b) => a.hand.length - b.hand.length)
-            .slice(0, 2);
-          if (allies.length > 0) {
-            addLog(`${endingPlayer.hero.name} 发动「惠民」，${allies.map(p => p.hero.name).join('、')} 各摸一张牌`, 'skill');
+          const needy = playersRef.current.filter(p => !p.isDead && p.hand.length < p.hp);
+          const x = needy.length;
+          if (x > 0) {
+            addLog(`${endingPlayer.hero.name} 发动「惠民」，摸 ${x} 张牌并分给 ${needy.map(p => p.hero.name).join('、')}`, 'skill');
             showSkillBanner(endingPlayer.hero.name, '惠民');
-            allies.forEach(p => drawCards(p.id, 1));
-            await delay(400);
+            drawCards(endingPlayer.id, x);
+            await delay(300);
+            const recipients = needy.slice().sort((a, b) => a.hand.length - b.hand.length);
+            for (const r of recipients) {
+              const me = playersRef.current.find(p => p.id === endingPlayer.id);
+              if (!me || me.hand.length === 0 || r.isDead) break;
+              const gift = me.hand[Math.floor(Math.random() * me.hand.length)];
+              mutateHand(me.id, h => h.filter(c => c.id !== gift.id));
+              mutateHand(r.id, h => [...h, gift]);
+              addLog(`${me.hero.name} 将【${gift.name}】交给 ${r.hero.name}`, 'skill');
+              await delay(250);
+            }
           }
         }
 
@@ -1565,6 +1639,7 @@ const App: React.FC = () => {
           to: getPlayer(nextIndex)?.hero.name ?? '',
           id: Date.now(),
         });
+        if (!isMutedRef.current) playSfx('turn');
         await delay(1000);
         setTurnPass(null);
 
@@ -2539,13 +2614,15 @@ const App: React.FC = () => {
     if (isSlashLike && target.id !== me.id) {
       const reach = getAttackRange(me);
       const dist = getDistance(me.id, target.id);
-      if (dist > reach && me.hero.name !== '张星彩') {
+      const qiangwuLong = me.hero.name === '张星彩' && qiangwuPointRef.current !== null
+        && rankValue(card.rank) < qiangwuPointRef.current;
+      if (dist > reach && !qiangwuLong) {
         addLog(`距离不足：你与 ${target.hero.name} 距离 ${dist}，攻击范围 ${reach}`, 'warning');
         setTimeout(() => { clickGuard.current = false; }, 200);
         return;
       }
-      if (!canPlaySlash(me)) {
-        addLog('出牌阶段只能使用一张【杀】（装备诸葛连弩可无限使用）', 'warning');
+      if (!canPlaySlash(me, card)) {
+        addLog('出牌阶段只能使用一张【杀】（诸葛连弩 / 张飞「咆哮」不限；张星彩「枪舞」可让大点数【杀】不计次数）', 'warning');
         setTimeout(() => { clickGuard.current = false; }, 200);
         return;
       }
@@ -2881,11 +2958,10 @@ const App: React.FC = () => {
     const newHp = victim.hp - damage;
     updatePlayer(victimId, { hp: newHp });
 
-    // 关银屏「虎啸」：造成伤害后摸一张牌（每回合限一次，含非【杀】伤害）
-    if (sourceId >= 0 && !huxiaoUsedRef.current) {
+    // 关银屏「虎啸」：锁定技，造成伤害后摸一张牌（原版无次数限制）
+    if (sourceId >= 0) {
       const src = getPlayer(sourceId);
       if (src && !src.isDead && src.hero.name === '关银屏') {
-        huxiaoUsedRef.current = true;
         addLog(`${src.hero.name} 发动「虎啸」，摸一张牌`, 'skill');
         showSkillBanner(src.hero.name, '虎啸');
         drawCards(sourceId, 1);
@@ -2917,6 +2993,7 @@ const App: React.FC = () => {
     if (skillBannerTimerRef.current) clearTimeout(skillBannerTimerRef.current);
     setSkillBanner(null);
     setJudgmentVisual({ card, playerName, reason, id: Date.now() });
+    if (!isMutedRef.current) playSfx('flip');
     judgmentTimerRef.current = setTimeout(() => setJudgmentVisual(null), Math.max(950, duration / speedRef.current));
   };
 
@@ -2934,6 +3011,28 @@ const App: React.FC = () => {
     setSkillBanner({ hero, skill, id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6) });
     skillBannerTimerRef.current = setTimeout(() => setSkillBanner(null), 1500);
   }, []);
+
+  // 卞夫人「挽危」（原版）：每回合限一次，当你的牌被其他角色弃置或获得后，
+  // 从牌堆获得一张同名牌；牌堆中没有同名牌时改为摸一张牌。
+  const triggerWanwei = (ownerId: number, names: string[]) => {
+    if (wanweiUsedRef.current) return;
+    const owner = getPlayer(ownerId);
+    if (!owner || owner.isDead || owner.hero.name !== '卞夫人') return;
+    wanweiUsedRef.current = true;
+    const deck = [...deckRef.current];
+    const idx = deck.findIndex(c => names.includes(c.name));
+    if (idx >= 0) {
+      const card = deck.splice(idx, 1)[0];
+      setDeck(deck);
+      deckRef.current = deck;
+      mutateHand(ownerId, h => [...h, card]);
+      addLog(`${owner.hero.name} 发动「挽危」，从牌堆获得同名牌【${card.name}】`, 'skill');
+    } else {
+      addLog(`${owner.hero.name} 发动「挽危」，牌堆无同名牌，改为摸一张牌`, 'skill');
+      drawCardsRef.current?.(ownerId, 1);
+    }
+    showSkillBanner(owner.hero.name, '挽危');
+  };
 
   // 通用判定：从牌堆顶翻一张判定牌并展示，返回判定牌
   const performJudgment = async (playerId: number, reason: string): Promise<Card | null> => {
@@ -2971,6 +3070,23 @@ const App: React.FC = () => {
     return finalCard;
   };
 
+  // 张星彩「枪舞」：出牌阶段限一次，进行判定；
+  // 本回合内点数小于判定结果的【杀】无距离限制，点数大于判定结果的【杀】不计次数。
+  const activateQiangwu = async () => {
+    const human = playersRef.current.find(p => p.isHuman);
+    const me = human ? getPlayer(human.id) : null;
+    if (!me || me.isDead || me.hero.name !== '张星彩' || qiangwuUsedRef.current) return;
+    qiangwuUsedRef.current = true;
+    setHasUsedQiangwu(true);
+    const jc = await performJudgment(me.id, '枪舞');
+    if (!jc) return;
+    const pt = rankValue(jc.rank);
+    qiangwuPointRef.current = pt;
+    setQiangwuPoint(pt);
+    addLog(`${me.hero.name} 发动「枪舞」：判定点数 ${pt}，点数小于 ${pt} 的【杀】无距离限制，点数大于 ${pt} 的【杀】不计次数`, 'skill');
+    showSkillBanner(me.hero.name, '枪舞');
+  };
+
   const playCard = (playerId: number, card: Card) => {
     discardCards(playerId, [card]);
     showCardVisual(card, getPlayer(playerId)?.hero.name || '', 1200, getPlayer(playerId)?.hero.gender);
@@ -2989,11 +3105,10 @@ const App: React.FC = () => {
           addLog(`${source.hero.name} 使用了【${card.name}】`, 'chat');
       }
 
-      // 黄月英「集智」/ 诸葛果「祈禳」：使用锦囊牌时摸一张
-      if (card.type === CardType.SCROLL && (source.hero.name === '黄月英' || source.hero.name === '诸葛果')) {
-        const sk = source.hero.name === '诸葛果' ? '祈禳' : '集智';
-        addLog(`${source.hero.name} 发动「${sk}」，摸一张牌`, 'skill');
-        showSkillBanner(source.hero.name, sk);
+      // 黄月英「集智」：使用锦囊牌时摸一张（诸葛果的「祈禳」改为装备触发，见 equipCard）
+      if (card.type === CardType.SCROLL && source.hero.name === '黄月英') {
+        addLog(`${source.hero.name} 发动「集智」，摸一张牌`, 'skill');
+        showSkillBanner(source.hero.name, '集智');
         drawCards(source.id, 1);
       }
 
@@ -3035,13 +3150,37 @@ const App: React.FC = () => {
             }
           }
 
-          // 伏皇后「求援」：成为【杀】的目标时摸一张牌（每回合限一次，简化实现）
-          if (effectiveTarget.hero.name === '伏皇后' && !fuHelpUsedRef.current) {
-            fuHelpUsedRef.current = true;
-            addLog(`${effectiveTarget.hero.name} 发动「求援」，摸一张牌`, 'skill');
-            showSkillBanner(effectiveTarget.hero.name, '求援');
-            drawCards(effectiveTarget.id, 1);
-            await delay(400);
+          // 伏皇后「求援」（原版）：成为【杀】的目标时，可令另一名其他角色交给你一张【闪】，
+          // 否则该角色也成为此【杀】的目标。AI 会优先挑「敌对且没有闪」的人：要么交闪，要么替她挨刀。
+          if (effectiveTarget.hero.name === '伏皇后' && source.id !== effectiveTarget.id) {
+            const candidates = playersRef.current.filter(p =>
+              !p.isDead && p.id !== source.id && p.id !== effectiveTarget.id
+              && !slashTargets.some(t => t.id === p.id)
+            );
+            if (candidates.length > 0) {
+              const helper = candidates.slice().sort((a, b) => {
+                const enemyDiff = (isAlly(effectiveTarget, a) ? 1 : 0) - (isAlly(effectiveTarget, b) ? 1 : 0);
+                if (enemyDiff !== 0) return enemyDiff;
+                const shanDiff = (a.hand.some(c => c.name === CardName.SHAN) ? 1 : 0)
+                  - (b.hand.some(c => c.name === CardName.SHAN) ? 1 : 0);
+                if (shanDiff !== 0) return shanDiff;
+                return a.hand.length - b.hand.length;
+              })[0];
+              const shan = helper.hand.find(c => c.name === CardName.SHAN);
+              const willing = !!shan && (isAlly(effectiveTarget, helper) || helper.hp >= 2);
+              addLog(`${effectiveTarget.hero.name} 发动「求援」，指定 ${helper.hero.name}`, 'skill');
+              showSkillBanner(effectiveTarget.hero.name, '求援');
+              await delay(450);
+              if (willing && shan) {
+                mutateHand(helper.id, h => h.filter(c => c.id !== shan.id));
+                mutateHand(effectiveTarget.id, h => [...h, shan]);
+                addLog(`${helper.hero.name} 交出【闪】响应「求援」，不再成为此【杀】的目标`, 'skill');
+              } else {
+                slashTargets.push(helper);
+                addLog(`${helper.hero.name} 未交出【闪】，也成为此【杀】的目标`, 'skill');
+              }
+              await delay(450);
+            }
           }
 
           // 王异「贞烈」：失去1点体力，弃伤害来源一张手牌，令此【杀】无效
@@ -3295,6 +3434,7 @@ const App: React.FC = () => {
               onEquipLost(target.id, stolenEquip.name);
               triggerXiaoji(target.id);
               addLog(`${source.hero.name} 顺手牵走了 ${target.hero.name} 的装备【${stolenEquip.name}】`, 'chat');
+              triggerWanwei(target.id, [stolenEquip.name]);
             } else if (target.hand.length > 0) {
               const randomIndex = Math.floor(Math.random() * target.hand.length);
               const stolenCard = target.hand[randomIndex];
@@ -3304,6 +3444,7 @@ const App: React.FC = () => {
               mutateHand(source.id, hand => [...hand, stolenCard]);
 
               addLog(`${source.hero.name} 从 ${target.hero.name} 那里偷到了【${stolenCard.name}】`, 'chat');
+              triggerWanwei(target.id, [stolenCard.name]);
             } else {
               addLog(`${target.hero.name} 没有牌可偷`, 'info');
             }
@@ -3364,6 +3505,7 @@ const App: React.FC = () => {
               onEquipLost(target.id, brokenEquip.name);
               triggerXiaoji(target.id);
               addLog(`${source.hero.name} 拆掉了 ${target.hero.name} 的装备【${brokenEquip.name}】`, 'chat');
+              triggerWanwei(target.id, [brokenEquip.name]);
             } else {
               // 从目标手牌中弃置（基于最新 state），进入弃牌堆
               const randomIndex = Math.floor(Math.random() * target.hand.length);
@@ -3377,6 +3519,7 @@ const App: React.FC = () => {
               });
 
               addLog(`${source.hero.name} 弃置了 ${target.hero.name} 的【${brokenCard.name}】`, 'chat');
+              triggerWanwei(target.id, [brokenCard.name]);
             }
           } else {
             addLog(`${target.hero.name} 使用了【无懈可击】，免疫了【${card.name}】的效果！`, 'success');
@@ -4519,9 +4662,8 @@ const App: React.FC = () => {
       updatePlayer(victimId, { hp: newHp });
       addLog(`${victim.hero.name} 受到 ${finalAmount} 点${natureLabel}伤害！当前体力: ${newHp}/${victim.maxHp}`, 'danger');
 
-      // 关银屏「虎啸」：造成伤害后摸一张牌（每回合限一次）
-      if (sourceId >= 0 && sourceId !== victimId && source?.hero.name === '关银屏' && !huxiaoUsedRef.current) {
-        huxiaoUsedRef.current = true;
+      // 关银屏「虎啸」：锁定技，造成伤害后摸一张牌（原版无次数限制）
+      if (sourceId >= 0 && sourceId !== victimId && source?.hero.name === '关银屏') {
         addLog(`${source.hero.name} 发动「虎啸」，摸一张牌`, 'skill');
         showSkillBanner(source.hero.name, '虎啸');
         drawCards(sourceId, 1);
@@ -4962,6 +5104,21 @@ const App: React.FC = () => {
       }
     }
 
+    // 11.7 张星彩「枪舞」：出牌阶段限一次，先判定再出【杀】
+    const xingcai = getPlayer(aiPlayer.id);
+    if (xingcai && !xingcai.isDead && xingcai.hero.name === '张星彩' && !qiangwuUsedRef.current) {
+      qiangwuUsedRef.current = true;
+      const jc = await performJudgment(xingcai.id, '枪舞');
+      if (jc) {
+        const pt = rankValue(jc.rank);
+        qiangwuPointRef.current = pt;
+        setQiangwuPoint(pt);
+        addLog(`${xingcai.hero.name} 发动「枪舞」：判定点数 ${pt}`, 'skill');
+        showSkillBanner(xingcai.hero.name, '枪舞');
+        await delay(400);
+      }
+    }
+
     // 12. Play Slash（受攻击范围限制；张飞「咆哮」/ 诸葛连弩 可连续出【杀】）
     let slashPlayed = 0;
     for (let i = 0; i < 3; i++) {
@@ -4980,10 +5137,13 @@ const App: React.FC = () => {
           description: '丈八蛇矛：两张手牌当【杀】使用。',
         };
       }
+      // 张星彩「枪舞」：点数小于判定结果的【杀】无距离限制
+      const qiangwuLongShot = !!slash && aiNow.hero.name === '张星彩' && qiangwuPointRef.current !== null
+        && rankValue(slash.rank) < qiangwuPointRef.current;
       const target = players
-        .filter(p => !p.isDead && p.id !== aiNow.id && isEnemy(aiNow, p) && canReach(aiNow, p))
+        .filter(p => !p.isDead && p.id !== aiNow.id && isEnemy(aiNow, p) && (canReach(aiNow, p) || qiangwuLongShot))
         .sort((a, b) => a.hp - b.hp)[0];
-      if (!slash || !target || !canPlaySlash(aiNow)) break;
+      if (!slash || !target || !canPlaySlash(aiNow, slash)) break;
       if (zhangbaCost.length === 2) {
         discardCards(aiNow.id, [zhangbaCost[1]]);
         addLog(`${aiNow.hero.name} 发动【丈八蛇矛】，将两张手牌当【杀】使用`, 'skill');
@@ -5564,6 +5724,7 @@ const App: React.FC = () => {
         discardCount={discardPile.length}
         logs={logs}
         stats={stats}
+        durationMs={gameStartedAtRef.current ? Date.now() - gameStartedAtRef.current : 0}
         theme={theme}
         isMuted={isMuted}
         toggleMute={toggleMute}
@@ -7531,6 +7692,22 @@ const App: React.FC = () => {
                       </button>
                     )}
                     
+                    {/* 张星彩「枪舞」：出牌阶段限一次判定 */}
+                    {players[0].hero.name === '张星彩' && !hasUsedQiangwu && (
+                      <button
+                        onClick={() => { void activateQiangwu(); }}
+                        className="skill-btn text-base"
+                        title="出牌阶段限一次：判定后，点数小于判定结果的【杀】无距离限制，点数大于判定结果的【杀】不计次数"
+                      >
+                        枪舞
+                      </button>
+                    )}
+                    {players[0].hero.name === '张星彩' && qiangwuPoint !== null && (
+                      <span className="px-2 py-1 rounded border border-[#d4af37]/50 text-[#f0d38a] text-sm font-ancient whitespace-nowrap">
+                        枪舞 · 判定 {qiangwuPoint}
+                      </span>
+                    )}
+
                     {/* Sun Quan's Zhiheng Skill Button */}
                     {players[0].hero.name === '孙权' && !isZhihengMode && !hasUsedZhiheng && (
                       <button 

@@ -18,6 +18,16 @@ const SKILL_SLUG: Record<string, string> = {
   '洛神': 'luoshen', '集智': 'jizhi', '枭姬': 'xiaoji', '结姻': 'jieyin',
   '伤逝': 'shangshi', '流离': 'liuli', '断肠': 'duanchang',
   '奇袭': 'qixi', '克己': 'keji', '秘计': 'miji', '追忆': 'zhuiyi',
+  // 补齐缺口（TTS 合成，见 public/audio/语音说明.md）
+  '龙胆': 'longdan', '反馈': 'fankui', '闭月': 'biyue', '反间': 'fanjian',
+  '奇才': 'qicai', '绝情': 'jueqing', '巨象': 'juxiang', '烈刃': 'lieren',
+  '国色': 'guse', '红颜': 'hongyan', '天香': 'tianxiang', '悲歌': 'beige',
+  '贞烈': 'zhenlie', '安恤': 'anxu', '突袭': 'tuxi', '裸衣': 'luoyi',
+  '天妒': 'tiandu', '遗计': 'yiji', '马术': 'mashu', '铁骑': 'tieqi',
+  '观星': 'guanxing', '空城': 'kongcheng', '苦肉': 'kurou', '谦逊': 'qianxun',
+  '连营': 'lianying', '青囊': 'qingnang', '急救': 'jijiu', '护驾': 'hujia',
+  '激将': 'jijiang', '救援': 'jiuyuan', '虎啸': 'huxiao', '枪舞': 'qiangwu',
+  '挽危': 'wanwei', '祈禳': 'qirang', '惠民': 'huimin', '求援': 'qiuyuan',
 };
 
 const cache = new Map<string, HTMLAudioElement>();
@@ -55,17 +65,27 @@ export function playSkillVoice(skillName: string): boolean {
 
 // 仅这些武将有本地阵亡语音（与 public/audio/die 下的实际文件一致）。
 // 未收录的武将直接返回 false，由调用方回退合成音效，避免产生 404 与控制台报错。
+// 全部 39 名武将都有阵亡语音：前 24 名为 noname 公开素材，其余 15 名为 TTS 合成
 const DEATH_VOICE_HEROES = new Set([
   'bulianshi', 'caiwenji', 'caocao', 'daqiao', 'diaochan', 'ganning', 'guanyu',
   'huangyueying', 'huangzhong', 'liubei', 'lvbu', 'lvmeng', 'simayi', 'sunquan',
   'sunshangxiang', 'wangyi', 'xiahoudun', 'xiaoqiao', 'zhangchunhua', 'zhangfei',
   'zhaoyun', 'zhenji', 'zhouyu', 'zhurong',
+  'zhangliao', 'xuchu', 'guojia', 'machao', 'zhugeliang', 'huanggai', 'luxun',
+  'huatuo', 'guanyinping', 'zhangxingcai', 'bianfuren', 'zhugeguo', 'caojie',
+  'fuhuanghou', 'mayunlu',
 ]);
 
 /** 阵亡台词：传入武将 id */
 export function playDeathVoice(heroId: string): boolean {
   if (!DEATH_VOICE_HEROES.has(heroId)) return false;
   return playFile(`audio/die/${heroId}.mp3`);
+}
+
+/** 登场台词：39 名武将均有本地文件（真实素材或 TTS 合成） */
+export function playEnterVoice(heroId: string): boolean {
+  if (!DEATH_VOICE_HEROES.has(heroId)) return false;
+  return playFile(`audio/enter/${heroId}.mp3`);
 }
 
 export const hasSkillVoice = (skillName: string) => !!SKILL_SLUG[skillName];

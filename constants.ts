@@ -404,7 +404,7 @@ export const HEROES: Hero[] = [
     avatarUrl: 'images/heroes/关银屏.webp',
     description: '将门虎女',
     skillName: '虎啸',
-    skillDesc: '虎啸：你造成伤害后，可摸一张牌（每回合限一次，含非【杀】伤害）。',
+    skillDesc: '虎啸：锁定技，你每造成一次伤害后，摸一张牌。',
     gender: 'female',
   },
   {
@@ -415,7 +415,7 @@ export const HEROES: Hero[] = [
     avatarUrl: 'images/heroes/张星彩.webp',
     description: '星之少女',
     skillName: '枪舞',
-    skillDesc: '枪舞：锁定技，你使用【杀】无距离限制，且每回合可额外使用一张【杀】。',
+    skillDesc: '枪舞：出牌阶段限一次，你可以进行判定；直到回合结束，你使用点数小于判定结果的【杀】无距离限制，使用点数大于判定结果的【杀】不计入使用次数。',
     gender: 'female',
   },
   {
@@ -426,7 +426,7 @@ export const HEROES: Hero[] = [
     avatarUrl: 'images/heroes/卞夫人.webp',
     description: '母仪天下',
     skillName: '挽危',
-    skillDesc: '挽危：当你失去最后一张手牌时，摸一张牌。',
+    skillDesc: '挽危：每回合限一次，当你的牌被其他角色弃置或获得后，你可以从牌堆获得一张同名牌；没有同名牌则改为摸一张牌。',
     gender: 'female',
   },
   {
@@ -437,7 +437,7 @@ export const HEROES: Hero[] = [
     avatarUrl: 'images/heroes/诸葛果.webp',
     description: '羽化登仙',
     skillName: '祈禳',
-    skillDesc: '祈禳：当你使用一张锦囊牌时，摸一张牌。',
+    skillDesc: '祈禳：当一张装备牌置入你的装备区后，你从牌堆获得一张锦囊牌；牌堆中没有锦囊牌则改为摸一张牌。',
     gender: 'female',
   },
   {
@@ -448,7 +448,7 @@ export const HEROES: Hero[] = [
     avatarUrl: 'images/heroes/曹节.webp',
     description: '汉室皇后',
     skillName: '惠民',
-    skillDesc: '惠民：结束阶段，令至多两名手牌最少的其他角色各摸一张牌。',
+    skillDesc: '惠民：结束阶段，你可以摸X张牌（X为手牌数小于体力值的角色数），然后依次交给这些角色各一张手牌。',
     gender: 'female',
   },
   {
@@ -459,7 +459,7 @@ export const HEROES: Hero[] = [
     avatarUrl: 'images/heroes/伏皇后.webp',
     description: '汉献帝皇后',
     skillName: '求援',
-    skillDesc: '求援：当你成为【杀】的目标时，摸一张牌（每回合限一次，简化实现）。',
+    skillDesc: '求援：当你成为【杀】的目标时，你可以指定另一名其他角色，除非该角色交给你一张【闪】，否则其也成为此【杀】的目标。',
     gender: 'female',
   },
   {
