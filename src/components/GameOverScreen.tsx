@@ -52,7 +52,7 @@ export const GameOverScreen: React.FC<GameOverScreenProps> = ({
     : compact ? 'text-4xl md:text-5xl' : 'text-6xl md:text-8xl';
 
   return (
-    <div data-density={layoutDensity} data-motion={motionOn ? 'on' : 'off'} className={`min-h-screen w-full flex flex-col items-center justify-center text-center p-4 pb-28 relative overflow-y-auto ${theme === 'light' ? 'parchment-bg' : 'bg-black'}`}>
+    <div data-density={layoutDensity} data-motion={motionOn ? 'on' : 'off'} className={`gameover-shell min-h-screen w-full flex flex-col items-center justify-center text-center p-4 pb-28 relative overflow-y-auto ${theme === 'light' ? 'parchment-bg' : 'bg-black'}`}>
       {/* 背景轮播 - 白天模式显示 */}
       {theme === 'light' && (
         <BackgroundCarousel

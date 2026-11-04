@@ -2029,6 +2029,14 @@ a:focus-visible {
   }
 }
 
+/* 结算页：矮屏收掉底部预留，避免 min-h-screen + pb-28 把文档高度顶出视口 */
+@media (max-height: 900px) {
+  .gameover-shell { padding-bottom: 56px !important; }
+}
+@media (max-height: 800px) {
+  .gameover-shell { padding-bottom: 40px !important; }
+}
+
 
 
 
