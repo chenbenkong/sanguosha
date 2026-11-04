@@ -4,7 +4,8 @@ import { HEROES, INITIAL_DECK, EQUIP_META } from './constants';
 import { playSfx, SFX_FOR_NAME } from './src/audio/sfx';
 import { playCardVoice, playSkillVoice, playDeathVoice, hasCardVoice } from './src/audio/voice';
 import CardComponent, { CardArtFilters } from './components/CardComponent';
-import TutorialOverlay, { TUTORIAL_STORAGE_KEY } from './src/components/TutorialOverlay';
+import TutorialOverlay from './src/components/TutorialOverlay';
+import RulesDialog from './src/components/RulesDialog';
 import { GameSave, SAVE_VERSION, readSave, writeSave, clearSave, consumeSaveRejected, isSaveFinished } from './src/game/save';
 import { shuffle, rankValue, wuguKeepPriority } from './src/game/utils';
 import { IconSpeaker, IconSun, IconMoon, IconBolt, IconBook, IconDice, IconMotion, IconArrowLeft, ThemeIcon } from './src/components/Icons';
@@ -857,7 +858,8 @@ const App: React.FC = () => {
       turnIndex: lordIndex,
       logs: initLogs,
     };
-    if (writeSave(snap)) setSavedGame(snap);
+    // 引导局不落盘：避免「看一遍教学」污染首页的「继续上一局」
+    if (!opts?.tutorial && writeSave(snap)) setSavedGame(snap);
   };
 
   // 继续上一局：从存档的「回合开始」重放，先清掉所有挂起的交互与演出状态
@@ -961,50 +963,27 @@ const App: React.FC = () => {
 
   // --- 新手引导 ---
   // 引导不是「假界面」：直接开一局真实对局，由浮层高亮真实控件；主循环与读秒在此期间冻结
-  const screenRef = useRef(screen);
-  useEffect(() => {
-    screenRef.current = screen;
-  }, [screen]);
+  // 仅由玩家主动点击入口（首页「新手教学」/ 玩法说明里的「新手教学」/ 对局中「?」）启动，不做任何自动弹窗
 
   const startTutorial = () => {
     const hero = HEROES.find(h => h.name === '刘备') || HEROES[0];
     tutorialHeroRef.current = hero;
+    setShowRules(false);
     setTutorialActive(true);
     startGame(hero, { playerCount: 5, tutorial: true });
   };
 
-  // 看完：记录「已看过」，并重开一局干净对局，避免引导期间的任何状态残留
+  // 看完：重开一局干净对局，避免引导期间的任何状态残留
   const finishTutorial = () => {
-    try { localStorage.setItem(TUTORIAL_STORAGE_KEY, '1'); } catch { /* ignore */ }
     setTutorialActive(false);
     startGame(tutorialHeroRef.current || HEROES[0], { playerCount: 5 });
   };
 
-  // 跳过：记录「已看过」，退出引导局并回到首页（不留存档）
+  // 跳过：退出引导局并回到首页（不留存档）
   const skipTutorial = () => {
-    try { localStorage.setItem(TUTORIAL_STORAGE_KEY, '1'); } catch { /* ignore */ }
     setTutorialActive(false);
     exitToHome('已跳过新手引导，可随时在首页重新打开');
   };
-
-  // 首次进入自动走一遍；已看过 / 有战绩 / 有存档时不再打扰
-  // 注意：StrictMode 会「执行→清理→再执行」effect，所以这里不能用 ref 去重，
-  // 否则第二次执行会被 ref 挡掉、定时器也被第一次的清理取消，导致引导永远不启动
-  useEffect(() => {
-    let seen = true;
-    try { seen = localStorage.getItem(TUTORIAL_STORAGE_KEY) === '1'; } catch { /* ignore */ }
-    if (seen || savedGame) return;
-    let hasStats = false;
-    try { hasStats = !!localStorage.getItem('sgs-stats'); } catch { /* ignore */ }
-    if (hasStats) return;
-    const t = window.setTimeout(() => {
-      // 玩家已经自己点进选将/对局时不再抢焦点
-      if (screenRef.current !== 'start') return;
-      startTutorial();
-    }, 900);
-    return () => window.clearTimeout(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   // --- Core Game Functions ---
 
@@ -5303,15 +5282,34 @@ const App: React.FC = () => {
                 );
               })()}
 
-              <button onClick={startTutorial} className="ui-text-btn">
-                <IconDice />
-                <span>新手教学</span>
-              </button>
+              <div className="flex w-full max-w-[430px] flex-col sm:flex-row items-stretch justify-center gap-2.5">
+                <button
+                  onClick={startTutorial}
+                  aria-label="新手教学：9 步分步引导，可跳过，随时可重看"
+                  className={`group flex flex-1 items-center justify-center gap-3 min-h-[52px] px-4 rounded-lg border transition-colors ${theme === 'dark'
+                    ? 'border-[#c8a45c]/50 bg-[#1b1510]/85 hover:border-[#e8cf94] hover:bg-[#241c14]/95'
+                    : 'border-[#8b6914]/45 bg-[#fbf6ea]/90 hover:border-[#8b6914] hover:bg-[#fff9ec]'
+                    }`}
+                >
+                  <IconDice />
+                  <span className="flex flex-col items-start leading-tight text-left">
+                    <span className={`font-ancient text-base tracking-[0.18em] ${theme === 'dark' ? 'text-[#e8cf94]' : 'text-[#6b4a1a]'}`}>新手教学</span>
+                    <span className={`text-[10px] tracking-wide ${theme === 'dark' ? 'text-[#9a8b74]' : 'text-[#8a7a60]'}`}>9 步 · 可跳过 · 随时重看</span>
+                  </span>
+                </button>
 
-              <button onClick={() => setShowRules(true)} className="ui-text-btn">
-                <IconBook />
-                <span>玩法说明</span>
-              </button>
+                <button
+                  onClick={() => setShowRules(true)}
+                  aria-label="玩法说明"
+                  className={`flex items-center justify-center gap-2 min-h-[52px] px-4 rounded-lg border transition-colors ${theme === 'dark'
+                    ? 'border-[#c8a45c]/30 hover:border-[#e8cf94]/70'
+                    : 'border-[#8b6914]/30 hover:border-[#8b6914]/70'
+                    }`}
+                >
+                  <IconBook />
+                  <span className={`font-ancient text-base tracking-[0.18em] ${theme === 'dark' ? 'text-[#d9c49a]' : 'text-[#6b4a1a]'}`}>玩法说明</span>
+                </button>
+              </div>
 
               {homeNotice && (
                 <div role="status" className="mt-1 px-4 py-2 rounded-lg border border-[#c8a45c]/45 bg-[#1b1510]/90 text-[12px] text-[#e8cf94]">
@@ -5343,89 +5341,7 @@ const App: React.FC = () => {
           <span>{APP_VERSION}</span>
         </div>
         
-        {/* 玩法说明弹窗：头部/正文/底部三段式，正文独立滚动 */}
-        {showRules && (
-          <div className="absolute inset-0 z-[120] modal-mask flex items-center justify-center p-4" onClick={() => setShowRules(false)}>
-            <div
-              className="modal-shell max-w-3xl w-full max-h-[86vh] flex flex-col overflow-hidden"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="relative flex-none px-6 py-5 border-b border-[#8b7355]/30">
-                <div className="text-center">
-                  <h3 className="modal-title text-3xl font-ancient">玩法说明</h3>
-                  <div className="w-32 modal-divider mx-auto mt-2.5" />
-                </div>
-                <button
-                  onClick={() => setShowRules(false)}
-                  aria-label="关闭玩法说明"
-                  className="btn-ink absolute top-4 right-4 w-8 h-8 rounded-full flex items-center justify-center text-sm"
-                >
-                  ✕
-                </button>
-              </div>
-
-              <div className="flex-1 overflow-y-auto px-5 md:px-7 py-5 space-y-4 text-[#e5dcc8] scrollbar-thin">
-                {/* 身份 */}
-                <section className="rounded-md bg-black/20 p-4 border border-[#8b7355]/25">
-                  <h4 className="font-ancient text-xl text-[#e8cf94] mb-2.5"><span className="mr-2 text-[#8b7355] text-sm">壹</span>身份与胜利</h4>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5 text-sm">
-                    <div className="p-2.5 rounded bg-[#c8a45c]/10 border border-[#c8a45c]/30"><span className="font-bold text-[#e8cf94]">主公</span>：明示身份，体力上限+1</div>
-                    <div className="p-2.5 rounded bg-[#c8a45c]/10 border border-[#c8a45c]/30"><span className="font-bold text-[#e8cf94]">忠臣</span>：与主公同阵营</div>
-                    <div className="p-2.5 rounded bg-[#9e2b25]/15 border border-[#c86b62]/40"><span className="font-bold text-[#f0c8c2]">反贼</span>：击杀主公即胜</div>
-                    <div className="p-2.5 rounded bg-[#3a3a4a]/30 border border-[#7a7a96]/40"><span className="font-bold text-[#e8e8f0]">内奸</span>：最后与主公单挑并获胜</div>
-                  </div>
-                  <p className="text-xs text-[#bfae94] mt-2.5">身份在角色阵亡时公开。杀死反贼摸3张牌；主公误杀忠臣需弃光手牌。</p>
-                </section>
-
-                {/* 流程 */}
-                <section className="rounded-md bg-black/20 p-4 border border-[#8b7355]/25">
-                  <h4 className="font-ancient text-xl text-[#e8cf94] mb-2.5"><span className="mr-2 text-[#8b7355] text-sm">贰</span>回合流程</h4>
-                  <div className="flex flex-wrap items-center gap-2 text-sm">
-                    {['回合开始', '判定', '摸牌阶段', '出牌阶段', '弃牌阶段', '回合结束'].map((s, i) => (
-                      <span key={s} className="flex items-center gap-2">
-                        {i > 0 && <span className="text-[#8b7355]">→</span>}
-                        <span className="px-2 py-0.5 rounded bg-[#2a2018] border border-[#8b7355]/40">{s}</span>
-                      </span>
-                    ))}
-                  </div>
-                  <p className="text-xs text-[#bfae94] mt-2.5">判定区有延时锦囊（闪电 / 乐不思蜀 / 兵粮寸断）时，回合开始与摸牌、出牌阶段前会进行判定。弃牌阶段手牌不能超过当前体力值。</p>
-                </section>
-
-                {/* 牌类 */}
-                <section className="rounded-md bg-black/20 p-4 border border-[#8b7355]/25">
-                  <h4 className="font-ancient text-xl text-[#e8cf94] mb-2.5"><span className="mr-2 text-[#8b7355] text-sm">叁</span>牌型速览</h4>
-                  <ul className="text-sm space-y-1.5">
-                    <li><span className="text-[#e8cf94] font-bold">基本牌</span>：杀（攻击）、闪（抵消杀）、桃（回血）、酒（杀伤害+1 或濒死自救）</li>
-                    <li><span className="text-[#e8cf94] font-bold">锦囊牌</span>：决斗、无中生有、南蛮入侵、万箭齐发、顺手牵羊、过河拆桥、无懈可击、火攻、铁索连环、五谷丰登、桃园结义、借刀杀人、乐不思蜀、兵粮寸断、闪电</li>
-                    <li><span className="text-[#e8cf94] font-bold">装备牌</span>：武器（青釭剑 / 青龙偃月刀 / 方天画戟 / 诸葛连弩）、防具（八卦阵 / 仁王盾）、坐骑（赤兔 / 大宛 为 -1 进攻马，的卢 / 绝影 为 +1 防御马）。点击装备牌即刻上装</li>
-                    <li><span className="text-[#e8cf94] font-bold">距离与范围</span>：默认攻击范围 1（左右相邻），装备武器可提升；【杀】无法打到范围外角色，顺手牵羊 / 兵粮寸断仅限距离 1</li>
-                    <li><span className="text-[#e8cf94] font-bold">无懈可击</span>：仅在锦囊牌生效前打出响应，抵消其对一名角色的效果</li>
-                    <li><span className="text-[#e8cf94] font-bold">铁索连环</span>：横置1-2名角色，被横置者受到属性伤害（如火攻）时伤害传导</li>
-                  </ul>
-                </section>
-
-                {/* 操作 */}
-                <section className="rounded-md bg-black/20 p-4 border border-[#8b7355]/25">
-                  <h4 className="font-ancient text-xl text-[#e8cf94] mb-2.5"><span className="mr-2 text-[#8b7355] text-sm">肆</span>操作技巧</h4>
-                  <ul className="text-sm space-y-1.5">
-                    <li>点击手牌选择，点击头像指定目标；再点一次可取消</li>
-                    <li>非选目标时，点击任意武将头像可查看人物介绍、技能与装备详情</li>
-                    <li>桌面端快捷键：<span className="text-[#e8cf94] font-bold">1-9</span> 选手牌 · <span className="text-[#e8cf94] font-bold">Enter</span> 出牌/确认 · <span className="text-[#e8cf94] font-bold">E</span> 结束回合 · <span className="text-[#e8cf94] font-bold">Esc</span> 取消选择 · <span className="text-[#e8cf94] font-bold">?</span> 帮助</li>
-                    <li>右上角可切换 <span className="text-[#e8cf94] font-bold">速度 / 动效 / 主题 / 静音</span>，设置会记住到下次打开</li>
-                    <li>右上角 <span className="text-[#e8cf94] font-bold">⚡×N</span> 可加速 AI 结算节奏</li>
-                    <li>遇到危险时别慌——弹出响应框前先看清需要什么牌</li>
-                  </ul>
-                </section>
-              </div>
-
-              <div className="flex-none px-6 py-4 border-t border-[#8b7355]/30 flex justify-center">
-                <button onClick={() => setShowRules(false)} className="btn-gold px-10 py-2.5 rounded-lg font-ancient text-xl tracking-[0.2em]">
-                  知道了
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
+        {showRules && <RulesDialog onClose={() => setShowRules(false)} onStartTutorial={startTutorial} />}
       </div>
     );
   }
@@ -6633,8 +6549,16 @@ const App: React.FC = () => {
         {/* 顶部装饰条 */}
         <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-transparent via-yellow-700/50 to-transparent"></div>
 
-        {/* 右上角控制组：速度 / 主题 / 静音 */}
+        {/* 右上角控制组：帮助 / 速度 / 主题 / 静音 */}
         <div data-region="top-controls" className="absolute top-2 right-3 z-50 flex items-center gap-2">
+          <button
+            onClick={() => setShowRules(true)}
+            className="ui-icon-btn font-bold"
+            title="玩法说明与新手教学"
+            aria-label="玩法说明与新手教学"
+          >
+            <span className="text-base leading-none">?</span>
+          </button>
           <button
             onClick={() => setSpeedLevel(speedLevel === 1 ? 2 : speedLevel === 2 ? 3 : 1)}
             className="ui-icon-btn font-bold text-sm tracking-wider"
@@ -8158,6 +8082,9 @@ const App: React.FC = () => {
            </div>
          </div>
       </div>
+
+      {/* 对局中玩法说明 / 新手教学入口（右上角 ?） */}
+      {showRules && <RulesDialog onClose={() => setShowRules(false)} onStartTutorial={startTutorial} />}
 
       {/* 新手引导：高亮真实控件，不改变对局状态 */}
       {tutorialActive && (

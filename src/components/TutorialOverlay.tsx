@@ -16,9 +16,6 @@ export interface TourStep {
   hint?: string;
 }
 
-const TUTORIAL_KEY = 'sgs-tutorial-v1';
-export const TUTORIAL_STORAGE_KEY = TUTORIAL_KEY;
-
 export const TUTORIAL_STEPS: TourStep[] = [
   {
     id: 'welcome',
