@@ -6,6 +6,7 @@ import { playCardVoice, playSkillVoice, playDeathVoice, playEnterVoice, hasCardV
 import CardComponent, { CardArtFilters } from './components/CardComponent';
 import TutorialOverlay from './src/components/TutorialOverlay';
 import { PortraitLightbox } from './src/components/PortraitLightbox';
+import { HeroDetailModal } from './src/components/HeroDetailModal';
 import RulesDialog from './src/components/RulesDialog';
 import { GameSave, SAVE_VERSION, readSave, writeSave, clearSave, consumeSaveRejected, isSaveFinished } from './src/game/save';
 import { shuffle, rankValue, wuguKeepPriority } from './src/game/utils';
@@ -291,6 +292,10 @@ const App: React.FC = () => {
   const [inspectPlayerId, setInspectPlayerId] = useState<number | null>(null);
   // 立绘大图（竖幅原图）查看
   const [portraitHero, setPortraitHero] = useState<Hero | null>(null);
+  // 武将详情面板（选将页 / 对局内）
+  const [detailHero, setDetailHero] = useState<Hero | null>(null);
+  // 对局战报折叠（桌面）
+  const [logCollapsed, setLogCollapsed] = useState<boolean>(true);
 
   // 玩法说明弹窗（首页）
   const [showRules, setShowRules] = useState<boolean>(false);
@@ -5606,7 +5611,7 @@ const App: React.FC = () => {
             {HEROES.map(hero => (
               <button
                 key={hero.id}
-                onClick={() => setSelectedHero(hero)}
+                onClick={() => { setSelectedHero(hero); setDetailHero(hero); }}
                 className="hero-pick group text-left"
                 aria-pressed={selectedHero?.id === hero.id}
                 aria-label={`选择 ${hero.name}`}
@@ -5691,6 +5696,13 @@ const App: React.FC = () => {
                       >
                         查看立绘
                       </button>
+                      <button
+                        onClick={() => setDetailHero(selectedHero)}
+                        className={`flex-none text-[11px] px-2 py-0.5 rounded border ${theme === 'dark' ? 'border-[#c8a45c]/50 text-[#e8cf94] hover:bg-[#c8a45c]/15' : 'border-[#a8842c]/50 text-[#6b4a1a] hover:bg-[#c8a45c]/15'}`}
+                        aria-label={`查看 ${selectedHero.name} 武将详情`}
+                      >
+                        武将详情
+                      </button>
                     </div>
                     <p className={`mt-0.5 text-xs leading-relaxed truncate ${theme === 'dark' ? 'text-[#c8bda8]' : 'text-[#5a4c38]'}`}>
                       {selectedHero.skillDesc}
@@ -5729,6 +5741,13 @@ const App: React.FC = () => {
           </div>
         </div>
 
+        <HeroDetailModal
+          hero={detailHero}
+          onClose={() => setDetailHero(null)}
+          onSelect={(h) => { setSelectedHero(h); setDetailHero(null); }}
+          onStart={(h) => { setDetailHero(null); startGame(h); }}
+          onZoom={(h) => setPortraitHero(h)}
+        />
         <PortraitLightbox hero={portraitHero} onClose={() => setPortraitHero(null)} />
       </div>
     );
@@ -6069,6 +6088,13 @@ const App: React.FC = () => {
                   >
                     查看立绘
                   </button>
+                  <button
+                    onClick={() => { setInspectPlayerId(null); setDetailHero(p.hero); }}
+                    className="text-[11px] px-2 py-0.5 rounded border border-[#c8a45c]/50 text-[#e8cf94] hover:bg-[#c8a45c]/15"
+                    aria-label={`查看 ${p.hero.name} 武将详情`}
+                  >
+                    武将详情
+                  </button>
                 </div>
                 <div className="flex-1">
                   <h4 className="text-2xl font-bold text-[#d4af37] font-ancient flex items-center gap-2">
@@ -6132,6 +6158,13 @@ const App: React.FC = () => {
 
       {/* 立绘大图查看（竖幅原图，可关闭） */}
       <PortraitLightbox hero={portraitHero} onClose={() => setPortraitHero(null)} />
+
+      {/* 武将详情（对局内点击座位 → 武将详情） */}
+      <HeroDetailModal
+        hero={detailHero}
+        onClose={() => setDetailHero(null)}
+        onZoom={(h) => setPortraitHero(h)}
+      />
 
       {/* Skill Info Modal - 技能说明弹窗 */}
       {showSkillModal && (
@@ -6734,9 +6767,8 @@ const App: React.FC = () => {
         </div>
       </div>
 
-      {/* Top Area: Enemies - 原版三国杀环形布局
-          手机端顶部悬浮着托管/速度/主题按钮，座位区需让出高度，避免压住敌方武将 */}
-      <div className="flex-none pt-[52px] md:pt-3 pb-2 z-10 relative">
+      {/* 顶部工具栏：桌面端不占竖向高度，座位环绝对定位覆盖牌桌舞台 */}
+      <div className="flex-none md:h-0 z-10 relative md:static">
         {/* 顶部装饰条 */}
         <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-transparent via-yellow-700/50 to-transparent"></div>
 
@@ -6785,22 +6817,20 @@ const App: React.FC = () => {
           </button>
         </div>
 
-        {/* 环形座位布局 */}
-      <div data-region="seats" className={`relative w-full flex items-start justify-center gap-1 overflow-x-auto md:block md:h-[var(--seat-h)] md:gap-0 md:overflow-visible py-1 md:py-0 px-1 md:px-0 scrollbar-hide`}>
+        {/* 环形座位：桌面端绝对定位环绕牌桌；手机端为顶部横向压缩小卡 */}
+      <div data-region="seats" data-many={enemies.length >= 5 ? 'true' : 'false'} className={`relative w-full flex items-start justify-center gap-1 overflow-x-auto pt-[52px] pb-1 px-1 scrollbar-hide md:pt-0 md:pb-0 md:px-0 md:absolute md:top-0 md:left-0 md:right-0 md:h-[68vh] md:block md:overflow-visible`}>
           {enemies.map((p, index) => {
-            // 计算环形位置
+            // 环绕牌桌的椭圆弧：以左右两侧为低点、顶端为高点，避开中央牌堆与顶部工具栏
             const totalEnemies = enemies.length;
-            const angleStep = 180 / (totalEnemies + 1); // 上半圆分布
-            const angle = angleStep * (index + 1); // 从左侧开始
-            const radian = (angle * Math.PI) / 180;
-            
-            // 计算位置（以屏幕中心为基准）
-            const centerX = 50; // 中心点百分比
-            const radius = 42; // 半径百分比
-            const left = centerX - radius * Math.cos(radian);
-            const top = radius * Math.sin(radian) * 0.6; // 压缩垂直方向
+            const t = totalEnemies > 1 ? (-76 + 152 * index / (totalEnemies - 1)) : 0;
+            const radian = (t * Math.PI) / 180;
+            const left = 50 + 38 * Math.sin(radian);
+            const top = 44 - 37 * Math.cos(radian);
             // 选中【杀】类牌时，超出攻击范围的目标灰显
             const outOfRange = !p.isDead && isSelectingTarget && slashLikeActive && getDistance(me.id, p.id) > getAttackRange(me);
+            // 正处于「选择目标」流程时，给合法目标一个明确的候选标记
+            const selectableTarget = !p.isDead && (isSelectingTarget || isLijianMode || isJieyinMode
+              || (isRendeMode && rendeSelectedCardIds.length > 0) || isJiedaoMode);
             
             return (
             <div 
@@ -6893,7 +6923,14 @@ const App: React.FC = () => {
                 ${damageAnimTarget === p.id ? 'animate-damage-shake' : ''}
                 ${healAnimTarget === p.id ? 'animate-heal-pulse' : ''}
                 ${outOfRange ? 'opacity-40 saturate-[0.6]' : ''}
+                ${selectableTarget && !outOfRange ? 'target-candidate' : ''}
               `}>
+                {/* 合法目标候选标记：配合高亮描边，明确「可点」 */}
+                {selectableTarget && !outOfRange && (
+                  <span className="target-chip absolute -top-3 left-1/2 -translate-x-1/2 z-30 whitespace-nowrap">
+                    选择目标
+                  </span>
+                )}
                 {/* 势力色顶条：魏蓝 / 蜀红 / 吴绿 / 群金 */}
                 <span
                   className="absolute top-0 left-2 right-2 h-[2px] rounded-full opacity-80"
@@ -6918,8 +6955,8 @@ const App: React.FC = () => {
                   </div>
                 )}
 
-                {/* 武将头像区域 */}
-                <div className={`seat-avatar relative w-[74px] h-[92px] mb-2 ${
+                {/* 武将立绘：2:3 竖幅，尺寸由 --seat-aw / --seat-ah 按视口分档自适应 */}
+                <div className={`seat-avatar relative mb-1.5 ${
                   healAnimTarget === p.id ? 'animate-heal-glow' :
                   damageAnimTarget === p.id ? 'animate-damage-glow' : ''
                 } ${skillGlowId === p.id ? 'skill-glow' : ''} ${aiThinkingId === p.id ? 'ai-thinking' : ''}`}>
@@ -6983,12 +7020,12 @@ const App: React.FC = () => {
                 
                 {/* 武将信息 */}
                 <div className="text-center">
-                  <div className="font-ancient text-base mb-1 truncate text-[#e8dcc8]">{p.hero.name}</div>
+                  <div className="font-ancient text-sm md:text-base mb-0.5 truncate text-[#e8dcc8]">{p.hero.name}</div>
                   {/* 技能名牌：官方武将牌在姓名下方标注技能 */}
-                  <div className="kingdom-name text-[10px] tracking-[0.12em] leading-none mb-1 truncate opacity-85">【{p.hero.skillName}】</div>
+                  <div className="kingdom-name text-[9px] md:text-[10px] tracking-[0.12em] leading-none mb-1 truncate opacity-85">【{p.hero.skillName}】</div>
                   
                   {/* 体力值 - 朱红勾玉 */}
-                  <div className="flex justify-center gap-0.5 mb-1.5">
+                  <div className="flex justify-center gap-0.5 mb-1">
                     {Array.from({ length: p.maxHp }).map((_, i) => (
                       <div 
                         key={i}
@@ -7003,9 +7040,31 @@ const App: React.FC = () => {
                     ))}
                   </div>
                   
-                  {/* 状态标志 - 铁索连环、乐不思蜀、兵粮寸断 */}
-                  {(p.isChained || p.isLeBuSiShu || p.isBingLiangCunDuan) && (
-                    <div className="flex justify-center gap-1 mt-1.5 flex-wrap">
+                  {/* 装备区：武器 / 防具 / +1 马 / -1 马 四槽常显（官方对局信息层级） */}
+                  <div className="grid grid-cols-4 gap-0.5 md:gap-1 mb-1 max-w-[136px] mx-auto">
+                    {[
+                      { key: 'weapon', label: '武', item: p.equipment?.weapon, tone: 'bg-[#2b3a2b]/80 border-[#6a8a6a]/60 text-[#cfe8cf]', tip: '武器' },
+                      { key: 'armor', label: '防', item: p.equipment?.armor, tone: 'bg-[#2b3340]/80 border-[#6a8296]/60 text-[#cfe0ee]', tip: '防具' },
+                      { key: 'horsePlus', label: '+1', item: p.equipment?.horsePlus, tone: 'bg-[#2b3346]/80 border-[#6a7ea0]/60 text-[#d0dcf0]', tip: '+1 马' },
+                      { key: 'horseMinus', label: '-1', item: p.equipment?.horseMinus, tone: 'bg-[#402b33]/80 border-[#a06a7e]/60 text-[#f0d0dc]', tip: '-1 马' },
+                    ].map(slot => (
+                      <span
+                        key={slot.key}
+                        title={`${slot.tip}：${slot.item ? slot.item.name : '空'}`}
+                        className={`h-4 md:h-5 rounded-[3px] border text-[8px] md:text-[9px] leading-none flex items-center justify-center ${
+                          slot.item
+                            ? slot.tone
+                            : theme === 'dark' ? 'border-[#4a3f33]/60 text-[#5f5343] bg-black/20' : 'border-[#c4b8a8]/60 text-[#b0ab9f] bg-white/30'
+                        }`}
+                      >
+                        {slot.label}
+                      </span>
+                    ))}
+                  </div>
+
+                  {/* 判定区：乐 / 兵 / 电 / 链 逐张可见 */}
+                  {(p.isChained || p.isLeBuSiShu || p.isBingLiangCunDuan || p.isShandian) && (
+                    <div className="flex justify-center gap-1 mt-1.5 flex-wrap" title="判定区">
                       {p.isChained && (
                         <div className="w-5 h-5 rounded-full bg-amber-700 border border-amber-500 flex items-center justify-center" title="铁索连环">
                           <span className="text-[10px] text-amber-200 font-bold">链</span>
@@ -7028,41 +7087,14 @@ const App: React.FC = () => {
                       )}
                     </div>
                   )}
-                  
-                  {/* 装备区 */}
-                  {(p.equipment?.weapon || p.equipment?.armor || p.equipment?.horsePlus || p.equipment?.horseMinus) && (
-                    <div className="flex items-center justify-center gap-1 mb-1 flex-wrap max-w-[120px] mx-auto">
-                      {p.equipment?.weapon && (
-                        <span className="px-1 py-0.5 rounded-[3px] bg-[#2b3a2b]/80 border border-[#6a8a6a]/50 text-[#cfe8cf] text-[10px] leading-none whitespace-nowrap" title={`武器：${p.equipment.weapon.name}`}>
-                          {p.equipment.weapon.name}
-                        </span>
-                      )}
-                      {p.equipment?.armor && (
-                        <span className="px-1 py-0.5 rounded-[3px] bg-[#2b3340]/80 border border-[#6a8296]/50 text-[#cfe0ee] text-[10px] leading-none" title={`防具：${p.equipment.armor.name}`}>
-                          {p.equipment.armor.name}
-                        </span>
-                      )}
-                      {p.equipment?.horsePlus && (
-                        <span className="px-1 py-0.5 rounded-[3px] bg-[#2b3346]/80 border border-[#6a7ea0]/50 text-[#d0dcf0] text-[10px] leading-none" title={`防御马：${p.equipment.horsePlus.name}`}>
-                          +1马
-                        </span>
-                      )}
-                      {p.equipment?.horseMinus && (
-                        <span className="px-1 py-0.5 rounded-[3px] bg-[#402b33]/80 border border-[#a06a7e]/50 text-[#f0d0dc] text-[10px] leading-none" title={`进攻马：${p.equipment.horseMinus.name}`}>
-                          -1马
-                        </span>
-                      )}
-                    </div>
-                  )}
 
-                  {/* 手牌数 */}
-                  <div className="flex items-center justify-center gap-1 md:gap-2 text-[10px] md:text-xs mt-1">
-                    <span className="text-[#8f806a]">手牌</span>
-                    <span className="font-bold text-[#e8cf94]">{p.hand.length}</span>
-                    <span className="text-[#8f806a]">距离</span>
-                    <span className={`font-bold ${getDistance(me.id, p.id) <= getAttackRange(me) ? 'text-[#9fcfae]' : 'text-[#8f806a]'}`}>
-                      {getDistance(me.id, p.id)}
+                  {/* 手牌数（官方布局：座位角标显示张数）+ 距离 */}
+                  <div className="flex items-center justify-center gap-1.5 mt-0.5">
+                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-[4px] bg-black/35 border border-[#8b7355]/40 text-[10px] leading-none">
+                      <span className="text-[#8f806a]">手牌</span>
+                      <span className="font-bold text-[#e8cf94] tabular-nums">{p.hand.length}</span>
                     </span>
+                    <span className="text-[9px] text-[#8f806a]">距 {getDistance(me.id, p.id)}</span>
                   </div>
                 </div>
               </div>
@@ -7075,15 +7107,34 @@ const App: React.FC = () => {
       {/* Middle: Field - 原版三国杀风格 */}
       <div className="flex-1 relative flex items-center justify-center w-full">
         
-        {/* Logs - 左侧日志区域 - 可滚动 - 优化位置和大小 */}
-        <div data-region="log" className="absolute left-2 top-0 bottom-4 w-64 min-[1280px]:w-72 hidden md:block z-10">
-           <div className="log-panel h-full flex flex-col overflow-hidden">
+        {/* Logs - 战况记录：可折叠侧栏（桌面端） */}
+        <div data-region="log" className={`absolute left-2 top-2 bottom-4 hidden md:flex z-30 transition-[width] duration-200 ${logCollapsed ? 'log-collapsed w-10' : 'w-64 min-[1280px]:w-72'}`}>
+          {logCollapsed ? (
+            <button
+              onClick={() => setLogCollapsed(false)}
+              className="log-panel w-full h-full flex flex-col items-center justify-center gap-2"
+              aria-label="展开战况记录"
+              title="展开战况记录"
+            >
+              <span className="text-[10px] tracking-[0.34em] text-[#d9c49a]" style={{ writingMode: 'vertical-rl' }}>战况记录</span>
+              <span className="text-[10px] tabular-nums px-1.5 py-0.5 rounded bg-black/40 text-[#e8cf94] border border-[#8b7355]/40">{logs.length}</span>
+            </button>
+          ) : (
+           <div className="log-panel h-full w-full flex flex-col overflow-hidden">
              {/* 标题栏 */}
              <div className="flex-none px-3 py-2 border-b border-[#8b7355]/25 bg-black/25">
                <div className="flex items-center gap-2">
                  <span className="w-[3px] h-4 rounded-sm bg-gradient-to-b from-[#f0d894] to-[#a8842c]" />
                  <span className="text-xs font-bold tracking-[0.2em] text-[#d9c49a]">战况记录</span>
-                 <span className="ml-auto text-[10px] tabular-nums text-[#8f806a]">{logs.length}</span>
+                 <span className="text-[10px] tabular-nums text-[#8f806a]">{logs.length}</span>
+                 <button
+                   onClick={() => setLogCollapsed(true)}
+                   className="ml-auto text-[11px] px-1.5 py-0.5 rounded border border-[#8b7355]/50 text-[#d9c49a] hover:bg-white/10"
+                   aria-label="收起战况记录"
+                   title="收起战况记录"
+                 >
+                   收起 ‹
+                 </button>
                </div>
              </div>
              {/* 可滚动日志内容 */}
@@ -7155,6 +7206,7 @@ const App: React.FC = () => {
                <div ref={logsEndRef} />
              </div>
            </div>
+          )}
         </div>
 
         {/* Mobile Toast Log */}
@@ -7166,9 +7218,11 @@ const App: React.FC = () => {
            ))}
         </div>
 
-        {/* Phase Indicator - 五阶段进度轨（桌面端；手机端由顶部紧凑读秒替代） */}
-        <div className="hidden md:block ui-panel absolute right-3 bottom-3 px-4 py-2.5 z-10">
-          <div className={`hidden md:block text-[10px] mb-1.5 tracking-[0.24em] ${theme === 'dark' ? 'text-[#9a8b74]' : 'text-[#8a7a60]'}`}>当前阶段</div>
+        {/* Phase Indicator - 五阶段进度轨（底部居中，紧邻手牌条上方） */}
+        <div className={`hidden md:flex ui-panel absolute left-1/2 -translate-x-1/2 bottom-2 px-4 py-2 z-30 flex-col items-center ${theme === 'dark' ? 'shadow-[0_6px_24px_rgba(0,0,0,0.55)]' : ''}`}>
+          <div className={`text-[10px] mb-1 tracking-[0.24em] ${theme === 'dark' ? 'text-[#9a8b74]' : 'text-[#8a7a60]'}`}>
+            当前阶段 · <span className="text-[#e8cf94]">{getPlayer(turnIndex)?.hero.name}</span>
+          </div>
           <div className="flex items-center gap-1">
             {[GamePhase.START, GamePhase.DRAW, GamePhase.ACTION, GamePhase.DISCARD, GamePhase.END].map((ph, i) => {
               const phIndex = [GamePhase.START, GamePhase.DRAW, GamePhase.ACTION, GamePhase.DISCARD, GamePhase.END].indexOf(phase);
@@ -7347,8 +7401,8 @@ const App: React.FC = () => {
         {/* 底部装饰线 */}
         <div className={`absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent ${theme === 'dark' ? 'via-yellow-700/30' : 'via-[#c4a77d]/30'} to-transparent`}></div>
         
-        {/* 玩家信息栏：桌面端居中，与上方环形座位形成「自己在牌桌下首」的构图 */}
-        <div data-region="player-info" className="player-info-row flex flex-col md:flex-row md:justify-center md:items-center gap-1 md:gap-7 px-2 md:px-4 mb-1 md:mb-3">
+        {/* 玩家信息栏：自己固定牌桌下首（左侧），操作区靠右下 */}
+        <div data-region="player-info" className="player-info-row flex flex-col md:flex-row md:justify-between md:items-start gap-1 md:gap-6 px-2 md:px-4 mb-1 md:mb-2">
           {/* 玩家头像和信息 - 原版三国杀风格 */}
           <div className="flex items-center gap-4">
             <div className="relative">
@@ -7410,7 +7464,7 @@ const App: React.FC = () => {
                     if (!dyingState && !pendingReaction) setInspectPlayerId(me.id);
                   }}
                   title={`点击查看 ${me.hero.name} 的武将详情`}
-                  className={`player-avatar relative w-20 h-24 cursor-pointer ${
+                  className={`player-avatar relative cursor-pointer ${
                   healAnimTarget === 0 ? 'animate-heal-glow' :
                   damageAnimTarget === 0 ? 'animate-damage-glow' : ''
                 } ${skillGlowId === 0 ? 'skill-glow' : ''} ${aiThinkingId === 0 ? 'ai-thinking' : ''}`}>
@@ -7566,11 +7620,16 @@ const App: React.FC = () => {
                 ) : (
                   <span className={`px-2 py-0.5 rounded-[4px] border border-dashed text-[11px] ${theme === 'dark' ? 'border-[#4a3f33] text-stone-600' : 'border-[#c4b8a8] text-[#b0aba5]'}`}>防具</span>
                 )}
-                {me.equipment?.horseMinus && (
+                {/* 装备四槽常显：武器 / 防具 / -1 马 / +1 马 */}
+                {me.equipment?.horseMinus ? (
                   <span className="px-2 py-0.5 rounded-[4px] bg-[#402b33]/80 border border-[#a06a7e]/60 text-[#f0d0dc] text-[11px] font-bold">-1马</span>
+                ) : (
+                  <span className={`px-2 py-0.5 rounded-[4px] border border-dashed text-[11px] ${theme === 'dark' ? 'border-[#4a3f33] text-stone-600' : 'border-[#c4b8a8] text-[#b0aba5]'}`}>-1马</span>
                 )}
-                {me.equipment?.horsePlus && (
+                {me.equipment?.horsePlus ? (
                   <span className="px-2 py-0.5 rounded-[4px] bg-[#2b3346]/80 border border-[#6a7ea0]/60 text-[#d0dcf0] text-[11px] font-bold">+1马</span>
+                ) : (
+                  <span className={`px-2 py-0.5 rounded-[4px] border border-dashed text-[11px] ${theme === 'dark' ? 'border-[#4a3f33] text-stone-600' : 'border-[#c4b8a8] text-[#b0aba5]'}`}>+1马</span>
                 )}
               </div>
             </div>
@@ -8206,9 +8265,39 @@ const App: React.FC = () => {
              <div className="absolute inset-x-4 bottom-0 h-32 rounded-t-2xl pointer-events-none bg-gradient-to-t from-[#0c0906]/85 to-transparent"></div>
            )}
            <div className="hand-tray" aria-hidden="true" />
-           <div className="absolute left-4 bottom-3 hidden md:flex items-center gap-1.5 pointer-events-none">
-             <span className={`text-[10px] tracking-[0.28em] ${theme === 'dark' ? 'text-[#8f806a]' : 'text-[#9a8a70]'}`}>手牌</span>
-             <span className={`font-ancient text-lg leading-none ${theme === 'dark' ? 'text-[#e8cf94]' : 'text-[#8b6914]'}`}>{me.hand.length}</span>
+           {/* 左下角标：手牌数 + 弃牌堆（可查看，含张数） */}
+           <div className="absolute left-3 bottom-3 hidden md:flex items-center gap-3 z-20">
+             <div className="flex items-center gap-1.5 pointer-events-none">
+               <span className={`text-[10px] tracking-[0.28em] ${theme === 'dark' ? 'text-[#8f806a]' : 'text-[#9a8a70]'}`}>手牌</span>
+               <span className={`font-ancient text-lg leading-none ${theme === 'dark' ? 'text-[#e8cf94]' : 'text-[#8b6914]'}`}>{me.hand.length}</span>
+             </div>
+             <button
+               onClick={() => setShowDiscardViewer(true)}
+               disabled={!!dyingState || isProcessing}
+               className={`pointer-events-auto inline-flex items-center gap-1 px-2 py-1 rounded-[4px] border text-[10px] leading-none transition-colors ${
+                 theme === 'dark'
+                   ? 'bg-[#14100c]/80 border-[#8b7355]/45 text-[#c8bda8] hover:border-[#c8a45c] hover:text-[#e8cf94]'
+                   : 'bg-white/60 border-[#c4b8a8]/70 text-[#6b5a42] hover:border-[#a8842c]'
+               }`}
+               aria-label={`查看弃牌堆，共 ${discardPile.length} 张`}
+               title="查看弃牌堆"
+             >
+               <span className="opacity-70">弃牌堆</span>
+               <span className="font-bold tabular-nums text-[#e8cf94]">{discardPile.length}</span>
+             </button>
+           </div>
+
+           {/* 右下角标：牌堆剩余张数 */}
+           <div className="absolute right-3 bottom-3 hidden md:flex items-center gap-2 z-20">
+             <div
+               className={`inline-flex items-center gap-1 px-2 py-1 rounded-[4px] border text-[10px] leading-none ${
+                 theme === 'dark' ? 'bg-[#14100c]/80 border-[#8b7355]/45 text-[#c8bda8]' : 'bg-white/60 border-[#c4b8a8]/70 text-[#6b5a42]'
+               }`}
+               title="牌堆剩余张数"
+             >
+               <span className="opacity-70">牌堆</span>
+               <span className="font-bold tabular-nums text-[#e8cf94]">{deck.length}</span>
+             </div>
            </div>
 
            <div className="flex -space-x-2 sm:space-x-1 md:space-x-2 items-end px-4 pb-2 relative mx-auto shrink-0 w-max">
