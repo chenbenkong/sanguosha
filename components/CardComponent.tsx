@@ -175,7 +175,7 @@ const CardComponent: React.FC<CardProps> = ({ card, onClick, disabled, selected,
         group relative flex flex-col items-center text-left
         rounded-lg overflow-hidden transition-all duration-200
         bg-gradient-to-br ${theme.face}
-        ${small ? 'w-16 h-24' : large ? 'w-24 h-36 md:w-36 md:h-52' : 'w-[76px] h-[114px] sm:w-24 sm:h-36 md:w-28 md:h-44'}
+        ${small ? 'w-[82px] h-[118px]' : large ? 'w-[106px] h-[152px]' : 'w-[96px] h-[144px]'}
         mx-1 mb-2
         ${selected
           ? 'ring-4 ring-yellow-500 z-30 shadow-[0_10px_30px_rgba(0,0,0,0.55),0_0_20px_rgba(234,179,8,0.45)]'

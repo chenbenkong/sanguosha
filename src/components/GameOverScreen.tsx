@@ -3,7 +3,7 @@ import { Identity, LogEntry, Player } from '../../types';
 import { BackgroundCarousel } from '../components/BackgroundCarousel';
 import { BACKGROUND_IMAGES, CAROUSEL_CONFIG } from '../config/backgrounds';
 import { IconSpeaker } from '../components/Icons';
-import { WINNER_LABEL, WinnerSide } from '../game/constants';
+import { KINGDOM_CLASS, WINNER_LABEL, WinnerSide } from '../game/constants';
 import { useLayoutProfile } from '../hooks/useLayoutProfile';
 
 interface GameOverScreenProps {
@@ -148,17 +148,25 @@ export const GameOverScreen: React.FC<GameOverScreenProps> = ({
           {players.map((player, idx) => (
             <div
               key={player.id}
-              className={`reveal-card flex flex-col items-center p-2.5 rounded-xl border transition-all duration-300 w-[86px]
+              className={`reveal-card settle-hero flex flex-col items-center p-2.5 rounded-xl border transition-all duration-300 w-[92px] kingdom-frame ${KINGDOM_CLASS[player.hero.kingdom] ?? ''}
                 ${player.isDead
-                  ? 'bg-black/45 border-[#9e2b25]/60 opacity-70 grayscale'
-                  : 'bg-black/25 border-[#8b7355]/35 hover:border-[#c8a45c]/70 hover:bg-black/35'
+                  ? 'bg-black/45 opacity-70 grayscale'
+                  : 'bg-black/25 hover:bg-black/35'
                 }
               `}
               style={{ animationDelay: `${idx * 90}ms` }}
             >
-              <img src={player.hero.avatarUrl} alt={player.hero.name} loading="lazy" decoding="async" className={`w-[52px] h-[78px] rounded-md mb-2 border-2 object-cover object-top ${player.isDead ? 'border-[#9e2b25]/60 grayscale' : 'border-[#c8a45c]/55'}`} />
-              <div className="text-base modal-text font-bold mb-1">
+              <img src={player.hero.avatarUrl} alt={player.hero.name} loading="lazy" decoding="async" className={`settle-portrait w-[56px] h-[84px] rounded-md mb-2 object-cover object-top ${player.isDead ? 'grayscale' : ''}`} />
+              <div className="text-base modal-text font-bold mb-0.5">
                 {player.hero.name}
+              </div>
+              <div className="settle-hp" title={`体力 ${player.hp}/${player.maxHp}`}>
+                <span className="settle-hp-pips">
+                  {Array.from({ length: player.maxHp }).map((_, i) => (
+                    <i key={i} className={`settle-pip ${i < player.hp ? 'is-on' : ''}`} />
+                  ))}
+                </span>
+                <b className="settle-hp-num tabular-nums">{player.hp}</b>
               </div>
               <div className={`text-sm font-ancient px-2.5 py-0.5 rounded-full
                 ${player.isDead
