@@ -489,8 +489,8 @@
 }
 .skill-cast-portrait {
   position: relative;
-  width: 100px;
-  height: 100px;
+  width: 96px;
+  height: 144px;
   margin: 0 auto 8px;
 }
 .skill-cast-portrait img {
@@ -499,7 +499,7 @@
   width: 100%;
   height: 100%;
   object-fit: cover;
-  border-radius: 50%;
+  border-radius: 8px;
   border: 2px solid #e8cf94;
   box-shadow:
     0 0 0 3px rgba(158, 43, 37, 0.35),
@@ -510,14 +510,14 @@
 .skill-cast-ring {
   position: absolute;
   inset: -5px;
-  border-radius: 50%;
+  border-radius: 12px;
   border: 1px solid rgba(232, 207, 148, 0.75);
   animation: castRing 0.9s ease-out 2 both;
   pointer-events: none;
 }
 @media (max-width: 640px) {
   .skill-cast { padding: 10px 26px 8px; }
-  .skill-cast-portrait { width: 76px; height: 76px; }
+  .skill-cast-portrait { width: 72px; height: 108px; }
   .skill-cast::before { width: 220px; height: 220px; }
 }
 @media (prefers-reduced-motion: reduce) {
@@ -1186,7 +1186,7 @@
 /* 选将卡：整张牌面裁切，文字压在下缘的墨色渐层里 */
 .hero-pick {
   position: relative;
-  aspect-ratio: 3 / 4;
+  aspect-ratio: 2 / 3;
   border-radius: 8px;
   overflow: hidden;
   border: 1px solid rgba(200, 164, 92, 0.35);
@@ -1255,40 +1255,40 @@
    这样 100% 浏览器缩放下不会再把底部手牌挤出视口。 */
 [data-density="roomy"] {
   --seat-h: 300px;
-  --seat-aw: 112px;
-  --seat-ah: 132px;
+  --seat-aw: 100px;
+  --seat-ah: 150px;
   --hand-min: 200px;
   --felt-w: min(720px, 52vw);
   --felt-h: min(290px, 30vh);
 }
 [data-density="normal"] {
   --seat-h: 260px;
-  --seat-aw: 96px;
-  --seat-ah: 112px;
+  --seat-aw: 84px;
+  --seat-ah: 126px;
   --hand-min: 184px;
   --felt-w: min(620px, 52vw);
   --felt-h: min(250px, 30vh);
 }
 [data-density="compact"] {
   --seat-h: 200px;
-  --seat-aw: 74px;
-  --seat-ah: 88px;
+  --seat-aw: 66px;
+  --seat-ah: 99px;
   --hand-min: 118px;
   --felt-w: min(560px, 50vw);
   --felt-h: min(220px, 28vh);
 }
 [data-density="tight"] {
   --seat-h: 176px;
-  --seat-aw: 62px;
-  --seat-ah: 74px;
+  --seat-aw: 55px;
+  --seat-ah: 82px;
   --hand-min: 104px;
   --felt-w: min(520px, 46vw);
   --felt-h: min(190px, 26vh);
 }
 [data-density="ultra"] {
   --seat-h: 150px;
-  --seat-aw: 52px;
-  --seat-ah: 62px;
+  --seat-aw: 48px;
+  --seat-ah: 72px;
   --hand-min: 92px;
   --felt-w: min(470px, 42vw);
   --felt-h: min(155px, 22vh);
@@ -1300,15 +1300,15 @@
 }
 [data-density="roomy"][data-size-tier="xl"] {
   --seat-h: 340px;
-  --seat-aw: 132px;
-  --seat-ah: 152px;
+  --seat-aw: 112px;
+  --seat-ah: 168px;
   --hand-min: 240px;
   --felt-w: min(900px, 50vw);
   --felt-h: min(340px, 28vh);
 }
 [data-density="compact"][data-size-tier="lg"] {
-  --seat-aw: 80px;
-  --seat-ah: 96px;
+  --seat-aw: 72px;
+  --seat-ah: 108px;
 }
 [data-size-tier="xl"] .ui-icon-btn {
   height: 44px;
@@ -1318,8 +1318,8 @@
 [data-size-tier="xl"] .player-info-panel { width: 360px; }
 [data-size-tier="xl"] .log-panel .text-xs { font-size: 13px; }
 
-.seat-avatar { width: 74px; height: 92px; }
-.player-avatar { width: 80px; height: 96px; }
+.seat-avatar { width: 64px; height: 96px; }
+.player-avatar { width: 72px; height: 108px; }
 
 @media (min-width: 768px) {
   .seat-avatar { width: var(--seat-aw); height: var(--seat-ah); }

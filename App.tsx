@@ -5,6 +5,7 @@ import { playSfx, SFX_FOR_NAME } from './src/audio/sfx';
 import { playCardVoice, playSkillVoice, playDeathVoice, playEnterVoice, hasCardVoice } from './src/audio/voice';
 import CardComponent, { CardArtFilters } from './components/CardComponent';
 import TutorialOverlay from './src/components/TutorialOverlay';
+import { PortraitLightbox } from './src/components/PortraitLightbox';
 import RulesDialog from './src/components/RulesDialog';
 import { GameSave, SAVE_VERSION, readSave, writeSave, clearSave, consumeSaveRejected, isSaveFinished } from './src/game/save';
 import { shuffle, rankValue, wuguKeepPriority } from './src/game/utils';
@@ -288,6 +289,8 @@ const App: React.FC = () => {
   const [showSkillModal, setShowSkillModal] = useState<boolean>(false);
   // 点击头像查看任意角色的武将详情
   const [inspectPlayerId, setInspectPlayerId] = useState<number | null>(null);
+  // 立绘大图（竖幅原图）查看
+  const [portraitHero, setPortraitHero] = useState<Hero | null>(null);
 
   // 玩法说明弹窗（首页）
   const [showRules, setShowRules] = useState<boolean>(false);
@@ -5576,9 +5579,9 @@ const App: React.FC = () => {
               <span>返回</span>
             </button>
 
-            <div className="text-center">
-              <h2 className={`font-ancient text-3xl md:text-5xl ${theme === 'dark' ? 'text-[#e8cf94]' : 'text-[#6b4a1a]'}`}>选择您的武将</h2>
-              <div className={`mt-1.5 text-[10px] tracking-[0.42em] pl-[0.42em] ${theme === 'dark' ? 'text-[#8f7c5e]' : 'text-[#9b8a6c]'}`}>
+            <div className="text-center px-2 min-w-0 pr-[6.5rem] sm:pr-2 md:max-w-none">
+              <h2 className={`font-ancient text-lg sm:text-3xl md:text-5xl whitespace-nowrap ${theme === 'dark' ? 'text-[#e8cf94]' : 'text-[#6b4a1a]'}`}>选择您的武将</h2>
+              <div className={`mt-1.5 text-[10px] tracking-[0.3em] md:tracking-[0.42em] pl-[0.3em] whitespace-nowrap hidden sm:block ${theme === 'dark' ? 'text-[#8f7c5e]' : 'text-[#9b8a6c]'}`}>
                 CHOOSE YOUR GENERAL · {HEROES.length} 名
               </div>
             </div>
@@ -5661,19 +5664,33 @@ const App: React.FC = () => {
             <div className="flex items-center gap-3 min-w-0 w-full md:flex-1">
               {selectedHero ? (
                 <>
-                  <img
-                    src={selectedHero.avatarUrl}
-                    alt={selectedHero.name}
-                    loading="eager"
-                    decoding="async"
-                    className="w-12 h-12 rounded-md object-cover object-top border border-[#c8a45c]/60 flex-none"
-                  />
+                  {/* 竖幅立绘缩略：点击查看原图大图 */}
+                  <button
+                    onClick={() => setPortraitHero(selectedHero)}
+                    className="flex-none rounded-md overflow-hidden border border-[#c8a45c]/60 hover:border-[#f0d894] transition-colors"
+                    aria-label={`查看 ${selectedHero.name} 立绘大图`}
+                    title="查看立绘大图"
+                  >
+                    <img
+                      src={selectedHero.avatarUrl}
+                      alt={selectedHero.name}
+                      loading="eager"
+                      decoding="async"
+                      className="block w-12 h-[72px] object-cover object-top"
+                    />
+                  </button>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-baseline gap-2">
                       <h3 className={`font-ancient text-2xl ${theme === 'dark' ? 'text-[#e8cf94]' : 'text-[#6b4a1a]'}`}>{selectedHero.name}</h3>
                       <span className={`text-[11px] tracking-wider ${theme === 'dark' ? 'text-[#9a8b74]' : 'text-[#8a7a60]'}`}>
                         {selectedHero.kingdom} · {selectedHero.maxHp} 体力 · 【{selectedHero.skillName}】
                       </span>
+                      <button
+                        onClick={() => setPortraitHero(selectedHero)}
+                        className={`ml-auto flex-none text-[11px] px-2 py-0.5 rounded border ${theme === 'dark' ? 'border-[#c8a45c]/50 text-[#e8cf94] hover:bg-[#c8a45c]/15' : 'border-[#a8842c]/50 text-[#6b4a1a] hover:bg-[#c8a45c]/15'}`}
+                      >
+                        查看立绘
+                      </button>
                     </div>
                     <p className={`mt-0.5 text-xs leading-relaxed truncate ${theme === 'dark' ? 'text-[#c8bda8]' : 'text-[#5a4c38]'}`}>
                       {selectedHero.skillDesc}
@@ -5711,6 +5728,8 @@ const App: React.FC = () => {
             </div>
           </div>
         </div>
+
+        <PortraitLightbox hero={portraitHero} onClose={() => setPortraitHero(null)} />
       </div>
     );
   }
@@ -6032,17 +6051,25 @@ const App: React.FC = () => {
                 <div className="w-24 modal-divider mx-auto"></div>
               </div>
               <div className="flex items-center gap-4 mb-5 p-4 bg-black/30 rounded-lg border border-[#8b7355]/30">
-                <img
-                  src={p.hero.avatarUrl}
-                  alt={p.hero.name}
-                  loading="eager"
-                  decoding="async"
-                  className={`w-20 h-24 rounded-lg border-2 object-cover ${p.isDead ? 'grayscale border-stone-600 opacity-70' : 'border-[#d4af37]/50'}`}
-                  onError={(e) => {
-                    const target = e.target as HTMLImageElement;
-                    target.src = `data:image/svg+xml;utf8,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256"><rect width="256" height="256" fill="#241b14"/><text x="128" y="158" font-size="96" fill="#c8a45c" text-anchor="middle" font-family="serif">${p.hero.name}</text></svg>`)}`;
-                  }}
-                />
+                <div className="flex-none flex flex-col items-center gap-1.5">
+                  <img
+                    src={p.hero.avatarUrl}
+                    alt={p.hero.name}
+                    loading="eager"
+                    decoding="async"
+                    className={`w-20 h-[120px] rounded-lg border-2 object-cover ${p.isDead ? 'grayscale border-stone-600 opacity-70' : 'border-[#d4af37]/50'}`}
+                    onError={(e) => {
+                      const target = e.target as HTMLImageElement;
+                      target.src = `data:image/svg+xml;utf8,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256"><rect width="256" height="256" fill="#241b14"/><text x="128" y="158" font-size="96" fill="#c8a45c" text-anchor="middle" font-family="serif">${p.hero.name}</text></svg>`)}`;
+                    }}
+                  />
+                  <button
+                    onClick={() => { setInspectPlayerId(null); setPortraitHero(p.hero); }}
+                    className="text-[11px] px-2 py-0.5 rounded border border-[#c8a45c]/50 text-[#e8cf94] hover:bg-[#c8a45c]/15"
+                  >
+                    查看立绘
+                  </button>
+                </div>
                 <div className="flex-1">
                   <h4 className="text-2xl font-bold text-[#d4af37] font-ancient flex items-center gap-2">
                     {p.hero.name}
@@ -6103,6 +6130,9 @@ const App: React.FC = () => {
         );
       })()}
 
+      {/* 立绘大图查看（竖幅原图，可关闭） */}
+      <PortraitLightbox hero={portraitHero} onClose={() => setPortraitHero(null)} />
+
       {/* Skill Info Modal - 技能说明弹窗 */}
       {showSkillModal && (
          <div className="absolute inset-0 z-[100] modal-mask flex items-center justify-center p-4">
@@ -6115,7 +6145,7 @@ const App: React.FC = () => {
 
                {/* 武将信息 */}
                <div className="flex items-center gap-4 mb-6 p-4 bg-black/30 rounded-lg border border-[#8b7355]/30">
-                 <img src={me.hero.avatarUrl} alt={me.hero.name} loading="eager" decoding="async" className="w-20 h-20 rounded-lg border-2 border-[#d4af37]/50" />
+                 <img src={me.hero.avatarUrl} alt={me.hero.name} loading="eager" decoding="async" className="w-20 h-[120px] rounded-lg border-2 border-[#d4af37]/50 object-cover" />
                  <div>
                    <h4 className="text-2xl font-bold text-[#d4af37] font-ancient">{me.hero.name}</h4>
                    <p className="text-stone-400 text-sm">{me.hero.description}</p>
@@ -6901,7 +6931,9 @@ const App: React.FC = () => {
                     <img 
                       src={p.hero.avatarUrl} 
                       alt={p.hero.name} 
-                      className="w-full h-full object-cover"
+                      loading="lazy"
+                      decoding="async"
+                      className="w-full h-full object-cover object-top"
                       onError={(e) => {
                         const target = e.target as HTMLImageElement;
                         target.src = `data:image/svg+xml;utf8,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256"><rect width="256" height="256" fill="#241b14"/><text x="128" y="158" font-size="96" fill="#c8a45c" text-anchor="middle" font-family="serif">${p.hero.name}</text></svg>`)}`;
@@ -7390,7 +7422,9 @@ const App: React.FC = () => {
                     <img 
                       src={me.hero.avatarUrl} 
                       alt={me.hero.name} 
-                      className="w-full h-full object-cover"
+                      loading="eager"
+                      decoding="async"
+                      className="w-full h-full object-cover object-top"
                       onError={(e) => {
                         const target = e.target as HTMLImageElement;
                         target.src = `data:image/svg+xml;utf8,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256"><rect width="256" height="256" fill="#241b14"/><text x="128" y="158" font-size="96" fill="#c8a45c" text-anchor="middle" font-family="serif">${me.hero.name}</text></svg>`)}`;

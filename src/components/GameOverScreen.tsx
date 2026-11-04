@@ -156,7 +156,7 @@ export const GameOverScreen: React.FC<GameOverScreenProps> = ({
               `}
               style={{ animationDelay: `${idx * 90}ms` }}
             >
-              <img src={player.hero.avatarUrl} alt={player.hero.name} loading="lazy" decoding="async" className={`w-14 h-14 rounded-full mb-2 border-2 object-cover ${player.isDead ? 'border-[#9e2b25]/60 grayscale' : 'border-[#c8a45c]/55'}`} />
+              <img src={player.hero.avatarUrl} alt={player.hero.name} loading="lazy" decoding="async" className={`w-[52px] h-[78px] rounded-md mb-2 border-2 object-cover object-top ${player.isDead ? 'border-[#9e2b25]/60 grayscale' : 'border-[#c8a45c]/55'}`} />
               <div className="text-base modal-text font-bold mb-1">
                 {player.hero.name}
               </div>

@@ -12,6 +12,10 @@ export function shuffle<T>(array: T[]): T[] {
   return shuffled;
 }
 
+/** 竖幅立绘的 2x 资源路径（与 1x 同目录下的 2x/） */
+export const heroPortrait2x = (url: string): string =>
+  url.includes('/heroes/') ? url.replace('/heroes/', '/heroes/2x/') : url;
+
 /** 拼点用点数大小 */
 export const rankValue = (rank: string): number => {
   if (rank === 'A') return 1;
