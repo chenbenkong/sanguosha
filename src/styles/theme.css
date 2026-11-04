@@ -1173,20 +1173,13 @@
   height: min(250px, 30vh);
   border-radius: 50%;
   pointer-events: none;
-  border: 1px solid rgba(200, 164, 92, 0.16);
+  /* 只做「桌面暗纹/暖光」背景：不加硬边框与内圈金线，
+     避免读成一张压住座位的椭圆桌子（座位尺寸优先，牌桌退为留白） */
+  border: 0;
   background:
-    radial-gradient(ellipse 68% 62% at 50% 44%, rgba(200, 164, 92, 0.09) 0%, rgba(200, 164, 92, 0.03) 46%, rgba(0, 0, 0, 0) 72%),
-    repeating-linear-gradient(45deg, rgba(255, 255, 255, 0.008) 0 2px, rgba(0, 0, 0, 0) 2px 4px);
-  box-shadow:
-    inset 0 0 70px rgba(0, 0, 0, 0.45),
-    0 0 90px rgba(200, 164, 92, 0.05);
-}
-.table-felt::before {
-  content: '';
-  position: absolute;
-  inset: 10px;
-  border-radius: 50%;
-  border: 1px solid rgba(200, 164, 92, 0.12);
+    radial-gradient(ellipse 60% 56% at 50% 46%, rgba(200, 164, 92, 0.07) 0%, rgba(200, 164, 92, 0.025) 46%, rgba(0, 0, 0, 0) 74%),
+    repeating-linear-gradient(45deg, rgba(255, 255, 255, 0.006) 0 2px, rgba(0, 0, 0, 0) 2px 4px);
+  box-shadow: none;
 }
 .theme-light .table-felt {
   border-color: rgba(140, 105, 60, 0.18);
@@ -1438,5 +1431,604 @@ a:focus-visible {
   border: 1px solid rgba(232, 207, 148, 0.22);
   pointer-events: none;
 }
+
+/* ==========================================================================
+   2026-11 信息密度重构 v2
+   目标：按官方对局参考（顶部平铺 + 左右两侧 + 右下主视角 + 底部手牌）
+   重排座位，所有尺寸/字号以可读性优先；不再为椭圆形状压缩。
+   ========================================================================== */
+
+/* 各密度档的座位/主视角/手牌尺寸（normal = 1440×900 / 1600×860） */
+[data-density="roomy"] {
+  --sc-w: 256px; --sc-h: 208px;
+  --own-w: 400px; --own-h: 232px; --own-art-w: 132px; --own-art-h: 198px;
+  --hand-min: 210px;
+  --felt-w: min(760px, 46vw); --felt-h: min(300px, 30vh);
+}
+[data-density="roomy"][data-size-tier="xl"] {
+  --sc-w: 272px; --sc-h: 216px;
+  --own-w: 416px; --own-h: 240px; --own-art-w: 138px; --own-art-h: 207px;
+  --hand-min: 222px;
+}
+[data-density="normal"] {
+  --sc-w: 240px; --sc-h: 200px;
+  --own-w: 372px; --own-h: 212px; --own-art-w: 120px; --own-art-h: 180px;
+  --hand-min: 198px;
+  --felt-w: min(680px, 44vw); --felt-h: min(270px, 28vh);
+}
+[data-density="compact"] {
+  --sc-w: 210px; --sc-h: 180px;
+  --own-w: 340px; --own-h: 196px; --own-art-w: 108px; --own-art-h: 162px;
+  --hand-min: 186px;
+  --felt-w: min(600px, 42vw); --felt-h: min(240px, 26vh);
+}
+[data-density="tight"] {
+  --sc-w: 190px; --sc-h: 166px;
+  --own-w: 320px; --own-h: 184px; --own-art-w: 100px; --own-art-h: 150px;
+  --hand-min: 176px;
+  --felt-w: min(540px, 40vw); --felt-h: min(210px, 24vh);
+}
+[data-density="ultra"] {
+  --sc-w: 178px; --sc-h: 154px;
+  --own-w: 300px; --own-h: 172px; --own-art-w: 92px; --own-art-h: 138px;
+  --hand-min: 166px;
+  --felt-w: min(480px, 38vw); --felt-h: min(180px, 22vh);
+}
+
+/* 桌面座位：顶部一行平铺 + 左右两侧；贴边 12px */
+@media (min-width: 768px) {
+  .ring-seat {
+    position: absolute;
+    left: var(--seat-left);
+    top: 58px !important;
+    transform: translateX(-50%);
+    transition: left 240ms ease, top 240ms ease;
+  }
+  .ring-seat[data-side="left"] {
+    left: 12px;
+    top: 46vh !important;
+    transform: translateY(-50%);
+  }
+  .ring-seat[data-side="right"] {
+    left: auto;
+    right: 12px;
+    top: 46vh !important;
+    transform: translateY(-50%);
+  }
+  .table-felt { width: var(--felt-w); height: var(--felt-h); }
+
+  /* 战报侧栏：占左侧座位之上的一段空档，右/下边界不压座位与手牌区 */
+  [data-region="log"] {
+    top: 52px !important;
+    bottom: auto !important;
+    height: calc(46vh - var(--sc-h) / 2 - 60px) !important;
+  }
+}
+
+/* 左上身份目标条（对齐官方参考图左上角） */
+.objective-strip {
+  height: 34px;
+  padding: 0 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(139, 115, 85, 0.45);
+  background: linear-gradient(180deg, rgba(22, 17, 12, 0.92), rgba(12, 9, 6, 0.94));
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+}
+.objective-seats { display: flex; align-items: center; gap: 4px; }
+.objective-chip {
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1;
+  padding: 4px 6px;
+  border-radius: 4px;
+  border: 1px solid rgba(200, 164, 92, 0.3);
+  color: #d9c49a;
+  background: rgba(0, 0, 0, 0.3);
+}
+.objective-chip.is-主公 { color: #f5d98a; border-color: rgba(240, 216, 148, 0.6); }
+.objective-chip.is-忠臣 { color: #e3c99b; }
+.objective-chip.is-反贼 { color: #e8a096; border-color: rgba(200, 107, 98, 0.55); }
+.objective-chip.is-内奸 { color: #b9b9d4; border-color: rgba(140, 140, 180, 0.5); }
+.objective-goal {
+  font-size: 13px;
+  color: #b7a68a;
+  white-space: nowrap;
+}
+
+/* 座位卡：立绘铺满，信息层浮在卡面（官方座位牌构图） */
+.seat-card {
+  width: var(--sc-w);
+  height: var(--sc-h);
+  overflow: hidden;
+  border-width: 2px;
+  background: #120d09;
+  box-shadow:
+    0 10px 26px rgba(0, 0, 0, 0.45),
+    inset 0 0 0 1px rgba(255, 226, 166, 0.06);
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
+}
+.seat-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 14px 32px rgba(0, 0, 0, 0.5);
+}
+.seat-art { position: absolute; inset: 0; }
+.seat-art-img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center 16%;
+}
+.seat-scrim {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(
+    180deg,
+    rgba(6, 4, 3, 0.62) 0%,
+    rgba(6, 4, 3, 0.08) 24%,
+    rgba(6, 4, 3, 0.02) 42%,
+    rgba(6, 4, 3, 0.9) 100%
+  );
+}
+.seat-topline {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  right: 6px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+.seat-kingdom {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--k-main);
+  background: rgba(10, 8, 6, 0.82);
+  border: 1px solid var(--k-line);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.45);
+}
+.seat-identity {
+  min-width: 28px;
+  height: 26px;
+  padding: 0 5px;
+  border-radius: 4px;
+  font-size: 14px;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid;
+  transform: rotate(3deg);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.45);
+}
+.seat-identity.is-lord { background: #c8a45c; border-color: #e8cf94; color: #2a1f14; }
+.seat-identity.is-loyal { background: #7c5622; border-color: rgba(200, 164, 92, 0.75); color: #f7e7cf; }
+.seat-identity.is-rebel { background: #9e2b25; border-color: #c86b62; color: #f7e7cf; }
+.seat-identity.is-spy { background: #3a3a4a; border-color: #7a7a96; color: #e8e8f0; }
+
+.seat-name-rail {
+  position: absolute;
+  left: 0;
+  top: 42px;
+  width: 34px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 0 10px;
+  background: linear-gradient(90deg, rgba(6, 4, 3, 0.88) 0%, rgba(6, 4, 3, 0.5) 66%, rgba(6, 4, 3, 0) 100%);
+}
+.seat-name {
+  writing-mode: vertical-rl;
+  font-family: 'STKaiti', 'KaiTi', 'Noto Serif SC', serif;
+  font-size: 17px;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  color: #f6e7c6;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.9);
+}
+.seat-skill {
+  writing-mode: vertical-rl;
+  font-size: 13px;
+  letter-spacing: 0.04em;
+  color: var(--k-main);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
+  max-height: 84px;
+  overflow: hidden;
+}
+
+.seat-info {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 6px 7px 7px;
+  background: linear-gradient(0deg, rgba(8, 6, 4, 0.96) 0%, rgba(8, 6, 4, 0.88) 58%, rgba(8, 6, 4, 0) 100%);
+}
+.seat-title {
+  font-size: 13px;
+  line-height: 1.2;
+  color: #c9b58f;
+  letter-spacing: 0.06em;
+  margin-bottom: 1px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.seat-hp-row { display: flex; align-items: baseline; gap: 4px; line-height: 1; }
+.seat-hp-num {
+  font-size: 22px;
+  font-weight: 800;
+  color: #f5d98a;
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.9);
+}
+.seat-hp-max { font-size: 13px; color: #b7a68a; }
+.seat-pips { display: flex; align-items: flex-end; gap: 2px; margin-left: 3px; }
+.seat-pip {
+  width: 9px;
+  height: 13px;
+  border-radius: 2px 2px 5px 5px;
+  background: #3a2f26;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.6);
+}
+.seat-pip.is-on { background: linear-gradient(180deg, #fbe08e, #c79b2f); }
+.seat-pip.is-low { background: linear-gradient(180deg, #e88a7a, #a23a30); }
+.seat-meta-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 2px;
+  font-size: 14px;
+  color: #e8d8b8;
+  white-space: nowrap;
+}
+.seat-hand-count b { color: #f0d894; font-size: 15px; }
+.seat-distance { color: #b7a68a; font-size: 14px; }
+.seat-dead-tag { color: #e0705f; font-size: 13px; font-weight: 700; }
+.seat-equip {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 3px;
+  margin-top: 3px;
+}
+.seat-equip-slot {
+  position: relative;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  border-radius: 4px;
+  border: 1px solid rgba(200, 164, 92, 0.22);
+  background: rgba(0, 0, 0, 0.38);
+  color: #8f816b;
+  white-space: nowrap;
+}
+.seat-equip-slot.is-on {
+  color: #f5d98a;
+  border-color: rgba(240, 216, 148, 0.65);
+  background: rgba(200, 164, 92, 0.16);
+}
+.seat-equip-dot {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: #f0d894;
+  box-shadow: 0 0 4px rgba(240, 216, 148, 0.9);
+}
+.seat-judge { display: flex; gap: 3px; margin-top: 3px; }
+.seat-judge span {
+  height: 20px;
+  padding: 0 4px;
+  border-radius: 3px;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 18px;
+  border: 1px solid;
+}
+.seat-judge .is-chain { color: #f5d9a0; background: rgba(160, 110, 30, 0.4); border-color: rgba(220, 170, 80, 0.6); }
+.seat-judge .is-le { color: #e6c8f5; background: rgba(110, 50, 140, 0.4); border-color: rgba(170, 110, 200, 0.6); }
+.seat-judge .is-bing { color: #c8dcf5; background: rgba(40, 80, 140, 0.4); border-color: rgba(90, 140, 210, 0.6); }
+.seat-judge .is-dian { color: #e0d0ff; background: rgba(90, 40, 150, 0.45); border-color: rgba(160, 110, 230, 0.7); }
+
+.seat-dead {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.66);
+  filter: grayscale(1);
+}
+.seat-dead span {
+  font-family: 'STKaiti', 'KaiTi', serif;
+  font-size: 20px;
+  font-weight: 800;
+  color: #d98a80;
+  border: 1px solid #9e2b25;
+  padding: 3px 8px;
+  transform: rotate(-10deg);
+}
+
+/* 桌面底部：手牌左、主视角右下、操作按钮在其上方（对位官方参考） */
+@media (min-width: 768px) {
+  [data-region="bottom"] {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) var(--own-w);
+    grid-template-rows: auto auto;
+    column-gap: 12px;
+    row-gap: 4px;
+    padding: 6px 12px 8px;
+    align-items: end;
+  }
+  .player-info-row { display: contents !important; }
+  .own-seat {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+    justify-self: end;
+    align-self: end;
+    width: var(--own-w);
+    height: var(--own-h);
+    padding: 8px;
+    gap: 10px;
+    border: 2px solid var(--k-line);
+    border-radius: 14px;
+    background: linear-gradient(180deg, rgba(26, 21, 16, 0.96), rgba(14, 11, 8, 0.98));
+    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.45), inset 0 0 0 1px rgba(255, 226, 166, 0.08);
+  }
+  .own-seat .player-avatar {
+    width: var(--own-art-w);
+    height: var(--own-art-h);
+    border-width: 1px;
+  }
+  .own-seat .player-info-panel {
+    width: auto !important;
+    flex: 1;
+    min-width: 0;
+    height: 100%;
+    padding: 2px 0 0 !important;
+    border: 0 !important;
+    background: none !important;
+    box-shadow: none !important;
+  }
+  .action-bar {
+    grid-column: 1;
+    grid-row: 1;
+    justify-self: end;
+    align-self: end;
+    z-index: 40;
+  }
+  [data-region="hand"] {
+    grid-column: 1;
+    grid-row: 2;
+    min-height: var(--hand-min);
+  }
+}
+
+/* 主视角卡内字号（≥ 硬指标） */
+.own-name { font-size: 22px; line-height: 1.15; }
+.own-hp-row { display: flex; align-items: center; gap: 4px; margin-bottom: 4px; }
+.own-hp-num {
+  font-size: 24px;
+  font-weight: 800;
+  color: #f5d98a;
+  line-height: 1;
+}
+.own-hp-max { font-size: 14px; color: #b7a68a; }
+.own-meta-row { font-size: 15px; }
+.own-hand { font-size: 19px; }
+.own-equip {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 4px;
+  margin-top: 8px;
+}
+.own-equip-slot {
+  position: relative;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  border-radius: 4px;
+  border: 1px solid rgba(200, 164, 92, 0.24);
+  background: rgba(0, 0, 0, 0.32);
+  color: #8f816b;
+}
+.own-equip-slot.is-on {
+  color: #f5d98a;
+  border-color: rgba(240, 216, 148, 0.65);
+  background: rgba(200, 164, 92, 0.16);
+}
+
+/* 操作按钮字号（≥15px） */
+.action-bar button { font-size: 16px; }
+.action-bar .text-sm, .action-bar .text-xs { font-size: 15px !important; }
+
+/* 战报展开 340px、字号 ≥13px；位置下移到左侧座位以下，避免遮住武将 */
+[data-region="log"] .log-panel .text-xs { font-size: 13px; }
+
+/* ===== 武将卡卡面（参考 Lycium 制卡器的 400×559 竖牌构成） ===== */
+.hero-pick {
+  border-width: 2px;
+  border-style: solid;
+  border-radius: 10px;
+}
+.hero-pick.hero-card::before {
+  inset: 4px;
+  border-color: rgba(200, 164, 92, 0.22);
+}
+.hero-kingdom {
+  position: absolute;
+  width: 28px;
+  height: 28px;
+  border-radius: 5px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--k-main);
+  background: rgba(10, 8, 6, 0.86);
+  border: 1px solid var(--k-line);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+}
+.hero-hp {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 6px;
+  border-radius: 5px;
+  background: rgba(10, 8, 6, 0.82);
+  border: 1px solid rgba(200, 164, 92, 0.32);
+}
+.hero-hp-pips { display: flex; align-items: flex-end; gap: 2px; }
+.hero-hp-pip {
+  width: 6px;
+  height: 10px;
+  border-radius: 2px 2px 4px 4px;
+  background: linear-gradient(180deg, #fbe08e, #c79b2f);
+}
+.hero-hp-num { font-size: 14px; color: #f5d98a; line-height: 1; }
+.hero-pick-foot {
+  background: linear-gradient(180deg, rgba(8, 6, 4, 0) 0%, rgba(8, 6, 4, 0.82) 32%, rgba(8, 6, 4, 0.96) 100%);
+}
+.hero-pick-title {
+  font-size: 12px;
+  color: #c9b58f;
+  letter-spacing: 0.08em;
+  margin-bottom: 1px;
+}
+.hero-pick-name { font-size: 22px; }
+.hero-pick-skill {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+  color: #e8cf94;
+  margin-top: 1px;
+}
+.hero-lord-chip {
+  flex: none;
+  padding: 0 4px;
+  border-radius: 2px;
+  background: rgba(158, 43, 37, 0.9);
+  color: #f7e7cf;
+  font-size: 11px;
+}
+.hero-pick-desc {
+  font-size: 12px;
+  line-height: 1.5;
+  color: #d2c6b0;
+  margin-top: 3px;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* 结算页武将小卡：同样按势力描边 + 勾玉数字 */
+.settle-hero { border: 1px solid var(--k-line) !important; }
+.settle-portrait { border: 1px solid var(--k-line); }
+.settle-hp { display: flex; align-items: center; gap: 4px; margin: 2px 0 4px; }
+.settle-hp-pips { display: flex; gap: 1px; }
+.settle-pip {
+  width: 4px;
+  height: 7px;
+  border-radius: 1px 1px 3px 3px;
+  background: rgba(255, 255, 255, 0.18);
+}
+.settle-pip.is-on { background: linear-gradient(180deg, #fbe08e, #c79b2f); }
+.settle-hp-num { font-size: 13px; color: #e8cf94; }
+
+/* ===== 手机端：同步放大座位小卡 / 手牌，字号不低于 13px ===== */
+@media (max-width: 767px) {
+  [data-region="seats"] {
+    gap: 3px !important;
+    padding: 52px 2px 2px !important;
+  }
+  /* 窄屏（≤430px）：4 张 96px 座位卡一行放不下，用轻微叠压保证「卡宽不缩」，
+     叠压只吃掉相邻卡的右边缘 6px，名字竖栏与体力仍在可视区 */
+  @media (max-width: 430px) {
+    [data-region="seats"] { gap: 0 !important; justify-content: center !important; }
+    [data-region="seats"] > * { flex: 0 0 96px !important; }
+    [data-region="seats"] > * + * { margin-left: -6px; }
+  }
+  [data-region="seats"] .seat-card {
+    width: 96px;
+    height: 142px;
+    border-radius: 9px;
+  }
+  [data-region="seats"] .seat-art-img { object-position: center 12%; }
+  [data-region="seats"] .seat-topline { top: 3px; left: 3px; right: 3px; }
+  [data-region="seats"] .seat-kingdom { width: 20px; height: 20px; font-size: 13px; }
+  [data-region="seats"] .seat-identity { min-width: 20px; height: 19px; padding: 0 3px; font-size: 13px; }
+  [data-region="seats"] .seat-name-rail {
+    top: 26px;
+    width: 22px;
+    gap: 3px;
+    padding: 3px 0 5px;
+  }
+  [data-region="seats"] .seat-name { font-size: 14px; letter-spacing: 0.1em; }
+  [data-region="seats"] .seat-skill { font-size: 13px; max-height: 46px; }
+  [data-region="seats"] .seat-info { padding: 3px 4px 4px; }
+  [data-region="seats"] .seat-hp-num { font-size: 18px; }
+  [data-region="seats"] .seat-hp-max { font-size: 13px; }
+  [data-region="seats"] .seat-pips { gap: 1px; margin-left: 2px; }
+  [data-region="seats"] .seat-pip { width: 5px; height: 8px; }
+  [data-region="seats"] .seat-meta-row { font-size: 13px; gap: 4px; margin-top: 1px; }
+  [data-region="seats"] .seat-hand-count b { font-size: 13px; }
+  [data-region="seats"] .seat-distance { font-size: 13px; }
+  [data-region="seats"] .seat-equip { gap: 2px; margin-top: 2px; }
+  [data-region="seats"] .seat-equip-slot { height: 18px; font-size: 13px; border-radius: 3px; }
+  [data-region="seats"] .seat-judge { gap: 2px; margin-top: 2px; }
+  [data-region="seats"] .seat-judge span { height: 17px; line-height: 15px; padding: 0 2px; font-size: 13px; }
+  [data-region="seats"] .seat-dead span { font-size: 16px; }
+  [data-region="seats"] .seat-title { font-size: 13px; }
+
+  .own-seat { width: auto; height: auto; padding: 4px; gap: 6px; border: 1px solid var(--k-line); border-radius: 10px; }
+  .own-seat .player-avatar { width: 84px; height: 126px; }
+  .own-seat .player-info-panel { width: auto !important; flex: 1; min-width: 0; padding: 2px 4px !important; border: 0 !important; background: none !important; box-shadow: none !important; }
+  .own-name { font-size: 16px; }
+  .own-hp-num { font-size: 20px; }
+  .own-hp-max { font-size: 13px; }
+  .own-meta-row { font-size: 13px; }
+  .own-hand { font-size: 16px; }
+  .own-equip { gap: 3px; margin-top: 5px; }
+  .own-equip-slot { height: 24px; font-size: 13px; }
+
+  .hero-pick-title { font-size: 12px; }
+  .hero-pick-name { font-size: 20px; }
+  .hero-pick-skill { font-size: 14px; }
+  .hero-pick-desc { font-size: 12px; line-height: 1.5; }
+  .hero-lord-chip { font-size: 11px; }
+
+  /* 手机竖向空间紧张：中央牌堆缩到 0.68，操作条改为浮动在自己座位上沿，
+     把手牌完整留在首屏内（不再被底部裁切） */
+  [data-region="center-decks"] { transform: scale(0.68); }
+  /* 中央区固定矮高度：transform 不改变布局盒，必须显式收高度才不挤占手牌 */
+  [data-region="field"] { flex: 0 0 118px; height: 118px; }
+  .action-bar {
+    position: absolute !important;
+    right: 8px;
+    left: auto !important;
+    bottom: calc(100% + 4px);
+    margin: 0 !important;
+    z-index: 45;
+  }
+}
+
+
 
 

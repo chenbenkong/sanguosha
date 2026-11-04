@@ -35,9 +35,9 @@ export const useLayoutProfile = (): LayoutProfile => {
     };
   }, []);
 
-  // 手机端仅在较矮视口（<720）做整页缩放兜底；≥720 的常规手机交给密度分档，
-  // 保证 390×844 这类主流尺寸的触控热区不被缩小
-  const uiScale = viewport.w > 0 && viewport.w < 768 && viewport.h > 0 && viewport.h < 720
+  // 手机端仅在「很矮」视口（<660）做整页缩放兜底；≥660 的常规手机（含 375×667）
+  // 不再缩放——缩放会把座位卡与字号一起压小，违背「手机端同步放大」的硬指标
+  const uiScale = viewport.w > 0 && viewport.w < 768 && viewport.h > 0 && viewport.h < 660
     ? Math.max(0.68, Math.min(1, viewport.h / 840))
     : 1;
 

@@ -5612,7 +5612,7 @@ const App: React.FC = () => {
               <button
                 key={hero.id}
                 onClick={() => { setSelectedHero(hero); setDetailHero(hero); }}
-                className="hero-pick group text-left"
+                className={`hero-pick hero-card group text-left kingdom-frame ${KINGDOM_CLASS[hero.kingdom] ?? ''}`}
                 aria-pressed={selectedHero?.id === hero.id}
                 aria-label={`选择 ${hero.name}`}
                 title={`${hero.name}（${hero.kingdom} · ${hero.maxHp} 体力）【${hero.skillName}】${hero.skillDesc}${hero.lordSkillName ? ` 主公技【${hero.lordSkillName}】${hero.lordSkillDesc}` : ''}`}
@@ -5626,36 +5626,38 @@ const App: React.FC = () => {
                 />
                 <div className="hero-pick-shade" />
 
-                {/* 势力印章 */}
-                <span className={`absolute top-2 left-2 w-6 h-6 rounded-[3px] flex items-center justify-center text-[11px] font-bold border border-[#c8a45c]/50 bg-[#14100c]/90 ${
-                  hero.kingdom === '魏' ? 'text-[#8fb4d9]' :
-                  hero.kingdom === '蜀' ? 'text-[#d98a8a]' :
-                  hero.kingdom === '吴' ? 'text-[#8fc39a]' :
-                  'text-[#bfae94]'
-                }`}>
+                {/* 势力印章（卡框同时按势力配色） */}
+                <span className="hero-kingdom absolute top-2 left-2">
                   {hero.kingdom}
                 </span>
 
-                {/* 体力 */}
-                <span className="absolute top-2 right-2 px-1.5 py-0.5 rounded-[3px] text-[10px] font-bold bg-[#120d09]/85 text-[#e8a99f] border border-[#9e2b25]/60">
-                  {hero.maxHp} 血
+                {/* 体力：勾玉 + 数字同时呈现 */}
+                <span className="hero-hp absolute top-2 right-2" title={`体力上限 ${hero.maxHp}`}>
+                  <span className="hero-hp-pips">
+                    {Array.from({ length: hero.maxHp }).map((_, i) => (
+                      <i key={i} className="hero-hp-pip" />
+                    ))}
+                  </span>
+                  <b className="hero-hp-num tabular-nums">{hero.maxHp}</b>
                 </span>
 
                 {/* 选中角标 */}
                 {selectedHero?.id === hero.id && (
-                  <span className="absolute right-2 bottom-[64px] w-6 h-6 rounded-full bg-[#d4af37] text-[#241a0e] flex items-center justify-center text-xs font-bold shadow-lg">
+                  <span className="absolute right-2 top-10 w-6 h-6 rounded-full bg-[#d4af37] text-[#241a0e] flex items-center justify-center text-xs font-bold shadow-lg">
                     ✓
                   </span>
                 )}
 
-                <div className="absolute inset-x-0 bottom-0 px-2.5 pb-2.5 pt-8">
-                  <div className="font-ancient text-[19px] leading-tight text-[#f4e4bf] drop-shadow-[0_1px_3px_rgba(0,0,0,0.85)]">
+                <div className="hero-pick-foot absolute inset-x-0 bottom-0 px-2.5 pb-2.5 pt-8">
+                  <div className="hero-pick-title truncate">{hero.description}</div>
+                  <div className="font-ancient hero-pick-name leading-tight text-[#f4e4bf] drop-shadow-[0_1px_3px_rgba(0,0,0,0.85)]">
                     {hero.name}
                   </div>
-                  <div className="mt-0.5 flex items-center gap-1.5 text-[10px] tracking-wide text-[#d9c49a]/90">
+                  <div className="hero-pick-skill">
                     <span className="truncate">【{hero.skillName}】</span>
-                    {hero.lordSkillName && <span className="flex-none px-1 rounded-[2px] bg-[#9e2b25]/85 text-[9px] text-[#f7e7cf]">主</span>}
+                    {hero.lordSkillName && <span className="hero-lord-chip">主公技</span>}
                   </div>
+                  <div className="hero-pick-desc line-clamp-3">{hero.skillDesc}</div>
                 </div>
               </button>
             ))}
@@ -5793,10 +5795,10 @@ const App: React.FC = () => {
   );
 
   // --- 对局面板自适应 ---
-  // 高度不足 roomy 时手牌统一用小卡；roomy（≥960）才使用大卡，避免矮屏手牌被裁
+  // 手牌尺寸只按设备类型分档：桌面始终大卡（高度≥140px 硬指标），手机小卡但高度≥110px
   const compactHand = layoutDensity !== 'roomy';
-  // 大屏 + 高视口：手牌再放大一档，避免高分屏上核心区显得空洞
-  const handLarge = layoutDensity === 'roomy' && sizeTier !== 'md';
+  const isMobileHand = viewport.w < 768;
+  const handLarge = !isMobileHand;
 
   return (
     <div
@@ -6745,6 +6747,29 @@ const App: React.FC = () => {
         </button>
       </div>
 
+      {/* 左上身份目标条：对齐官方参考图左上角的「主×1 忠×1 反×2 内×1」与目标提示 */}
+      <div className="hidden md:flex objective-strip absolute top-2 left-[150px] z-[225] items-center gap-2">
+        <span className="objective-seats">
+          {([
+            [Identity.ZHUGONG, '主'],
+            [Identity.ZHONGCHEN, '忠'],
+            [Identity.FANZEI, '反'],
+            [Identity.NEIJIAN, '内'],
+          ] as [Identity, string][]).map(([id, short]) => {
+            const n = [me, ...enemies].filter(p => p.identity === id).length;
+            return n > 0 ? (
+              <span key={id} className={`objective-chip is-${id}`}>{short}×{n}</span>
+            ) : null;
+          })}
+        </span>
+        <span className="objective-goal">
+          {me.identity === Identity.ZHUGONG ? '目标：剿灭反贼与内奸' :
+            me.identity === Identity.ZHONGCHEN ? '目标：护主，清除反贼' :
+            me.identity === Identity.FANZEI ? '目标：击杀主公' :
+            '目标：先清场，再与主公单挑'}
+        </span>
+      </div>
+
       {/* 手机端紧凑阶段指示：放在顶部控制区中间的空档，避免压住牌桌与战报 */}
       <div className="md:hidden absolute top-2 left-[156px] z-[230]">
         <div className="ui-panel relative overflow-hidden flex items-center gap-1.5 h-10 px-2.5 whitespace-nowrap">
@@ -6818,14 +6843,19 @@ const App: React.FC = () => {
         </div>
 
         {/* 环形座位：桌面端绝对定位环绕牌桌；手机端为顶部横向压缩小卡 */}
-      <div data-region="seats" data-many={enemies.length >= 5 ? 'true' : 'false'} className={`relative w-full flex items-start justify-center gap-1 overflow-x-auto pt-[52px] pb-1 px-1 scrollbar-hide md:pt-0 md:pb-0 md:px-0 md:absolute md:top-0 md:left-0 md:right-0 md:h-[68vh] md:block md:overflow-visible`}>
+      <div data-region="seats" data-many={enemies.length >= 5 ? 'true' : 'false'} className={`relative w-full flex items-start justify-center gap-1 overflow-x-auto pt-[44px] pb-1 px-1 scrollbar-hide md:pt-0 md:pb-0 md:px-0 md:absolute md:top-0 md:left-0 md:right-0 md:h-[68vh] md:block md:overflow-visible`}>
           {enemies.map((p, index) => {
-            // 环绕牌桌的椭圆弧：以左右两侧为低点、顶端为高点，避开中央牌堆与顶部工具栏
+            // 官方参考布局骨架：敌人顶部横向平铺，超出部分放左右两侧；不再为椭圆压缩尺寸
             const totalEnemies = enemies.length;
-            const t = totalEnemies > 1 ? (-76 + 152 * index / (totalEnemies - 1)) : 0;
-            const radian = (t * Math.PI) / 180;
-            const left = 50 + 38 * Math.sin(radian);
-            const top = 44 - 37 * Math.cos(radian);
+            const sideCount = totalEnemies >= 4 ? 2 : 0;
+            const topCount = totalEnemies - sideCount;
+            const seatW = layoutDensity === 'roomy' ? (sizeTier === 'xl' ? 272 : 256)
+              : layoutDensity === 'normal' ? 240
+              : layoutDensity === 'compact' ? 210
+              : layoutDensity === 'tight' ? 190 : 178;
+            const side = index < topCount ? 'top' : (index === topCount ? 'left' : 'right');
+            const offset = index - (topCount - 1) / 2;
+            const leftPercent = side === 'top' ? `calc(50% + ${Math.round(offset * (seatW + 12))}px)` : '12px';
             // 选中【杀】类牌时，超出攻击范围的目标灰显
             const outOfRange = !p.isDead && isSelectingTarget && slashLikeActive && getDistance(me.id, p.id) > getAttackRange(me);
             // 正处于「选择目标」流程时，给合法目标一个明确的候选标记
@@ -6836,9 +6866,9 @@ const App: React.FC = () => {
             <div 
               key={p.id} 
               className="ring-seat"
+              data-side={side}
               style={{
-                '--seat-left': `${left}%`,
-                '--seat-top': `${top}%`,
+                '--seat-left': leftPercent,
               } as React.CSSProperties}
             >
               {/* 回合指示器 - 朱红小匾 */}
@@ -6877,7 +6907,7 @@ const App: React.FC = () => {
                 }}
                 title={p.isDead ? `${p.hero.name}（已阵亡）` : `点击查看 ${p.hero.name} 的武将详情`}
                 className={`
-                relative p-1.5 md:p-2 rounded-lg border-2 kingdom-frame hero-card ${KINGDOM_CLASS[p.hero.kingdom] ?? ''}
+                seat-card relative rounded-xl border-2 kingdom-frame hero-card ${KINGDOM_CLASS[p.hero.kingdom] ?? ''}
                 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#e8cf94]
                 ${damageAnimTarget === p.id || healAnimTarget === p.id
                   ? '' // 动画期间禁用过渡效果
@@ -6955,147 +6985,104 @@ const App: React.FC = () => {
                   </div>
                 )}
 
-                {/* 武将立绘：2:3 竖幅，尺寸由 --seat-aw / --seat-ah 按视口分档自适应 */}
-                <div className={`seat-avatar relative mb-1.5 ${
+                {/* 立绘铺满整张座位卡（官方对局座位牌构图）：信息改为浮层，立绘高度=卡高 */}
+                <div className={`seat-art ${
                   healAnimTarget === p.id ? 'animate-heal-glow' :
                   damageAnimTarget === p.id ? 'animate-damage-glow' : ''
                 } ${skillGlowId === p.id ? 'skill-glow' : ''} ${aiThinkingId === p.id ? 'ai-thinking' : ''}`}>
-                  {/* 描金外框：统一色调，势力色只保留在小印章上，降低整屏配色噪音 */}
-                  <div className="absolute -inset-1 rounded-lg bg-gradient-to-br from-[#c8a45c]/45 via-[#8b7355]/25 to-[#5a4a38]/15"></div>
-                  
-                  {/* 头像 */}
-                  <div className="relative w-full h-full rounded-lg overflow-hidden border border-[#c8a45c]/55 hero-portrait">
-                    <img 
-                      src={p.hero.avatarUrl} 
-                      alt={p.hero.name} 
-                      loading="lazy"
-                      decoding="async"
-                      className="w-full h-full object-cover object-top"
-                      onError={(e) => {
-                        const target = e.target as HTMLImageElement;
-                        target.src = `data:image/svg+xml;utf8,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256"><rect width="256" height="256" fill="#241b14"/><text x="128" y="158" font-size="96" fill="#c8a45c" text-anchor="middle" font-family="serif">${p.hero.name}</text></svg>`)}`;
-                      }}
-                    />
-                    
-                    {/* 阵亡遮罩 */}
-                    {p.isDead && (
-                      <div className="absolute inset-0 bg-black/75 flex items-center justify-center">
-                        <span className="font-ancient text-[#c86b62] text-xl font-bold transform -rotate-12 border border-[#9e2b25] px-2 py-1">
-                          阵亡
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                  
-                  {/* 势力标识：深墨圆环 + 势力色字，不用大面积彩色底 */}
-                  <div className={`
-                    absolute -top-2 -left-2 w-6 h-6 flex items-center justify-center rounded-full text-[11px] font-bold border shadow-md
-                    bg-[#1a1512] border-[#c8a45c]/50
-                    ${p.hero.kingdom === '魏' ? 'text-[#8fb4d9]' :
-                      p.hero.kingdom === '蜀' ? 'text-[#d98a8a]' :
-                      p.hero.kingdom === '吴' ? 'text-[#8fc39a]' :
-                      'text-[#bfae94]'
-                    }
-                  `}>
-                    {p.hero.kingdom}
-                  </div>
-                  
-                  {/* 身份标识：朱印方章 */}
-                  {(p.isRevealed || p.isHuman || p.identity === Identity.ZHUGONG) && (
-                    <div className={`
-                      absolute -bottom-2 -right-2 w-7 h-7 flex items-center justify-center rounded-[4px] rotate-3 font-bold text-[11px] border shadow-md
-                      ${p.identity === Identity.ZHUGONG ? 'bg-[#c8a45c] border-[#e8cf94] text-[#2a1f14]' :
-                        p.identity === Identity.ZHONGCHEN ? 'bg-[#8a5a20] border-[#c8a45c]/70 text-[#f7e7cf]' :
-                        p.identity === Identity.FANZEI ? 'bg-[#9e2b25] border-[#c86b62] text-[#f7e7cf]' :
-                        'bg-[#3a3a4a] border-[#7a7a96] text-[#e8e8f0]'
-                      }
-                    `}>
-                      {p.identity === Identity.ZHUGONG ? '主' :
-                        p.identity === Identity.ZHONGCHEN ? '忠' :
-                        p.identity === Identity.FANZEI ? '反' : '内'
-                      }
+                  <img
+                    src={p.hero.avatarUrl}
+                    alt={p.hero.name}
+                    loading="lazy"
+                    decoding="async"
+                    className="seat-art-img"
+                    onError={(e) => {
+                      const target = e.target as HTMLImageElement;
+                      target.src = `data:image/svg+xml;utf8,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256"><rect width="256" height="256" fill="#241b14"/><text x="128" y="158" font-size="96" fill="#c8a45c" text-anchor="middle" font-family="serif">${p.hero.name}</text></svg>`)}`;
+                    }}
+                  />
+                  <div className="seat-scrim" />
+
+                  {/* 阵亡遮罩 */}
+                  {p.isDead && (
+                    <div className="seat-dead">
+                      <span>阵亡</span>
                     </div>
                   )}
+
+                  {/* 势力 + 身份：卡面左上 / 右上角章 */}
+                  <div className="seat-topline">
+                    <span className="seat-kingdom">{p.hero.kingdom}</span>
+                    {(p.isRevealed || p.isHuman || p.identity === Identity.ZHUGONG) && (
+                      <span className={`seat-identity ${
+                        p.identity === Identity.ZHUGONG ? 'is-lord' :
+                        p.identity === Identity.ZHONGCHEN ? 'is-loyal' :
+                        p.identity === Identity.FANZEI ? 'is-rebel' :
+                        'is-spy'
+                      }`}>
+                        {p.identity === Identity.ZHUGONG ? '主' :
+                          p.identity === Identity.ZHONGCHEN ? '忠' :
+                          p.identity === Identity.FANZEI ? '反' : '内'
+                        }
+                      </span>
+                    )}
+                  </div>
+
+                  {/* 左侧竖排：武将名 + 技能名（官方牌面把名字做在左边缘） */}
+                  <div className="seat-name-rail">
+                    <span className="seat-name">{p.hero.name}</span>
+                    <span className="seat-skill">【{p.hero.skillName}】</span>
+                  </div>
                 </div>
                 
-                {/* 武将信息 */}
-                <div className="text-center">
-                  <div className="font-ancient text-sm md:text-base mb-0.5 truncate text-[#e8dcc8]">{p.hero.name}</div>
-                  {/* 技能名牌：官方武将牌在姓名下方标注技能 */}
-                  <div className="kingdom-name text-[9px] md:text-[10px] tracking-[0.12em] leading-none mb-1 truncate opacity-85">【{p.hero.skillName}】</div>
-                  
-                  {/* 体力值 - 朱红勾玉 */}
-                  <div className="flex justify-center gap-0.5 mb-1">
-                    {Array.from({ length: p.maxHp }).map((_, i) => (
-                      <div 
-                        key={i}
-                        className={`
-                          w-3 h-3 md:w-3.5 md:h-3.5 hp-fish
-                          ${i < p.hp 
-                            ? (p.hp === 1 ? 'hp-fish-low' : '')
-                            : 'hp-fish-empty'
-                          }
-                        `}
-                      />
-                    ))}
+                {/* 底部信息层：称号 / 体力数字 + 勾玉 / 手牌数 / 距离 / 装备四槽 / 判定区 */}
+                <div className="seat-info">
+                  <div className="seat-title" title={p.hero.description}>{p.hero.description}</div>
+                  <div className="seat-hp-row" title={`体力 ${p.hp}/${p.maxHp}`}>
+                    <span className="seat-hp-num tabular-nums">{p.hp}</span>
+                    <span className="seat-hp-max">/{p.maxHp}</span>
+                    <div className="seat-pips">
+                      {Array.from({ length: p.maxHp }).map((_, i) => (
+                        <span key={i} className={`seat-pip ${i < p.hp ? (p.hp === 1 ? 'is-low' : 'is-on') : ''}`} />
+                      ))}
+                    </div>
                   </div>
-                  
-                  {/* 装备区：武器 / 防具 / +1 马 / -1 马 四槽常显（官方对局信息层级） */}
-                  <div className="grid grid-cols-4 gap-0.5 md:gap-1 mb-1 max-w-[136px] mx-auto">
+
+                  <div className="seat-meta-row">
+                    <span className="seat-hand-count">手牌 <b className="tabular-nums">{p.hand.length}</b></span>
+                    <span className="seat-distance">距 {getDistance(me.id, p.id)}</span>
+                    {p.isDead && <span className="seat-dead-tag">阵亡</span>}
+                  </div>
+
+                  {/* 装备区：武器 / 防具 / +1 马 / -1 马 四槽常显，悬停显示全称 */}
+                  <div className="seat-equip">
                     {[
-                      { key: 'weapon', label: '武', item: p.equipment?.weapon, tone: 'bg-[#2b3a2b]/80 border-[#6a8a6a]/60 text-[#cfe8cf]', tip: '武器' },
-                      { key: 'armor', label: '防', item: p.equipment?.armor, tone: 'bg-[#2b3340]/80 border-[#6a8296]/60 text-[#cfe0ee]', tip: '防具' },
-                      { key: 'horsePlus', label: '+1', item: p.equipment?.horsePlus, tone: 'bg-[#2b3346]/80 border-[#6a7ea0]/60 text-[#d0dcf0]', tip: '+1 马' },
-                      { key: 'horseMinus', label: '-1', item: p.equipment?.horseMinus, tone: 'bg-[#402b33]/80 border-[#a06a7e]/60 text-[#f0d0dc]', tip: '-1 马' },
+                      { key: 'weapon', label: '武', item: p.equipment?.weapon, tip: '武器' },
+                      { key: 'armor', label: '防', item: p.equipment?.armor, tip: '防具' },
+                      { key: 'horsePlus', label: '+1', item: p.equipment?.horsePlus, tip: '+1 马（防御马）' },
+                      { key: 'horseMinus', label: '−1', item: p.equipment?.horseMinus, tip: '-1 马（进攻马）' },
                     ].map(slot => (
                       <span
                         key={slot.key}
                         title={`${slot.tip}：${slot.item ? slot.item.name : '空'}`}
-                        className={`h-4 md:h-5 rounded-[3px] border text-[8px] md:text-[9px] leading-none flex items-center justify-center ${
-                          slot.item
-                            ? slot.tone
-                            : theme === 'dark' ? 'border-[#4a3f33]/60 text-[#5f5343] bg-black/20' : 'border-[#c4b8a8]/60 text-[#b0ab9f] bg-white/30'
-                        }`}
+                        aria-label={`${slot.tip}：${slot.item ? slot.item.name : '空'}`}
+                        className={`seat-equip-slot ${slot.item ? 'is-on' : ''}`}
                       >
                         {slot.label}
+                        {slot.item && <i className="seat-equip-dot" />}
                       </span>
                     ))}
                   </div>
 
                   {/* 判定区：乐 / 兵 / 电 / 链 逐张可见 */}
                   {(p.isChained || p.isLeBuSiShu || p.isBingLiangCunDuan || p.isShandian) && (
-                    <div className="flex justify-center gap-1 mt-1.5 flex-wrap" title="判定区">
-                      {p.isChained && (
-                        <div className="w-5 h-5 rounded-full bg-amber-700 border border-amber-500 flex items-center justify-center" title="铁索连环">
-                          <span className="text-[10px] text-amber-200 font-bold">链</span>
-                        </div>
-                      )}
-                      {p.isLeBuSiShu && (
-                        <div className="w-5 h-5 rounded-full bg-purple-700 border border-purple-500 flex items-center justify-center" title="乐不思蜀">
-                          <span className="text-[10px] text-purple-200 font-bold">乐</span>
-                        </div>
-                      )}
-                      {p.isBingLiangCunDuan && (
-                        <div className="w-5 h-5 rounded-full bg-blue-700 border border-blue-500 flex items-center justify-center" title="兵粮寸断">
-                          <span className="text-[10px] text-blue-200 font-bold">兵</span>
-                        </div>
-                      )}
-                      {p.isShandian && (
-                        <div className="w-5 h-5 rounded-full bg-purple-700 border border-purple-400 flex items-center justify-center animate-pulse" title="闪电悬顶">
-                          <span className="text-[10px] text-purple-100 font-bold">电</span>
-                        </div>
-                      )}
+                    <div className="seat-judge" title="判定区">
+                      {p.isChained && <span className="is-chain" title="铁索连环">链</span>}
+                      {p.isLeBuSiShu && <span className="is-le" title="乐不思蜀">乐</span>}
+                      {p.isBingLiangCunDuan && <span className="is-bing" title="兵粮寸断">兵</span>}
+                      {p.isShandian && <span className="is-dian" title="闪电悬顶">电</span>}
                     </div>
                   )}
-
-                  {/* 手牌数（官方布局：座位角标显示张数）+ 距离 */}
-                  <div className="flex items-center justify-center gap-1.5 mt-0.5">
-                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-[4px] bg-black/35 border border-[#8b7355]/40 text-[10px] leading-none">
-                      <span className="text-[#8f806a]">手牌</span>
-                      <span className="font-bold text-[#e8cf94] tabular-nums">{p.hand.length}</span>
-                    </span>
-                    <span className="text-[9px] text-[#8f806a]">距 {getDistance(me.id, p.id)}</span>
-                  </div>
                 </div>
               </div>
             </div>
@@ -7105,10 +7092,10 @@ const App: React.FC = () => {
       </div>
 
       {/* Middle: Field - 原版三国杀风格 */}
-      <div className="flex-1 relative flex items-center justify-center w-full">
+      <div data-region="field" className="flex-1 relative flex items-center justify-center w-full">
         
         {/* Logs - 战况记录：可折叠侧栏（桌面端） */}
-        <div data-region="log" className={`absolute left-2 top-2 bottom-4 hidden md:flex z-30 transition-[width] duration-200 ${logCollapsed ? 'log-collapsed w-10' : 'w-64 min-[1280px]:w-72'}`}>
+        <div data-region="log" className={`absolute left-2 hidden md:flex z-30 transition-[width] duration-200 ${logCollapsed ? 'log-collapsed w-10' : 'w-[340px]'}`}>
           {logCollapsed ? (
             <button
               onClick={() => setLogCollapsed(false)}
@@ -7116,8 +7103,8 @@ const App: React.FC = () => {
               aria-label="展开战况记录"
               title="展开战况记录"
             >
-              <span className="text-[10px] tracking-[0.34em] text-[#d9c49a]" style={{ writingMode: 'vertical-rl' }}>战况记录</span>
-              <span className="text-[10px] tabular-nums px-1.5 py-0.5 rounded bg-black/40 text-[#e8cf94] border border-[#8b7355]/40">{logs.length}</span>
+              <span className="text-[13px] tracking-[0.3em] text-[#d9c49a]" style={{ writingMode: 'vertical-rl' }}>战况记录</span>
+              <span className="text-[13px] tabular-nums px-1.5 py-0.5 rounded bg-black/40 text-[#e8cf94] border border-[#8b7355]/40">{logs.length}</span>
             </button>
           ) : (
            <div className="log-panel h-full w-full flex flex-col overflow-hidden">
@@ -7125,11 +7112,11 @@ const App: React.FC = () => {
              <div className="flex-none px-3 py-2 border-b border-[#8b7355]/25 bg-black/25">
                <div className="flex items-center gap-2">
                  <span className="w-[3px] h-4 rounded-sm bg-gradient-to-b from-[#f0d894] to-[#a8842c]" />
-                 <span className="text-xs font-bold tracking-[0.2em] text-[#d9c49a]">战况记录</span>
-                 <span className="text-[10px] tabular-nums text-[#8f806a]">{logs.length}</span>
+                 <span className="text-[13px] font-bold tracking-[0.2em] text-[#d9c49a]">战况记录</span>
+                 <span className="text-[13px] tabular-nums text-[#8f806a]">{logs.length}</span>
                  <button
                    onClick={() => setLogCollapsed(true)}
-                   className="ml-auto text-[11px] px-1.5 py-0.5 rounded border border-[#8b7355]/50 text-[#d9c49a] hover:bg-white/10"
+                   className="ml-auto text-[13px] px-1.5 py-0.5 rounded border border-[#8b7355]/50 text-[#d9c49a] hover:bg-white/10"
                    aria-label="收起战况记录"
                    title="收起战况记录"
                  >
@@ -7211,7 +7198,7 @@ const App: React.FC = () => {
 
         {/* Mobile Toast Log */}
         <div className="md:hidden absolute top-0 left-0 right-0 p-2 pointer-events-none z-20 flex flex-col items-center">
-           {logs.slice(-2).map(log => (
+           {logs.slice(-1).map(log => (
              <div key={log.id} className="bg-[#14100c]/90 text-[#f0e0c4] py-2 px-4 mb-1 rounded-lg border border-[#c8a45c]/45 text-xs shadow-[0_4px_18px_rgba(0,0,0,0.55)] w-full text-center backdrop-blur-sm">
                {log.text}
              </div>
@@ -7219,8 +7206,8 @@ const App: React.FC = () => {
         </div>
 
         {/* Phase Indicator - 五阶段进度轨（底部居中，紧邻手牌条上方） */}
-        <div className={`hidden md:flex ui-panel absolute left-1/2 -translate-x-1/2 bottom-2 px-4 py-2 z-30 flex-col items-center ${theme === 'dark' ? 'shadow-[0_6px_24px_rgba(0,0,0,0.55)]' : ''}`}>
-          <div className={`text-[10px] mb-1 tracking-[0.24em] ${theme === 'dark' ? 'text-[#9a8b74]' : 'text-[#8a7a60]'}`}>
+        <div className={`hidden md:flex ui-panel absolute left-1/2 -translate-x-1/2 top-[63%] px-5 py-2.5 z-30 flex-col items-center ${theme === 'dark' ? 'shadow-[0_6px_24px_rgba(0,0,0,0.55)]' : ''}`}>
+          <div className={`text-[15px] mb-1.5 tracking-[0.2em] ${theme === 'dark' ? 'text-[#9a8b74]' : 'text-[#8a7a60]'}`}>
             当前阶段 · <span className="text-[#e8cf94]">{getPlayer(turnIndex)?.hero.name}</span>
           </div>
           <div className="flex items-center gap-1">
@@ -7233,7 +7220,7 @@ const App: React.FC = () => {
                 <div key={ph} className="flex items-center gap-1">
                   {i > 0 && <div className={`w-3 h-px ${passed || active ? (theme === 'dark' ? 'bg-yellow-600' : 'bg-[#8b6914]') : (theme === 'dark' ? 'bg-stone-600' : 'bg-[#d8d3ce]')}`}></div>}
                   <div className={`
-                    px-1.5 py-0.5 rounded text-[11px] font-bold font-ancient transition-all duration-300
+                    px-2 py-1 rounded text-[15px] font-bold font-ancient transition-all duration-300
                     ${active
                       ? theme === 'dark'
                         ? 'bg-gradient-to-b from-yellow-500 to-yellow-700 text-white shadow-[0_0_10px_rgba(234,179,8,0.5)] scale-110'
@@ -7259,7 +7246,7 @@ const App: React.FC = () => {
                   style={{ width: `${Math.max(0, Math.min(100, (decisionLeft / DECISION_SECONDS) * 100))}%` }}
                 />
               </div>
-              <span className={`text-[11px] font-bold tabular-nums tracking-wider ${decisionLeft <= 5 ? 'text-[#e0705f] animate-pulse' : theme === 'dark' ? 'text-[#e8cf94]' : 'text-[#8b6914]'}`}>
+              <span className={`text-[14px] font-bold tabular-nums tracking-wider ${decisionLeft <= 5 ? 'text-[#e0705f] animate-pulse' : theme === 'dark' ? 'text-[#e8cf94]' : 'text-[#8b6914]'}`}>
                 {decisionLeft}s
               </span>
             </div>
@@ -7274,7 +7261,7 @@ const App: React.FC = () => {
         </div>
 
         {/* Center Decks - 牌堆和弃牌堆 - 原版三国杀风格 */}
-        <div className="relative flex items-center gap-12 z-[1] transform scale-90 md:scale-100">
+        <div data-region="center-decks" className="relative flex items-center gap-12 max-md:gap-6 z-[1] transform scale-90 md:scale-100">
            {/* 弃牌堆（点击查看明细） */}
            <div className="relative group cursor-pointer" onClick={() => setShowDiscardViewer(true)} title="点击查看弃牌堆">
               <div className={`text-sm text-center mb-2 font-ancient tracking-wider transition-colors ${theme === 'dark' ? 'text-stone-400 group-hover:text-yellow-500' : 'text-[#5c5854] group-hover:text-[#8b6914]'}`}>弃牌堆</div>
@@ -7403,8 +7390,8 @@ const App: React.FC = () => {
         
         {/* 玩家信息栏：自己固定牌桌下首（左侧），操作区靠右下 */}
         <div data-region="player-info" className="player-info-row flex flex-col md:flex-row md:justify-between md:items-start gap-1 md:gap-6 px-2 md:px-4 mb-1 md:mb-2">
-          {/* 玩家头像和信息 - 原版三国杀风格 */}
-          <div className="flex items-center gap-4">
+          {/* 主视角座位：立绘 + 信息合成一张大卡，官方参考里固定在右下角 */}
+          <div className={`own-seat flex items-center gap-2 kingdom-frame ${KINGDOM_CLASS[me.hero.kingdom] ?? ''}`}>
             <div className="relative">
               {/* 玩家头像卡片 */}
               <div className={`
@@ -7537,11 +7524,12 @@ const App: React.FC = () => {
             
             {/* 玩家详细信息面板 */}
             <div className="player-info-panel ui-panel px-4 py-3 w-[280px] md:w-[320px]">
-              <div className={`font-ancient text-lg mb-2 ${theme === 'dark' ? 'text-[#e8dcc8]' : 'text-[#3a332a]'}`}>{me.hero.name}</div>
+              <div className={`own-name font-ancient mb-1 ${theme === 'dark' ? 'text-[#e8dcc8]' : 'text-[#3a332a]'}`}>{me.hero.name}</div>
               
-              {/* 体力值 - 朱红勾玉 */}
-              <div className="flex items-center gap-2 mb-2">
-                <span className={`text-xs ${theme === 'dark' ? 'text-stone-500' : 'text-[#8a8680]'}`}>体力</span>
+              {/* 体力值 - 数字 + 朱红勾玉（与官方牌面一致，数字优先可读） */}
+              <div className="own-hp-row" title={`体力 ${me.hp}/${me.maxHp}`}>
+                <span className="own-hp-num tabular-nums">{me.hp}</span>
+                <span className="own-hp-max">/{me.maxHp}</span>
                 <div className="flex gap-1">
                   {Array.from({ length: me.maxHp }).map((_, i) => (
                     <div 
@@ -7588,10 +7576,10 @@ const App: React.FC = () => {
               )}
               
               {/* 手牌和技能信息 */}
-              <div className="flex items-center gap-4 text-sm">
+              <div className="own-meta-row flex items-center gap-3">
                 <div className="flex items-center gap-1">
                   <span className={theme === 'dark' ? 'text-stone-500' : 'text-[#8a8680]'}>手牌</span>
-                  <span className="text-[#e8cf94] font-bold text-lg">{me.hand.length}</span>
+                  <span className="own-hand text-[#e8cf94] font-bold tabular-nums">{me.hand.length}</span>
                 </div>
                 <div className="flex items-center gap-1">
                   <span className={theme === 'dark' ? 'text-[#8f806a]' : 'text-[#8a7a60]'}>技能</span>
@@ -7603,34 +7591,25 @@ const App: React.FC = () => {
                 </div>
               </div>
 
-              {/* 我的装备区 */}
-              <div data-tour="equipment" className="flex items-center gap-1.5 mt-2 flex-wrap">
-                <span className={`text-xs ${theme === 'dark' ? 'text-[#8f806a]' : 'text-[#8a7a60]'}`}>装备</span>
-                {me.equipment?.weapon ? (
-                  <span className="px-2 py-0.5 rounded-[4px] bg-[#2b3a2b]/80 border border-[#6a8a6a]/60 text-[#cfe8cf] text-[11px] font-bold" title={EQUIP_META[me.equipment.weapon.name]?.desc}>
-                    {me.equipment.weapon.name}({EQUIP_META[me.equipment.weapon.name]?.range ?? 1})
+              {/* 我的装备区：武器 / 防具 / +1 马 / -1 马 四槽，悬停显示全称与效果 */}
+              <div data-tour="equipment" className="own-equip">
+                {[
+                  { key: 'weapon', label: '武', item: me.equipment?.weapon, tip: '武器' },
+                  { key: 'armor', label: '防', item: me.equipment?.armor, tip: '防具' },
+                  { key: 'horsePlus', label: '+1', item: me.equipment?.horsePlus, tip: '+1 马（防御马）' },
+                  { key: 'horseMinus', label: '−1', item: me.equipment?.horseMinus, tip: '-1 马（进攻马）' },
+                ].map(slot => (
+                  <span
+                    key={slot.key}
+                    title={`${slot.tip}：${slot.item
+                      ? `${slot.item.name}${slot.key === 'weapon' ? `（范围 ${EQUIP_META[slot.item.name]?.range ?? 1}）` : ''}${EQUIP_META[slot.item.name]?.desc ? ` · ${EQUIP_META[slot.item.name]?.desc}` : ''}`
+                      : '空'}`}
+                    className={`own-equip-slot ${slot.item ? 'is-on' : ''}`}
+                  >
+                    {slot.label}
+                    {slot.item && <i className="seat-equip-dot" />}
                   </span>
-                ) : (
-                  <span className={`px-2 py-0.5 rounded-[4px] border border-dashed text-[11px] ${theme === 'dark' ? 'border-[#4a3f33] text-stone-600' : 'border-[#c4b8a8] text-[#b0aba5]'}`}>武器</span>
-                )}
-                {me.equipment?.armor ? (
-                  <span className="px-2 py-0.5 rounded-[4px] bg-[#2b3340]/80 border border-[#6a8296]/60 text-[#cfe0ee] text-[11px] font-bold" title={EQUIP_META[me.equipment.armor.name]?.desc}>
-                    {me.equipment.armor.name}
-                  </span>
-                ) : (
-                  <span className={`px-2 py-0.5 rounded-[4px] border border-dashed text-[11px] ${theme === 'dark' ? 'border-[#4a3f33] text-stone-600' : 'border-[#c4b8a8] text-[#b0aba5]'}`}>防具</span>
-                )}
-                {/* 装备四槽常显：武器 / 防具 / -1 马 / +1 马 */}
-                {me.equipment?.horseMinus ? (
-                  <span className="px-2 py-0.5 rounded-[4px] bg-[#402b33]/80 border border-[#a06a7e]/60 text-[#f0d0dc] text-[11px] font-bold">-1马</span>
-                ) : (
-                  <span className={`px-2 py-0.5 rounded-[4px] border border-dashed text-[11px] ${theme === 'dark' ? 'border-[#4a3f33] text-stone-600' : 'border-[#c4b8a8] text-[#b0aba5]'}`}>-1马</span>
-                )}
-                {me.equipment?.horsePlus ? (
-                  <span className="px-2 py-0.5 rounded-[4px] bg-[#2b3346]/80 border border-[#6a7ea0]/60 text-[#d0dcf0] text-[11px] font-bold">+1马</span>
-                ) : (
-                  <span className={`px-2 py-0.5 rounded-[4px] border border-dashed text-[11px] ${theme === 'dark' ? 'border-[#4a3f33] text-stone-600' : 'border-[#c4b8a8] text-[#b0aba5]'}`}>+1马</span>
-                )}
+                ))}
               </div>
             </div>
           </div>
@@ -8372,7 +8351,7 @@ const App: React.FC = () => {
                       onClick={dispatchCardClick}
                       canUseSkill={canUseLongdan}
                       skillName="龙胆"
-                      small={compactHand}
+                      small={isMobileHand}
                       large={handLarge}
                     />
                   </div>
