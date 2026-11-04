@@ -259,6 +259,54 @@
     transform: translateX(-50%);
     left: var(--seat-left);
     top: var(--seat-top);
+    transition: left 240ms ease, top 240ms ease;
+  }
+}
+
+/* 矮屏压缩环形高度：左右两侧座位不进入底部手牌区 */
+@media (min-width: 768px) and (max-height: 900px) {
+  .ring-seat { top: calc(var(--seat-top) * 0.86) !important; }
+}
+@media (min-width: 768px) and (max-height: 700px) {
+  .ring-seat { top: calc(var(--seat-top) * 0.78) !important; }
+}
+
+/* 手机：对手压缩成顶部横排小卡，7 人局（5+ 对手）进一步收窄以保持单行 */
+@media (max-width: 767px) {
+  [data-region="seats"] { gap: 2px !important; padding-left: 2px !important; padding-right: 2px !important; }
+  [data-region="seats"] .seat-avatar { width: 58px; height: 87px; }
+  [data-region="seats"][data-many="true"] { gap: 0 !important; padding-left: 0 !important; padding-right: 0 !important; }
+  [data-region="seats"][data-many="true"] .seat-avatar { width: 49px; height: 74px; }
+}
+
+/* ===== 目标选择：合法目标呼吸描边 + 候选角标（官方「高亮目标」的等价实现） ===== */
+.target-candidate {
+  outline: 2px solid rgba(240, 216, 148, 0.85);
+  outline-offset: 2px;
+  animation: target-breathe 1.6s ease-in-out infinite;
+  cursor: pointer;
+}
+@keyframes target-breathe {
+  0%, 100% { outline-color: rgba(240, 216, 148, 0.55); box-shadow: 0 0 0 0 rgba(240, 216, 148, 0.18); }
+  50% { outline-color: rgba(240, 216, 148, 1); box-shadow: 0 0 16px 3px rgba(240, 216, 148, 0.28); }
+}
+.target-chip {
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-size: 10px;
+  line-height: 1.2;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: #2a1f14;
+  background: linear-gradient(180deg, #f0d894, #c8a45c);
+  border: 1px solid rgba(255, 244, 214, 0.7);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.45);
+}
+
+/* 手机端操作按钮触控面积 ≥ 44px（官方移动版操作条规格） */
+@media (max-width: 767px) {
+  .action-bar button {
+    min-height: 44px;
   }
 }
 
@@ -1315,6 +1363,7 @@
   min-width: 44px;
 }
 [data-size-tier="xl"] [data-region="log"] { width: 340px; }
+[data-size-tier="xl"] [data-region="log"].log-collapsed { width: 40px; }
 [data-size-tier="xl"] .player-info-panel { width: 360px; }
 [data-size-tier="xl"] .log-panel .text-xs { font-size: 13px; }
 
