@@ -44,6 +44,11 @@ declare global {
 }
 
 
+// 特效强度：关 / 克制（默认）/ 完整
+type FxLevel = 'off' | 'subtle' | 'full';
+const FX_LABEL: Record<FxLevel, string> = { off: '特效·关', subtle: '特效·克制', full: '特效·完整' };
+const FX_TAG: Record<FxLevel, string> = { off: '关', subtle: '克', full: '全' };
+
 const App: React.FC = () => {
   // --- Theme ---
   const { theme, toggleTheme } = useTheme();
@@ -371,6 +376,18 @@ const App: React.FC = () => {
     const next = !motionOn;
     setMotionOn(next);
     try { localStorage.setItem('sgs-motion', next ? '1' : '0'); } catch { /* ignore */ }
+  };
+  // 特效强度：默认「克制」；关档位与动效开关都整体关闭静态质感与动态
+  const [fxLevel, setFxLevel] = useState<FxLevel>(() => {
+    try {
+      const v = localStorage.getItem('sgs-fx');
+      return v === 'off' || v === 'full' || v === 'subtle' ? v : 'subtle';
+    } catch { return 'subtle'; }
+  });
+  const cycleFx = () => {
+    const next: FxLevel = fxLevel === 'subtle' ? 'full' : fxLevel === 'full' ? 'off' : 'subtle';
+    setFxLevel(next);
+    try { localStorage.setItem('sgs-fx', next); } catch { /* ignore */ }
   };
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const bgmModeRef = useRef<'start' | 'battle' | 'climax'>('start');
@@ -5287,6 +5304,7 @@ const App: React.FC = () => {
         data-density={layoutDensity}
         data-size-tier={sizeTier}
         data-motion={motionOn ? 'on' : 'off'}
+        data-fx={fxLevel}
         className={`h-screen w-full flex flex-col items-center justify-center p-4 relative overflow-hidden ${theme === 'light' ? 'parchment-bg' : ''}`}
         style={scaleStyle}
       >
@@ -5345,6 +5363,15 @@ const App: React.FC = () => {
             aria-label={motionOn ? '关闭动效' : '开启动效'}
           >
             <IconMotion off={!motionOn} />
+          </button>
+          <button
+            onClick={cycleFx}
+            className="ui-icon-btn flex-col !gap-0.5"
+            title={`${FX_LABEL[fxLevel]}（点击切换）`}
+            aria-label={`特效强度：${FX_LABEL[fxLevel]}，点击切换`}
+          >
+            <span className="text-[12px] leading-none font-bold">特效</span>
+            <span className="text-[10px] leading-none opacity-75">{FX_TAG[fxLevel]}</span>
           </button>
           <button
             onClick={toggleTheme}
@@ -5598,6 +5625,10 @@ const App: React.FC = () => {
               <button onClick={toggleMotion} className="ui-icon-btn" title={motionOn ? '关闭动效' : '开启动效'} aria-label={motionOn ? '关闭动效' : '开启动效'}>
                 <IconMotion off={!motionOn} />
               </button>
+              <button onClick={cycleFx} className="ui-icon-btn flex-col !gap-0.5" title={`${FX_LABEL[fxLevel]}（点击切换）`} aria-label={`特效强度：${FX_LABEL[fxLevel]}，点击切换`}>
+                <span className="text-[12px] leading-none font-bold">特效</span>
+                <span className="text-[10px] leading-none opacity-75">{FX_TAG[fxLevel]}</span>
+              </button>
               <button onClick={toggleTheme} className="ui-icon-btn" title={theme === 'dark' ? '切换到白天模式' : '切换到黑夜模式'} aria-label={theme === 'dark' ? '切换到白天模式' : '切换到黑夜模式'}>
                 <ThemeIcon theme={theme} />
               </button>
@@ -5768,6 +5799,7 @@ const App: React.FC = () => {
         isMuted={isMuted}
         toggleMute={toggleMute}
         motionOn={motionOn}
+        fxLevel={fxLevel}
         onRestart={() => {
           // 连点「再来一局」只生效一次，避免一次开出两局
           if (Date.now() - startGuardRef.current < 600) return;
@@ -5805,6 +5837,7 @@ const App: React.FC = () => {
       data-density={layoutDensity}
       data-size-tier={sizeTier}
       data-motion={motionOn ? 'on' : 'off'}
+      data-fx={fxLevel}
       className={`h-screen w-full flex flex-col overflow-hidden relative ${theme === 'light' ? 'parchment-bg' : 'bg-[#1c1c1c]'}`}
       style={scaleStyle}
     >
@@ -6840,6 +6873,15 @@ const App: React.FC = () => {
           >
             <IconMotion off={!motionOn} />
           </button>
+          <button
+            onClick={cycleFx}
+            className="ui-icon-btn game-settings-hide flex-col !gap-0.5"
+            title={`${FX_LABEL[fxLevel]}（点击切换）`}
+            aria-label={`特效强度：${FX_LABEL[fxLevel]}，点击切换`}
+          >
+            <span className="text-[12px] leading-none font-bold">特效</span>
+            <span className="text-[10px] leading-none opacity-75">{FX_TAG[fxLevel]}</span>
+          </button>
         </div>
 
         {/* 环形座位：桌面端绝对定位环绕牌桌；手机端为顶部横向压缩小卡 */}
@@ -6880,6 +6922,11 @@ const App: React.FC = () => {
                 </div>
               )}
               
+              {/* 当前回合呼吸光晕：独立层只动 opacity，避免每帧重绘整张卡 */}
+              {turnIndex === p.id && !(dyingState && dyingState.isActive && dyingState.victimId === p.id) && (
+                <span className="turn-glow" aria-hidden="true" />
+              )}
+              
               {/* 玩家卡牌容器 - 统一深墨描金；支持 Enter / Space 等价点击 */}
               <div
                 role="button"
@@ -6917,6 +6964,10 @@ const App: React.FC = () => {
                   ? 'bg-[#15110e]/95 border-[#4a3f33] opacity-55'
                   : 'bg-[#1c1611]/95 border-[#8b7355]/45'
                 }
+                ${p.isDead ? 'is-dead' : ''}
+                ${p.identity === Identity.ZHUGONG ? 'is-lord-card' : ''}
+                ${dyingState && dyingState.isActive && dyingState.victimId === p.id ? 'is-dying' : ''}
+                ${turnIndex === p.id && !(dyingState && dyingState.isActive && dyingState.victimId === p.id) ? 'is-current-turn' : ''}
                 ${turnIndex === p.id
                   ? 'border-[#c8a45c] shadow-[0_0_22px_rgba(200,164,92,0.30)] scale-105'
                   : ''
@@ -7418,6 +7469,10 @@ const App: React.FC = () => {
                 ? 'bg-[#15110e]/95 border-[#4a3f33] opacity-55'
                 : 'bg-[#1c1611]/95 border-[#8b7355]/45'
               }
+              ${me.isDead ? 'is-dead' : ''}
+              ${me.identity === Identity.ZHUGONG ? 'is-lord-card' : ''}
+              ${dyingState && dyingState.isActive && dyingState.victimId === me.id ? 'is-dying' : ''}
+              ${isMyTurn && !(dyingState && dyingState.isActive && dyingState.victimId === me.id) ? 'is-current-turn' : ''}
               ${isMyTurn
                 ? 'border-[#c8a45c] shadow-[0_0_22px_rgba(200,164,92,0.30)] scale-105'
                 : ''
@@ -7426,6 +7481,10 @@ const App: React.FC = () => {
               ${healAnimTarget === 0 ? 'animate-heal-pulse' : ''}
             `}
           >
+            {/* 当前回合呼吸光晕（独立层，只动 opacity） */}
+            {isMyTurn && !(dyingState && dyingState.isActive && dyingState.victimId === me.id) && (
+              <span className="turn-glow" aria-hidden="true" />
+            )}
             {/* 势力色顶条：与座位卡一致 */}
             <span
               className="absolute top-0 left-2 right-2 h-[2px] rounded-full opacity-80"

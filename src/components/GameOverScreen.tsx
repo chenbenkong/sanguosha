@@ -19,6 +19,8 @@ interface GameOverScreenProps {
   isMuted: boolean;
   toggleMute: () => void;
   motionOn: boolean;
+  /** 特效强度：关 / 克制 / 完整（与对局页共用一套 CSS 变量） */
+  fxLevel?: 'off' | 'subtle' | 'full';
   onRestart: () => void;
   onHome: () => void;
 }
@@ -30,7 +32,7 @@ interface GameOverScreenProps {
  */
 export const GameOverScreen: React.FC<GameOverScreenProps> = ({
   players, winnerSide, deckCount, discardCount, logs, stats, durationMs,
-  theme, isMuted, toggleMute, motionOn, onRestart, onHome,
+  theme, isMuted, toggleMute, motionOn, fxLevel = 'subtle', onRestart, onHome,
 }) => {
   const myIdentity = players.find(p => p.isHuman)?.identity;
   const isVictory = winnerSide !== null && myIdentity !== undefined && (
@@ -52,7 +54,7 @@ export const GameOverScreen: React.FC<GameOverScreenProps> = ({
     : compact ? 'text-4xl md:text-5xl' : 'text-6xl md:text-8xl';
 
   return (
-    <div data-density={layoutDensity} data-motion={motionOn ? 'on' : 'off'} className={`gameover-shell min-h-screen w-full flex flex-col items-center justify-center text-center p-4 pb-28 relative overflow-y-auto ${theme === 'light' ? 'parchment-bg' : 'bg-black'}`}>
+    <div data-density={layoutDensity} data-motion={motionOn ? 'on' : 'off'} data-fx={fxLevel} className={`gameover-shell min-h-screen w-full flex flex-col items-center justify-center text-center p-4 pb-28 relative overflow-y-auto ${theme === 'light' ? 'parchment-bg' : 'bg-black'}`}>
       {/* 背景轮播 - 白天模式显示 */}
       {theme === 'light' && (
         <BackgroundCarousel
