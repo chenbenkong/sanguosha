@@ -2328,9 +2328,143 @@ a:focus-visible {
 .hero-card::after {
   opacity: var(--fx-tex, 0.05);
 }
+/* ---- 悬停 / 选中：1.2s 斜向高光扫过一次，不循环 ---- */
+.seat-scrim::after,
+.hero-pick-shade::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0;
+  background: linear-gradient(
+    112deg,
+    rgba(255, 255, 255, 0) 36%,
+    rgb(255 246 220 / 0.16) 50%,
+    rgba(255, 255, 255, 0) 64%
+  );
+  transform: translateX(-130%);
+}
+@keyframes fxSweep {
+  from { opacity: 0.85; transform: translateX(-130%); }
+  to   { opacity: 0.85; transform: translateX(130%); }
+}
+@media (hover: hover) and (prefers-reduced-motion: no-preference) {
+  [data-fx="subtle"]:not([data-motion="off"]) .seat-card:hover .seat-scrim::after,
+  [data-fx="full"]:not([data-motion="off"]) .seat-card:hover .seat-scrim::after,
+  [data-fx="subtle"]:not([data-motion="off"]) .hero-pick:hover .hero-pick-shade::after,
+  [data-fx="full"]:not([data-motion="off"]) .hero-pick:hover .hero-pick-shade::after {
+    animation: fxSweep 1.2s cubic-bezier(0.25, 0.6, 0.3, 1) 1;
+  }
+}
+[data-fx="subtle"]:not([data-motion="off"]) .seat-card:focus-visible .seat-scrim::after,
+[data-fx="full"]:not([data-motion="off"]) .seat-card:focus-visible .seat-scrim::after,
+[data-fx="subtle"]:not([data-motion="off"]) .hero-pick[aria-pressed="true"] .hero-pick-shade::after,
+[data-fx="full"]:not([data-motion="off"]) .hero-pick[aria-pressed="true"] .hero-pick-shade::after {
+  animation: fxSweep 1.2s ease-out 1;
+}
 
+/* ---- 当前回合：4s 呼吸，独立层只动 opacity（等价于 0.15 → 0.35），不重绘卡面 ---- */
+@keyframes fxTurnBreathOpacity {
+  0%, 100% { opacity: 0.43; }
+  50%      { opacity: 1; }
+}
+.turn-glow {
+  position: absolute;
+  inset: 0;
+  border-radius: 12px;
+  pointer-events: none;
+  z-index: 0;
+  /* 基色 0.35，整体透明度 0.43 ↔ 1，等效 0.15 ↔ 0.35 */
+  box-shadow: 0 0 0 2px rgba(232, 207, 148, 0.35), 0 0 18px rgba(200, 164, 92, 0.35);
+  opacity: 0.43;
+  animation: fxTurnBreathOpacity 4s ease-in-out infinite;
+  will-change: opacity;
+}
+@media (max-width: 767px) {
+  .turn-glow { border-radius: 9px; }
+}
 
+/* ---- 濒死：1.6s 低频心跳，scale 1 → 1.02，不叠加光晕 ---- */
+@keyframes fxHeartbeat {
+  0%, 100% { transform: scale(1); }
+  50%      { transform: scale(1.02); }
+}
+.seat-card.is-dying {
+  animation: fxHeartbeat 1.6s ease-in-out infinite;
+  box-shadow: 0 0 0 1px rgba(200, 107, 98, 0.30), 0 10px 26px rgba(0, 0, 0, 0.45);
+}
 
+/* ---- 受伤：180ms 红闪 + 2px 轻微震动（位移不超过 2 帧） ---- */
+@keyframes fxShake180 {
+  0%, 100% { transform: translateX(0); }
+  30%      { transform: translateX(-2px); }
+  70%      { transform: translateX(2px); }
+}
+.animate-damage-shake { animation: fxShake180 180ms ease-out 1; }
+@keyframes fxRedFlash {
+  0%   { opacity: 0; }
+  28%  { opacity: 1; }
+  100% { opacity: 0; }
+}
+.seat-art.animate-damage-glow { animation: none; }
+.seat-art.animate-damage-glow::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: rgba(200, 42, 36, 0.24);
+  animation: fxRedFlash 180ms ease-out 1 both;
+}
 
+/* ---- 阵亡：0.4s 灰化，整卡饱和度降到 0，保留立绘轮廓 ---- */
+.seat-card.is-dead,
+.seat-card.is-dead .seat-art-img {
+  filter: grayscale(1) saturate(0);
+  transition: filter 0.4s ease;
+}
+.seat-dead { background: rgba(0, 0, 0, 0.34); filter: none; }
 
+/* ---- 姓名可读性 + 技能区左侧极细竖线 ---- */
+.seat-name {
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.85), 0 0 10px rgba(0, 0, 0, 0.35);
+}
+.seat-skill {
+  border-left: 1px solid rgb(232 207 148 / calc(0.22 * var(--fx-deco, 1)));
+  padding-left: 3px;
+}
 
+/* ---- 关档位 / 动效开关：把新增循环动画彻底停掉 ---- */
+[data-fx="off"] .seat-card.is-current-turn,
+[data-motion="off"] .seat-card.is-current-turn,
+[data-fx="off"] .seat-card.is-dying,
+[data-motion="off"] .seat-card.is-dying {
+  animation: none;
+}
+[data-fx="off"] .turn-glow,
+[data-motion="off"] .turn-glow {
+  animation: none;
+  opacity: 0;
+}
+[data-fx="off"] .seat-art.animate-damage-glow::after,
+[data-motion="off"] .seat-art.animate-damage-glow::after {
+  display: none;
+}
+
+/* ---- 技能发动特写：200ms 淡入 + 轻微上浮，不做缩放弹跳 ---- */
+@keyframes fxCastIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.skill-cast { animation: fxCastIn 200ms ease-out both; }
+.skill-cast-ring { animation: none; opacity: 0.35; }
+.skill-cast::before { animation: none; opacity: 0.5; }
+.skill-cast-portrait img {
+  box-shadow:
+    0 0 0 2px rgba(158, 43, 37, 0.22),
+    0 0 16px 4px rgba(212, 175, 55, 0.20),
+    0 8px 22px rgba(0, 0, 0, 0.5);
+}
+@media (prefers-reduced-motion: reduce) {
+  .skill-cast, .skill-cast-ring { animation: none !important; }
+  .turn-glow { animation: none !important; opacity: 0 !important; }
+}
