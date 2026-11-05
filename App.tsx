@@ -6103,7 +6103,7 @@ const App: React.FC = () => {
                     {p.hero.name}
                     {p.isDead && <span className="text-[#c86b62] text-sm border border-[#9e2b25] px-1.5 py-0.5 rounded">阵亡</span>}
                   </h4>
-                  <p className="text-stone-400 text-sm">{p.hero.description}</p>
+                  {/* 对局内小卡浮层不显示称号（epithet）：称号只在选将页/完整详情面板出现 */}
                   <div className="flex flex-wrap items-center gap-2 mt-1.5 text-sm">
                     <span className={`px-2 py-0.5 rounded text-xs font-bold ${
                       p.hero.kingdom === '魏' ? 'bg-blue-900/60 text-blue-200' :
@@ -6183,7 +6183,7 @@ const App: React.FC = () => {
                  <img src={me.hero.avatarUrl} alt={me.hero.name} loading="eager" decoding="async" className="w-20 h-[120px] rounded-lg border-2 border-[#d4af37]/50 object-cover" />
                  <div>
                    <h4 className="text-2xl font-bold text-[#d4af37] font-ancient">{me.hero.name}</h4>
-                   <p className="text-stone-400 text-sm">{me.hero.description}</p>
+                   {/* 对局内技能说明浮层不显示称号（epithet） */}
                    <div className="flex items-center gap-2 mt-1">
                      <span className={`px-2 py-0.5 rounded text-xs font-bold ${
                        me.hero.kingdom === '魏' ? 'bg-blue-900/60 text-blue-200' :
@@ -7035,9 +7035,9 @@ const App: React.FC = () => {
                   </div>
                 </div>
                 
-                {/* 底部信息层：称号 / 体力数字 + 勾玉 / 手牌数 / 距离 / 装备四槽 / 判定区 */}
+                {/* 底部信息层：体力勾玉 / 手牌数 / 距离 / 装备四槽 / 判定区
+                    对局卡面不放称号（epithet）：只显示姓名与技能，避免重复占用卡面 */}
                 <div className="seat-info">
-                  <div className="seat-title" title={p.hero.description}>{p.hero.description}</div>
                   <div className="seat-hp-row" title={`体力 ${p.hp}/${p.maxHp}`}>
                     <div className="seat-pips">
                       {Array.from({ length: p.maxHp }).map((_, i) => (
