@@ -166,7 +166,6 @@ export const GameOverScreen: React.FC<GameOverScreenProps> = ({
                     <i key={i} className={`settle-pip ${i < player.hp ? 'is-on' : ''}`} />
                   ))}
                 </span>
-                <b className="settle-hp-num tabular-nums">{player.hp}</b>
               </div>
               <div className={`text-sm font-ancient px-2.5 py-0.5 rounded-full
                 ${player.isDead

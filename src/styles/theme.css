@@ -1440,42 +1440,42 @@ a:focus-visible {
 
 /* 各密度档的座位/主视角/手牌尺寸（normal = 1440×900 / 1600×860） */
 [data-density="roomy"] {
-  --sc-w: 256px; --sc-h: 208px;
+  --sc-w: 256px; --sc-h: 228px;
   --own-w: 400px; --own-h: 232px; --own-art-w: 132px; --own-art-h: 198px;
   --hand-min: 210px;
   --felt-w: min(760px, 46vw); --felt-h: min(300px, 30vh);
 }
 [data-density="roomy"][data-size-tier="xl"] {
-  --sc-w: 272px; --sc-h: 216px;
+  --sc-w: 272px; --sc-h: 236px;
   --own-w: 416px; --own-h: 240px; --own-art-w: 138px; --own-art-h: 207px;
   --hand-min: 222px;
 }
 [data-density="normal"] {
-  --sc-w: 240px; --sc-h: 200px;
+  --sc-w: 240px; --sc-h: 216px;
   --own-w: 372px; --own-h: 212px; --own-art-w: 120px; --own-art-h: 180px;
   --hand-min: 198px;
   --felt-w: min(680px, 44vw); --felt-h: min(270px, 28vh);
 }
 [data-density="compact"] {
-  --sc-w: 210px; --sc-h: 180px;
+  --sc-w: 210px; --sc-h: 196px;
   --own-w: 340px; --own-h: 196px; --own-art-w: 108px; --own-art-h: 162px;
   --hand-min: 186px;
   --felt-w: min(600px, 42vw); --felt-h: min(240px, 26vh);
 }
 [data-density="tight"] {
-  --sc-w: 190px; --sc-h: 166px;
+  --sc-w: 190px; --sc-h: 180px;
   --own-w: 320px; --own-h: 184px; --own-art-w: 100px; --own-art-h: 150px;
   --hand-min: 176px;
   --felt-w: min(540px, 40vw); --felt-h: min(210px, 24vh);
 }
 [data-density="ultra"] {
-  --sc-w: 178px; --sc-h: 154px;
+  --sc-w: 178px; --sc-h: 168px;
   --own-w: 300px; --own-h: 172px; --own-art-w: 92px; --own-art-h: 138px;
   --hand-min: 166px;
   --felt-w: min(480px, 38vw); --felt-h: min(180px, 22vh);
 }
 
-/* 桌面座位：顶部一行平铺 + 左右两侧；贴边 12px */
+/* 桌面座位：全部敌人顶部一行平铺；左右两侧留给战报与出牌顺序，中央卡池不被遮挡 */
 @media (min-width: 768px) {
   .ring-seat {
     position: absolute;
@@ -1484,26 +1484,175 @@ a:focus-visible {
     transform: translateX(-50%);
     transition: left 240ms ease, top 240ms ease;
   }
-  .ring-seat[data-side="left"] {
-    left: 12px;
-    top: 46vh !important;
-    transform: translateY(-50%);
-  }
-  .ring-seat[data-side="right"] {
-    left: auto;
-    right: 12px;
-    top: 46vh !important;
-    transform: translateY(-50%);
-  }
   .table-felt { width: var(--felt-w); height: var(--felt-h); }
 
-  /* 战报侧栏：占左侧座位之上的一段空档，右/下边界不压座位与手牌区 */
+  /* 中央区整体下移一个座位高度：卡池落在剩余区域的视觉中心，座位/气泡都不再压它 */
+  [data-region="field"] { padding-top: calc(58px + var(--sc-h) + 12px); }
+
+  /* 战报侧栏：左侧、座位下沿开始，到中央区底部 */
   [data-region="log"] {
-    top: 52px !important;
+    top: calc(58px + var(--sc-h) + 12px) !important;
     bottom: auto !important;
-    height: calc(46vh - var(--sc-h) / 2 - 60px) !important;
+    height: calc(100% - var(--sc-h) - 82px) !important;
   }
+
+  /* 阶段条贴右下，不与卡池争中央 */
+  .phase-panel {
+    left: auto !important;
+    right: 8px !important;
+    top: auto !important;
+    bottom: 8px !important;
+    transform: none !important;
+  }
+
+  /* 出牌顺序条：右侧竖排 */
+  [data-region="turn-rail"] {
+    position: absolute;
+    right: 8px;
+    top: calc(58px + var(--sc-h) + 12px);
+    bottom: 90px;
+    width: 184px;
+    z-index: 31;
+    gap: 3px;
+    padding: 4px;
+    overflow-y: auto;
+    scrollbar-width: thin;
+  }
+  [data-region="turn-rail"]::-webkit-scrollbar { width: 4px; }
+  [data-region="turn-rail"]::-webkit-scrollbar-thumb { background: rgba(200, 164, 92, 0.35); border-radius: 2px; }
+
+  /* 卡池是视觉中心：桌面整体放大 12%，布局盒不变，仍与座位/阶段条错开 */
+  [data-region="center-decks"] { transform: scale(1.12); }
 }
+
+/* 矮屏（1366×620 / 1280×600 等）：座位行收窄、卡池略缩，避免纵向裁切 */
+@media (min-width: 768px) and (max-height: 700px) {
+  .ring-seat { top: 48px !important; }
+  [data-region="field"] { padding-top: calc(48px + var(--sc-h) + 6px); }
+  [data-region="center-decks"] { transform: scale(0.88); }
+  [data-region="log"] {
+    top: calc(48px + var(--sc-h) + 6px) !important;
+    height: calc(100% - var(--sc-h) - 54px) !important;
+  }
+  .phase-panel { bottom: 6px !important; }
+  [data-region="turn-rail"] { top: calc(48px + var(--sc-h) + 6px); bottom: 78px; }
+}
+
+/* 极矮屏（≤640）：座位行再上提、卡池与底部栏留白收紧，手牌本体尺寸不变 */
+@media (min-width: 768px) and (max-height: 640px) {
+  .ring-seat { top: 36px !important; }
+  [data-region="field"] { padding-top: calc(36px + var(--sc-h) + 2px); }
+  [data-region="log"] {
+    top: calc(36px + var(--sc-h) + 2px) !important;
+    height: calc(100% - var(--sc-h) - 40px) !important;
+  }
+  [data-region="turn-rail"] { top: calc(36px + var(--sc-h) + 2px); bottom: 130px; }
+  .phase-panel { bottom: 4px !important; }
+  [data-region="bottom"] { padding: 0 !important; }
+  [data-region="hand"] { padding-top: 0 !important; }
+}
+
+/* ===== 手机端最近战报：手牌上方留白里的一条胶囊 =====
+   原来压在对局中央会挡住牌堆；移到手牌区顶部的空档后两者互不遮挡 */
+.mobile-log {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  top: 0;
+  z-index: 30;
+  display: flex;
+  justify-content: center;
+  pointer-events: none;
+}
+.mobile-log-line {
+  max-width: 100%;
+  font-size: 13px;
+  line-height: 1.25;
+  padding: 3px 10px;
+  border-radius: 999px;
+  color: #f0e0c4;
+  background: rgba(20, 16, 12, 0.92);
+  border: 1px solid rgba(200, 164, 92, 0.45);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ===== 出牌顺序条：桌面右侧竖排 / 手机顶部横排 =====
+   按行动顺序列人，当前回合高亮；不与中央卡池抢位置 */
+.turn-rail-head {
+  flex: 0 0 auto;
+  font-size: 13px;
+  letter-spacing: 0.18em;
+  padding: 2px 0 5px;
+  margin-bottom: 2px;
+  text-align: center;
+  color: #c9b58f;
+  border-bottom: 1px solid rgba(200, 164, 92, 0.28);
+}
+.turn-rail-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+  min-height: 30px;
+  padding: 2px 6px;
+  border-radius: 6px;
+  border: 1px solid rgba(200, 164, 92, 0.22);
+  border-left: 3px solid var(--k-line);
+  background: rgba(12, 9, 6, 0.82);
+  color: #e3d5bd;
+}
+.turn-rail-row[data-active="true"] {
+  border-color: rgba(240, 216, 148, 0.75);
+  background: linear-gradient(90deg, rgba(200, 164, 92, 0.24), rgba(20, 15, 10, 0.92));
+  box-shadow: 0 0 12px rgba(212, 175, 55, 0.28);
+}
+.turn-rail-row[data-dead="true"] { opacity: 0.45; filter: grayscale(0.7); }
+.turn-rail-idx {
+  flex: 0 0 15px;
+  font-size: 13px;
+  text-align: center;
+  color: #b7a68a;
+  font-variant-numeric: tabular-nums;
+}
+.turn-rail-avatar {
+  flex: 0 0 auto;
+  width: 24px;
+  height: 28px;
+  border-radius: 3px;
+  object-fit: cover;
+  object-position: center 18%;
+  border: 1px solid var(--k-line);
+}
+.turn-rail-name {
+  font-size: 14px;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--k-main);
+}
+.turn-rail-state {
+  margin-left: auto;
+  flex: 0 0 auto;
+  font-size: 13px;
+  padding: 1px 5px;
+  border-radius: 3px;
+  color: #cbbda6;
+  background: rgba(0, 0, 0, 0.35);
+  white-space: nowrap;
+}
+.turn-rail-row[data-active="true"] .turn-rail-state {
+  color: #2a1f14;
+  font-weight: 700;
+  background: linear-gradient(180deg, #f0d894, #c8a45c);
+}
+/* 7 人局收一点行高，保证 7 行 + 表头在栏内一屏放下 */
+[data-count="7"] .turn-rail-row { min-height: 24px; padding: 1px 5px; gap: 4px; }
+[data-count="7"] .turn-rail-avatar { width: 18px; height: 22px; }
+[data-count="7"] .turn-rail-head { padding-bottom: 3px; }
 
 /* 左上身份目标条（对齐官方参考图左上角） */
 .objective-strip {
@@ -1662,20 +1811,13 @@ a:focus-visible {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.seat-hp-row { display: flex; align-items: baseline; gap: 4px; line-height: 1; }
-.seat-hp-num {
-  font-size: 22px;
-  font-weight: 800;
-  color: #f5d98a;
-  font-variant-numeric: tabular-nums;
-  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.9);
-}
-.seat-hp-max { font-size: 13px; color: #b7a68a; }
-.seat-pips { display: flex; align-items: flex-end; gap: 2px; margin-left: 3px; }
+/* 体力只用勾玉：满/失血由填充与空槽区分，不再叠加数字（数字重复占卡面空间） */
+.seat-hp-row { display: flex; align-items: center; gap: 0; line-height: 1; }
+.seat-pips { display: flex; align-items: center; flex-wrap: wrap; gap: 3px 3px; max-width: 92px; }
 .seat-pip {
-  width: 9px;
-  height: 13px;
-  border-radius: 2px 2px 5px 5px;
+  width: 12px;
+  height: 18px;
+  border-radius: 3px 3px 6px 6px;
   background: #3a2f26;
   box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.6);
 }
@@ -1819,13 +1961,7 @@ a:focus-visible {
 /* 主视角卡内字号（≥ 硬指标） */
 .own-name { font-size: 22px; line-height: 1.15; }
 .own-hp-row { display: flex; align-items: center; gap: 4px; margin-bottom: 4px; }
-.own-hp-num {
-  font-size: 24px;
-  font-weight: 800;
-  color: #f5d98a;
-  line-height: 1;
-}
-.own-hp-max { font-size: 14px; color: #b7a68a; }
+
 .own-meta-row { font-size: 15px; }
 .own-hand { font-size: 19px; }
 .own-equip {
@@ -1893,14 +2029,13 @@ a:focus-visible {
   background: rgba(10, 8, 6, 0.82);
   border: 1px solid rgba(200, 164, 92, 0.32);
 }
-.hero-hp-pips { display: flex; align-items: flex-end; gap: 2px; }
+.hero-hp-pips { display: flex; align-items: center; flex-wrap: wrap; gap: 3px; max-width: 150px; }
 .hero-hp-pip {
-  width: 6px;
-  height: 10px;
-  border-radius: 2px 2px 4px 4px;
+  width: 9px;
+  height: 14px;
+  border-radius: 2px 2px 5px 5px;
   background: linear-gradient(180deg, #fbe08e, #c79b2f);
 }
-.hero-hp-num { font-size: 14px; color: #f5d98a; line-height: 1; }
 .hero-pick-foot {
   background: linear-gradient(180deg, rgba(8, 6, 4, 0) 0%, rgba(8, 6, 4, 0.82) 32%, rgba(8, 6, 4, 0.96) 100%);
 }
@@ -1938,19 +2073,18 @@ a:focus-visible {
   overflow: hidden;
 }
 
-/* 结算页武将小卡：同样按势力描边 + 勾玉数字 */
+/* 结算页武将小卡：同样按势力描边 + 勾玉（不再叠数字） */
 .settle-hero { border: 1px solid var(--k-line) !important; }
 .settle-portrait { border: 1px solid var(--k-line); }
 .settle-hp { display: flex; align-items: center; gap: 4px; margin: 2px 0 4px; }
-.settle-hp-pips { display: flex; gap: 1px; }
+.settle-hp-pips { display: flex; flex-wrap: wrap; gap: 2px; }
 .settle-pip {
-  width: 4px;
-  height: 7px;
-  border-radius: 1px 1px 3px 3px;
+  width: 6px;
+  height: 10px;
+  border-radius: 2px 2px 4px 4px;
   background: rgba(255, 255, 255, 0.18);
 }
 .settle-pip.is-on { background: linear-gradient(180deg, #fbe08e, #c79b2f); }
-.settle-hp-num { font-size: 13px; color: #e8cf94; }
 
 /* ===== 手机端：同步放大座位小卡 / 手牌，字号不低于 13px ===== */
 @media (max-width: 767px) {
@@ -1983,10 +2117,8 @@ a:focus-visible {
   [data-region="seats"] .seat-name { font-size: 14px; letter-spacing: 0.1em; }
   [data-region="seats"] .seat-skill { font-size: 13px; max-height: 46px; }
   [data-region="seats"] .seat-info { padding: 3px 4px 4px; }
-  [data-region="seats"] .seat-hp-num { font-size: 18px; }
-  [data-region="seats"] .seat-hp-max { font-size: 13px; }
-  [data-region="seats"] .seat-pips { gap: 1px; margin-left: 2px; }
-  [data-region="seats"] .seat-pip { width: 5px; height: 8px; }
+  [data-region="seats"] .seat-pips { gap: 2px; max-width: 70px; }
+  [data-region="seats"] .seat-pip { width: 8px; height: 12px; }
   [data-region="seats"] .seat-meta-row { font-size: 13px; gap: 4px; margin-top: 1px; }
   [data-region="seats"] .seat-hand-count b { font-size: 13px; }
   [data-region="seats"] .seat-distance { font-size: 13px; }
@@ -2001,8 +2133,6 @@ a:focus-visible {
   .own-seat .player-avatar { width: 84px; height: 126px; }
   .own-seat .player-info-panel { width: auto !important; flex: 1; min-width: 0; padding: 2px 4px !important; border: 0 !important; background: none !important; box-shadow: none !important; }
   .own-name { font-size: 16px; }
-  .own-hp-num { font-size: 20px; }
-  .own-hp-max { font-size: 13px; }
   .own-meta-row { font-size: 13px; }
   .own-hand { font-size: 16px; }
   .own-equip { gap: 3px; margin-top: 5px; }
@@ -2014,19 +2144,83 @@ a:focus-visible {
   .hero-pick-desc { font-size: 12px; line-height: 1.5; }
   .hero-lord-chip { font-size: 11px; }
 
-  /* 手机竖向空间紧张：中央牌堆缩到 0.68，操作条改为浮动在自己座位上沿，
-     把手牌完整留在首屏内（不再被底部裁切） */
-  [data-region="center-decks"] { transform: scale(0.68); }
-  /* 中央区固定矮高度：transform 不改变布局盒，必须显式收高度才不挤占手牌 */
-  [data-region="field"] { flex: 0 0 118px; height: 118px; }
+  /* 手机：场地高度固定，顶部两条横带 —— 顺序条（0–21）+ 操作按钮带（22–72），
+     卡池从 78px 起画，永远落在按钮带下方，不被座位卡/按钮遮挡 */
+  :root { --m-field: 140px; }
+  [data-region="field"] {
+    flex: 0 0 var(--m-field) !important;
+    height: var(--m-field) !important;
+    padding: 78px 0 4px !important;
+    align-items: flex-start !important;
+  }
+  /* 卡池以顶边为缩放基准：视觉高度 = 172×scale，从 78px 起的余量里放得下 */
+  [data-region="center-decks"] { transform: scale(0.36); transform-origin: top center; }
+
+  /* 出牌顺序在手机上折叠为顶部一条横排（可横向滑动） */
+  [data-region="turn-strip"] {
+    position: absolute;
+    top: 0;
+    left: 6px;
+    right: 6px;
+    height: 21px;
+    z-index: 28;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  [data-region="turn-strip"]::-webkit-scrollbar { display: none; }
+  .turn-chip {
+    flex: 0 0 auto;
+    font-size: 13px;
+    line-height: 1;
+    padding: 3px 7px;
+    border-radius: 4px;
+    border: 1px solid var(--k-line);
+    border-left-width: 3px;
+    background: rgba(12, 9, 6, 0.82);
+    color: var(--k-main);
+    white-space: nowrap;
+  }
+  .turn-chip[data-active="true"] {
+    font-weight: 800;
+    color: #2a1f14;
+    border-color: rgba(240, 216, 148, 0.9);
+    background: linear-gradient(180deg, #f0d894, #c8a45c);
+  }
   .action-bar {
     position: absolute !important;
-    right: 8px;
-    left: auto !important;
-    bottom: calc(100% + 4px);
+    left: 6px !important;
+    right: 6px !important;
+    top: auto !important;
+    /* 按钮带底边固定在场地顶部 +72px 处（顺序条 0–21 之下），与卡池（78px 起）不重叠 */
+    bottom: calc(100% + var(--m-field) - 72px) !important;
     margin: 0 !important;
     z-index: 45;
   }
+  .action-bar > div {
+    padding: 2px !important;
+    flex-wrap: nowrap !important;
+    overflow-x: auto;
+    max-width: 100%;
+    scrollbar-width: none;
+  }
+  .action-bar > div::-webkit-scrollbar { display: none; }
+  .action-bar button {
+    padding: 3px 10px !important;
+    font-size: 15px !important;
+    white-space: nowrap;
+  }
+}
+
+/* 较高的手机（≥700px 高）：场地 170，卡池 0.53（视觉 91px，落在 78–170 的 92px 带内） */
+@media (max-width: 767px) and (min-height: 700px) {
+  :root { --m-field: 170px; }
+  [data-region="center-decks"] { transform: scale(0.53); }
+}
+
+/* 矮手机（<700px 高）：对手卡不高，给操作按钮带腾出 16px */
+@media (max-width: 767px) and (max-height: 699px) {
+  .own-seat .player-avatar { width: 84px; height: 110px; }
 }
 
 /* 结算页：矮屏收掉底部预留，避免 min-h-screen + pb-28 把文档高度顶出视口 */
