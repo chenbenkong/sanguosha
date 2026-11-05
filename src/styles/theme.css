@@ -1357,29 +1357,22 @@
 }
 [data-size-tier="xl"] [data-region="log"] { width: 340px; }
 [data-size-tier="xl"] [data-region="log"].log-collapsed { width: 40px; }
-[data-size-tier="xl"] .player-info-panel { width: 360px; }
 [data-size-tier="xl"] .log-panel .text-xs { font-size: 13px; }
 
 .seat-avatar { width: 64px; height: 96px; }
-.player-avatar { width: 72px; height: 108px; }
 
 @media (min-width: 768px) {
   .seat-avatar { width: var(--seat-aw); height: var(--seat-ah); }
-  .player-avatar { width: calc(var(--seat-aw) + 8px); height: calc(var(--seat-ah) + 12px); }
   .table-felt { width: var(--felt-w); height: var(--felt-h); }
 }
 
 /* 底部区域：超紧凑/紧凑档收紧内边距与按钮，给手牌留出固定空间 */
 [data-density="ultra"] .bottom-bar { padding-top: 0; padding-bottom: 0; }
 [data-density="ultra"] [data-region="hand"] { padding-top: 6px; }
-[data-density="ultra"] .player-info-panel { width: 236px; padding: 4px 10px; }
 [data-density="tight"] .bottom-bar { padding-top: 6px; padding-bottom: 6px; }
 [data-density="compact"] .bottom-bar { padding-top: 8px; padding-bottom: 6px; }
 [data-density="ultra"] .player-info-row,
 [data-density="tight"] .player-info-row { margin-bottom: 2px; }
-[data-density="ultra"] .player-info-panel { width: 236px; padding: 4px 10px; }
-[data-density="tight"] .player-info-panel { width: 268px; padding: 8px 12px; }
-[data-density="ultra"] .player-info-panel .mb-2 { margin-bottom: 4px; }
 [data-density="ultra"] .action-bar .ui-panel { padding: 4px; gap: 4px; }
 [data-density="ultra"] .action-bar .btn-gold,
 [data-density="ultra"] .action-bar .btn-ink { padding: 6px 14px; font-size: 15px; }
@@ -1443,36 +1436,36 @@ a:focus-visible {
    （见 .seat-card / .seat-info，标题行已删除） */
 [data-density="roomy"] {
   --sc-w: 256px; --sc-h: 254px;
-  --own-w: 400px; --own-h: 232px; --own-art-w: 132px; --own-art-h: 198px;
+  --own-w: 400px; --own-h: 264px;
   --hand-min: 210px;
   --felt-w: min(760px, 46vw); --felt-h: min(300px, 30vh);
 }
 [data-density="roomy"][data-size-tier="xl"] {
   --sc-w: 272px; --sc-h: 262px;
-  --own-w: 416px; --own-h: 240px; --own-art-w: 138px; --own-art-h: 207px;
+  --own-w: 416px; --own-h: 272px;
   --hand-min: 222px;
 }
 [data-density="normal"] {
   --sc-w: 240px; --sc-h: 242px;
-  --own-w: 372px; --own-h: 212px; --own-art-w: 120px; --own-art-h: 180px;
+  --own-w: 372px; --own-h: 252px;
   --hand-min: 198px;
   --felt-w: min(680px, 44vw); --felt-h: min(270px, 28vh);
 }
 [data-density="compact"] {
   --sc-w: 210px; --sc-h: 196px;
-  --own-w: 340px; --own-h: 196px; --own-art-w: 108px; --own-art-h: 162px;
+  --own-w: 340px; --own-h: 212px;
   --hand-min: 186px;
   --felt-w: min(600px, 42vw); --felt-h: min(240px, 26vh);
 }
 [data-density="tight"] {
   --sc-w: 190px; --sc-h: 180px;
-  --own-w: 320px; --own-h: 184px; --own-art-w: 100px; --own-art-h: 150px;
+  --own-w: 320px; --own-h: 196px;
   --hand-min: 176px;
   --felt-w: min(540px, 40vw); --felt-h: min(210px, 24vh);
 }
 [data-density="ultra"] {
   --sc-w: 178px; --sc-h: 168px;
-  --own-w: 300px; --own-h: 172px; --own-art-w: 92px; --own-art-h: 138px;
+  --own-w: 300px; --own-h: 184px;
   --hand-min: 166px;
   --felt-w: min(480px, 38vw); --felt-h: min(180px, 22vh);
 }
@@ -1805,9 +1798,19 @@ a:focus-visible {
 }
 /* 对局卡面不画称号（epithet）：只保留姓名与技能，省出的整行交给立绘 */
 
-/* 体力只用勾玉：满/失血由填充与空槽区分，不再叠加数字（数字重复占卡面空间） */
-.seat-hp-row { display: flex; align-items: center; gap: 0; line-height: 1; }
-.seat-pips { display: flex; align-items: center; flex-wrap: wrap; gap: 3px 3px; max-width: 92px; }
+/* 体力只用勾玉：满/失血由填充与空槽区分，不再叠加数字（数字重复占卡面空间）
+   勾玉固定在卡面右上角安全区（身份章下方），与左侧竖排姓名/技能列互不相交；
+   超过 6 枚时在角内折两行，仍不侵入姓名区 */
+.seat-hp-corner {
+  position: absolute;
+  top: 36px;
+  right: 6px;
+  display: flex;
+  justify-content: flex-end;
+  z-index: 12;
+  cursor: help;
+}
+.seat-pips { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 3px; max-width: 96px; }
 .seat-pip {
   width: 12px;
   height: 18px;
@@ -1916,28 +1919,16 @@ a:focus-visible {
     align-self: end;
     width: var(--own-w);
     height: var(--own-h);
-    padding: 8px;
-    gap: 10px;
+    padding: 0;
+    display: block;
     border: 2px solid var(--k-line);
-    border-radius: 14px;
-    background: linear-gradient(180deg, rgba(26, 21, 16, 0.96), rgba(14, 11, 8, 0.98));
-    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.45), inset 0 0 0 1px rgba(255, 226, 166, 0.08);
+    border-radius: 12px;
+    /* 与座位卡同一套卡面（.seat-card + .kingdom-frame），只按 --own-w/--own-h 略大一号 */
+    overflow: visible !important;
   }
-  .own-seat .player-avatar {
-    width: var(--own-art-w);
-    height: var(--own-art-h);
-    border-width: 1px;
-  }
-  .own-seat .player-info-panel {
-    width: auto !important;
-    flex: 1;
-    min-width: 0;
-    height: 100%;
-    padding: 2px 0 0 !important;
-    border: 0 !important;
-    background: none !important;
-    box-shadow: none !important;
-  }
+  /* 立绘自身裁圆角，伤害飘字/回合徽标可以溢出到卡外 */
+  .own-seat .seat-art { overflow: hidden; border-radius: inherit; }
+  .own-seat .seat-info { border-radius: 0 0 12px 12px; }
   .action-bar {
     grid-column: 1;
     grid-row: 1;
@@ -1952,34 +1943,24 @@ a:focus-visible {
   }
 }
 
-/* 主视角卡内字号（≥ 硬指标） */
-.own-name { font-size: 22px; line-height: 1.15; }
-.own-hp-row { display: flex; align-items: center; gap: 4px; margin-bottom: 4px; }
-
-.own-meta-row { font-size: 15px; }
-.own-hand { font-size: 19px; }
-.own-equip {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 4px;
-  margin-top: 8px;
-}
-.own-equip-slot {
-  position: relative;
-  height: 26px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+/* 主视角卡：与座位卡同款后只剩两处专属元素（回合徽标 / 技能色字） */
+.own-turn-chip {
+  position: absolute;
+  top: 6px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 30;
+  padding: 1px 10px;
+  border-radius: 999px;
   font-size: 13px;
-  border-radius: 4px;
-  border: 1px solid rgba(200, 164, 92, 0.24);
-  background: rgba(0, 0, 0, 0.32);
-  color: #8f816b;
-}
-.own-equip-slot.is-on {
-  color: #f5d98a;
-  border-color: rgba(240, 216, 148, 0.65);
-  background: rgba(200, 164, 92, 0.16);
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  line-height: 1.4;
+  white-space: nowrap;
+  color: #f7e7cf;
+  background: #9e2b25;
+  border: 1px solid rgba(200, 107, 98, 0.7);
+  box-shadow: 0 2px 12px rgba(158, 43, 37, 0.55);
 }
 
 /* 操作按钮字号（≥15px） */
@@ -2111,7 +2092,8 @@ a:focus-visible {
   [data-region="seats"] .seat-name { font-size: 14px; letter-spacing: 0.1em; }
   [data-region="seats"] .seat-skill { font-size: 13px; max-height: 46px; }
   [data-region="seats"] .seat-info { padding: 3px 4px 4px; }
-  [data-region="seats"] .seat-pips { gap: 2px; max-width: 70px; }
+  [data-region="seats"] .seat-hp-corner { top: 24px; right: 4px; max-width: 64px; }
+  [data-region="seats"] .seat-pips { gap: 2px; max-width: 64px; }
   [data-region="seats"] .seat-pip { width: 8px; height: 12px; }
   [data-region="seats"] .seat-meta-row { font-size: 13px; gap: 4px; margin-top: 1px; }
   [data-region="seats"] .seat-hand-count b { font-size: 13px; }
@@ -2121,16 +2103,35 @@ a:focus-visible {
   [data-region="seats"] .seat-judge { gap: 2px; margin-top: 2px; }
   [data-region="seats"] .seat-judge span { height: 17px; line-height: 15px; padding: 0 2px; font-size: 13px; }
   [data-region="seats"] .seat-dead span { font-size: 16px; }
-  [data-region="seats"] .seat-title { display: none; }
 
-  .own-seat { width: auto; height: auto; padding: 4px; gap: 6px; border: 1px solid var(--k-line); border-radius: 10px; }
-  .own-seat .player-avatar { width: 84px; height: 126px; }
-  .own-seat .player-info-panel { width: auto !important; flex: 1; min-width: 0; padding: 2px 4px !important; border: 0 !important; background: none !important; box-shadow: none !important; }
-  .own-name { font-size: 16px; }
-  .own-meta-row { font-size: 13px; }
-  .own-hand { font-size: 16px; }
-  .own-equip { gap: 3px; margin-top: 5px; }
-  .own-equip-slot { height: 24px; font-size: 13px; }
+  /* 手机主视角卡：与座位卡同款卡面，宽度占满整行，立绘可见高与座位卡对齐 */
+  .own-seat {
+    width: 100%;
+    height: 156px;
+    padding: 0;
+    border: 2px solid var(--k-line);
+    border-radius: 9px;
+  }
+  .own-seat .seat-art { overflow: hidden; border-radius: inherit; }
+  .own-seat .seat-info { border-radius: 0 0 9px 9px; }
+  .own-seat .seat-topline { top: 4px; left: 4px; right: 4px; }
+  .own-seat .seat-kingdom { width: 22px; height: 22px; font-size: 13px; }
+  .own-seat .seat-identity { min-width: 22px; height: 20px; padding: 0 4px; font-size: 13px; }
+  .own-seat .seat-name-rail { top: 28px; width: 30px; gap: 4px; padding: 4px 0 6px; }
+  .own-seat .seat-name { font-size: 16px; letter-spacing: 0.1em; }
+  .own-seat .seat-skill { font-size: 13px; max-height: 48px; }
+  .own-seat .seat-hp-corner { top: 28px; right: 4px; max-width: 84px; }
+  .own-seat .seat-pips { gap: 2px; max-width: 84px; }
+  .own-seat .seat-pip { width: 10px; height: 15px; }
+  .own-seat .seat-info { padding: 4px 6px 5px; }
+  .own-seat .seat-meta-row { font-size: 13px; gap: 8px; margin-top: 1px; }
+  .own-seat .seat-hand-count b { font-size: 13px; }
+  .own-seat .seat-distance { font-size: 13px; }
+  .own-seat .seat-equip { gap: 3px; margin-top: 2px; }
+  .own-seat .seat-equip-slot { height: 20px; font-size: 13px; }
+  .own-seat .seat-judge { gap: 2px; margin-top: 2px; }
+  .own-seat .seat-judge span { height: 17px; line-height: 15px; padding: 0 2px; font-size: 13px; }
+  .own-turn-chip { top: 4px; padding: 0 8px; font-size: 13px; letter-spacing: 0.08em; }
 
   .hero-pick-title { font-size: 12px; }
   .hero-pick-name { font-size: 20px; }
@@ -2212,9 +2213,11 @@ a:focus-visible {
   [data-region="center-decks"] { transform: scale(0.53); }
 }
 
-/* 矮手机（<700px 高）：对手卡不高，给操作按钮带腾出 16px */
+
+/* 矮手机（<700px 高）：主视角卡收 20px，手牌仍完整落在首屏内 */
 @media (max-width: 767px) and (max-height: 699px) {
-  .own-seat .player-avatar { width: 84px; height: 110px; }
+  .own-seat { height: 136px; }
+  .own-seat .seat-info { padding: 3px 6px 4px; }
 }
 
 /* 结算页：矮屏收掉底部预留，避免 min-h-screen + pb-28 把文档高度顶出视口 */
