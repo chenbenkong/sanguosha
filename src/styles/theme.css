@@ -1438,20 +1438,22 @@ a:focus-visible {
    重排座位，所有尺寸/字号以可读性优先；不再为椭圆形状压缩。
    ========================================================================== */
 
-/* 各密度档的座位/主视角/手牌尺寸（normal = 1440×900 / 1600×860） */
+/* 各密度档的座位/主视角/手牌尺寸（normal = 1440×900 / 1600×860）
+   座位卡高度 = 原有值 + 26px：对局卡面不再画称号行，腾出的空间全部给立绘
+   （见 .seat-card / .seat-info，标题行已删除） */
 [data-density="roomy"] {
-  --sc-w: 256px; --sc-h: 228px;
+  --sc-w: 256px; --sc-h: 254px;
   --own-w: 400px; --own-h: 232px; --own-art-w: 132px; --own-art-h: 198px;
   --hand-min: 210px;
   --felt-w: min(760px, 46vw); --felt-h: min(300px, 30vh);
 }
 [data-density="roomy"][data-size-tier="xl"] {
-  --sc-w: 272px; --sc-h: 236px;
+  --sc-w: 272px; --sc-h: 262px;
   --own-w: 416px; --own-h: 240px; --own-art-w: 138px; --own-art-h: 207px;
   --hand-min: 222px;
 }
 [data-density="normal"] {
-  --sc-w: 240px; --sc-h: 216px;
+  --sc-w: 240px; --sc-h: 242px;
   --own-w: 372px; --own-h: 212px; --own-art-w: 120px; --own-art-h: 180px;
   --hand-min: 198px;
   --felt-w: min(680px, 44vw); --felt-h: min(270px, 28vh);
@@ -1801,16 +1803,8 @@ a:focus-visible {
   padding: 6px 7px 7px;
   background: linear-gradient(0deg, rgba(8, 6, 4, 0.96) 0%, rgba(8, 6, 4, 0.88) 58%, rgba(8, 6, 4, 0) 100%);
 }
-.seat-title {
-  font-size: 13px;
-  line-height: 1.2;
-  color: #c9b58f;
-  letter-spacing: 0.06em;
-  margin-bottom: 1px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
+/* 对局卡面不画称号（epithet）：只保留姓名与技能，省出的整行交给立绘 */
+
 /* 体力只用勾玉：满/失血由填充与空槽区分，不再叠加数字（数字重复占卡面空间） */
 .seat-hp-row { display: flex; align-items: center; gap: 0; line-height: 1; }
 .seat-pips { display: flex; align-items: center; flex-wrap: wrap; gap: 3px 3px; max-width: 92px; }
@@ -2127,7 +2121,7 @@ a:focus-visible {
   [data-region="seats"] .seat-judge { gap: 2px; margin-top: 2px; }
   [data-region="seats"] .seat-judge span { height: 17px; line-height: 15px; padding: 0 2px; font-size: 13px; }
   [data-region="seats"] .seat-dead span { font-size: 16px; }
-  [data-region="seats"] .seat-title { font-size: 13px; }
+  [data-region="seats"] .seat-title { display: none; }
 
   .own-seat { width: auto; height: auto; padding: 4px; gap: 6px; border: 1px solid var(--k-line); border-radius: 10px; }
   .own-seat .player-avatar { width: 84px; height: 126px; }
