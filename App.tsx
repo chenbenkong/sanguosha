@@ -5631,14 +5631,13 @@ const App: React.FC = () => {
                   {hero.kingdom}
                 </span>
 
-                {/* 体力：勾玉 + 数字同时呈现 */}
+                {/* 体力：只用勾玉表示（满/空/1血低血量），完整数值见悬停提示 */}
                 <span className="hero-hp absolute top-2 right-2" title={`体力上限 ${hero.maxHp}`}>
                   <span className="hero-hp-pips">
                     {Array.from({ length: hero.maxHp }).map((_, i) => (
                       <i key={i} className="hero-hp-pip" />
                     ))}
                   </span>
-                  <b className="hero-hp-num tabular-nums">{hero.maxHp}</b>
                 </span>
 
                 {/* 选中角标 */}
@@ -5796,9 +5795,10 @@ const App: React.FC = () => {
 
   // --- 对局面板自适应 ---
   // 手牌尺寸只按设备类型分档：桌面始终大卡（高度≥140px 硬指标），手机小卡但高度≥110px
+  // 例外：ultra 档（≤640px 高的窗口）用标准卡，否则 152px 高的大卡旋转后会超出视口底部
   const compactHand = layoutDensity !== 'roomy';
   const isMobileHand = viewport.w < 768;
-  const handLarge = !isMobileHand;
+  const handLarge = !isMobileHand && layoutDensity !== 'ultra';
 
   return (
     <div
@@ -6845,17 +6845,17 @@ const App: React.FC = () => {
         {/* 环形座位：桌面端绝对定位环绕牌桌；手机端为顶部横向压缩小卡 */}
       <div data-region="seats" data-many={enemies.length >= 5 ? 'true' : 'false'} className={`relative w-full flex items-start justify-center gap-1 overflow-x-auto pt-[44px] pb-1 px-1 scrollbar-hide md:pt-0 md:pb-0 md:px-0 md:absolute md:top-0 md:left-0 md:right-0 md:h-[68vh] md:block md:overflow-visible`}>
           {enemies.map((p, index) => {
-            // 官方参考布局骨架：敌人顶部横向平铺，超出部分放左右两侧；不再为椭圆压缩尺寸
+            // 顶部一行平铺全部敌人，左右两侧留给战报与出牌顺序条，中央卡池不被任何座位遮挡
             const totalEnemies = enemies.length;
-            const sideCount = totalEnemies >= 4 ? 2 : 0;
-            const topCount = totalEnemies - sideCount;
-            const seatW = layoutDensity === 'roomy' ? (sizeTier === 'xl' ? 272 : 256)
+            const baseW = layoutDensity === 'roomy' ? (sizeTier === 'xl' ? 272 : 256)
               : layoutDensity === 'normal' ? 240
               : layoutDensity === 'compact' ? 210
               : layoutDensity === 'tight' ? 190 : 178;
-            const side = index < topCount ? 'top' : (index === topCount ? 'left' : 'right');
-            const offset = index - (topCount - 1) / 2;
-            const leftPercent = side === 'top' ? `calc(50% + ${Math.round(offset * (seatW + 12))}px)` : '12px';
+            const seatW = totalEnemies >= 5 ? Math.min(baseW, 220) : baseW;
+            const seatGap = totalEnemies >= 5 ? 8 : 12;
+            const side = 'top';
+            const offset = index - (totalEnemies - 1) / 2;
+            const leftPercent = `calc(50% + ${Math.round(offset * (seatW + seatGap))}px)`;
             // 选中【杀】类牌时，超出攻击范围的目标灰显
             const outOfRange = !p.isDead && isSelectingTarget && slashLikeActive && getDistance(me.id, p.id) > getAttackRange(me);
             // 正处于「选择目标」流程时，给合法目标一个明确的候选标记
@@ -7039,8 +7039,6 @@ const App: React.FC = () => {
                 <div className="seat-info">
                   <div className="seat-title" title={p.hero.description}>{p.hero.description}</div>
                   <div className="seat-hp-row" title={`体力 ${p.hp}/${p.maxHp}`}>
-                    <span className="seat-hp-num tabular-nums">{p.hp}</span>
-                    <span className="seat-hp-max">/{p.maxHp}</span>
                     <div className="seat-pips">
                       {Array.from({ length: p.maxHp }).map((_, i) => (
                         <span key={i} className={`seat-pip ${i < p.hp ? (p.hp === 1 ? 'is-low' : 'is-on') : ''}`} />
@@ -7196,17 +7194,8 @@ const App: React.FC = () => {
           )}
         </div>
 
-        {/* Mobile Toast Log */}
-        <div className="md:hidden absolute top-0 left-0 right-0 p-2 pointer-events-none z-20 flex flex-col items-center">
-           {logs.slice(-1).map(log => (
-             <div key={log.id} className="bg-[#14100c]/90 text-[#f0e0c4] py-2 px-4 mb-1 rounded-lg border border-[#c8a45c]/45 text-xs shadow-[0_4px_18px_rgba(0,0,0,0.55)] w-full text-center backdrop-blur-sm">
-               {log.text}
-             </div>
-           ))}
-        </div>
-
         {/* Phase Indicator - 五阶段进度轨（底部居中，紧邻手牌条上方） */}
-        <div className={`hidden md:flex ui-panel absolute left-1/2 -translate-x-1/2 top-[63%] px-5 py-2.5 z-30 flex-col items-center ${theme === 'dark' ? 'shadow-[0_6px_24px_rgba(0,0,0,0.55)]' : ''}`}>
+        <div className={`phase-panel hidden md:flex ui-panel absolute left-1/2 -translate-x-1/2 top-[63%] px-5 py-2.5 z-30 flex-col items-center ${theme === 'dark' ? 'shadow-[0_6px_24px_rgba(0,0,0,0.55)]' : ''}`}>
           <div className={`text-[15px] mb-1.5 tracking-[0.2em] ${theme === 'dark' ? 'text-[#9a8b74]' : 'text-[#8a7a60]'}`}>
             当前阶段 · <span className="text-[#e8cf94]">{getPlayer(turnIndex)?.hero.name}</span>
           </div>
@@ -7261,7 +7250,32 @@ const App: React.FC = () => {
         </div>
 
         {/* Center Decks - 牌堆和弃牌堆 - 原版三国杀风格 */}
-        <div data-region="center-decks" className="relative flex items-center gap-12 max-md:gap-6 z-[1] transform scale-90 md:scale-100">
+        {/* 出牌顺序：右侧竖向顺序条（桌面）；手机端折叠为一条横排 */}
+        <div data-region="turn-rail" data-count={players.length} className="hidden md:flex flex-col">
+          <div className="turn-rail-head">出牌顺序</div>
+          {players.map((p, i) => {
+            const isCur = turnIndex === p.id;
+            const nextId = players[(turnIndex + 1) % Math.max(1, players.length)]?.id;
+            const state = p.isDead ? '阵亡' : isCur ? '当前' : p.id === nextId ? '下家' : p.id < turnIndex ? '已行动' : '待行动';
+            return (
+              <div key={p.id} className={`turn-rail-row ${KINGDOM_CLASS[p.hero.kingdom] || 'kingdom-qun'}`} data-active={isCur ? 'true' : 'false'} data-dead={p.isDead ? 'true' : 'false'} title={`${p.hero.name} · ${p.hero.kingdom} · ${state}`}>
+                <span className="turn-rail-idx">{i + 1}</span>
+                <img className="turn-rail-avatar" src={p.hero.avatarUrl} alt="" />
+                <span className="turn-rail-name">{p.hero.name}</span>
+                <span className="turn-rail-state">{state}</span>
+              </div>
+            );
+          })}
+        </div>
+        <div data-region="turn-strip" className="md:hidden flex items-center gap-1">
+          {players.map((p) => (
+            <span key={p.id} className={`turn-chip ${KINGDOM_CLASS[p.hero.kingdom] || 'kingdom-qun'}`} data-active={turnIndex === p.id ? 'true' : 'false'}>
+              {p.hero.name}
+            </span>
+          ))}
+        </div>
+
+        <div data-region="center-decks" className="relative flex items-center gap-12 max-md:gap-6 z-[1]">
            {/* 弃牌堆（点击查看明细） */}
            <div className="relative group cursor-pointer" onClick={() => setShowDiscardViewer(true)} title="点击查看弃牌堆">
               <div className={`text-sm text-center mb-2 font-ancient tracking-wider transition-colors ${theme === 'dark' ? 'text-stone-400 group-hover:text-yellow-500' : 'text-[#5c5854] group-hover:text-[#8b6914]'}`}>弃牌堆</div>
@@ -7528,14 +7542,12 @@ const App: React.FC = () => {
               
               {/* 体力值 - 数字 + 朱红勾玉（与官方牌面一致，数字优先可读） */}
               <div className="own-hp-row" title={`体力 ${me.hp}/${me.maxHp}`}>
-                <span className="own-hp-num tabular-nums">{me.hp}</span>
-                <span className="own-hp-max">/{me.maxHp}</span>
                 <div className="flex gap-1">
                   {Array.from({ length: me.maxHp }).map((_, i) => (
                     <div 
                       key={i}
                       className={`
-                        w-4 h-4 hp-fish
+                        w-5 h-5 hp-fish
                         ${i < me.hp 
                           ? (me.hp === 1 ? 'hp-fish-low' : '')
                           : 'hp-fish-empty'
@@ -8244,6 +8256,12 @@ const App: React.FC = () => {
              <div className="absolute inset-x-4 bottom-0 h-32 rounded-t-2xl pointer-events-none bg-gradient-to-t from-[#0c0906]/85 to-transparent"></div>
            )}
            <div className="hand-tray" aria-hidden="true" />
+           {/* 手机端最近战报：塞在手牌上方的留白里，不压中央卡池 */}
+           <div className="mobile-log md:hidden">
+             {logs.slice(-1).map(log => (
+               <div key={log.id} className="mobile-log-line">{log.text}</div>
+             ))}
+           </div>
            {/* 左下角标：手牌数 + 弃牌堆（可查看，含张数） */}
            <div className="absolute left-3 bottom-3 hidden md:flex items-center gap-3 z-20">
              <div className="flex items-center gap-1.5 pointer-events-none">
@@ -8322,7 +8340,7 @@ const App: React.FC = () => {
                const handCount = me.hand.length;
                const offset = index - (handCount - 1) / 2;
                const fanRot = Math.max(-24, Math.min(24, offset * 3.2));
-               const fanY = Math.abs(offset) * Math.abs(offset) * 1.6;
+               const fanY = Math.abs(offset) * Math.abs(offset) * 1.6 - (layoutDensity === 'ultra' ? 6 : 0);
 
                // 新摸到的牌：从牌堆方向飞入手牌区
                const drawStartIndex = drawPulse ? me.hand.length - drawPulse.count : me.hand.length;
