@@ -2835,3 +2835,62 @@ a:focus-visible {
 @media (prefers-reduced-motion: reduce) {
   .fx-dying-edge { animation: none !important; opacity: 0.7; }
 }
+
+/* ===== 技能发动特写：右侧立绘 + 书法大字 =====
+   原先是竖向居中（立绘在上/技能名在下），与中央「判定翻牌」完全重叠，同一帧看不
+   清任何一方。改为右侧横向构图：立绘贴右侧切入，技能名在左，中央留给判定/出牌。 */
+.skill-cast-layer {
+  align-items: center;
+  justify-content: flex-end;
+  padding-right: clamp(18px, 7vw, 112px);
+}
+.skill-cast-layer .skill-cast {
+  display: flex;
+  flex-direction: row-reverse;
+  align-items: center;
+  gap: clamp(14px, 2.2vw, 34px);
+  padding: 0;
+  text-align: left;
+}
+.skill-cast-layer .skill-cast-portrait {
+  width: clamp(120px, 15vw, 198px);
+  height: clamp(180px, 22.5vw, 297px);
+  margin: 0;
+  flex: 0 0 auto;
+}
+.skill-cast-layer .skill-banner-skill {
+  font-size: clamp(54px, 6.4vw, 92px);
+  line-height: 1.08;
+  letter-spacing: 0.16em;
+  padding-left: 0;
+  text-align: left;
+}
+.skill-cast-layer .skill-banner-hero {
+  margin-top: 12px;
+  font-size: clamp(12px, 1.1vw, 15px);
+  letter-spacing: 0.26em;
+  padding-left: 0;
+  text-align: left;
+}
+@media (max-width: 767px) {
+  .skill-cast-layer {
+    justify-content: center;
+    padding-right: 0;
+  }
+  .skill-cast-layer .skill-cast {
+    flex-direction: column;
+    gap: 8px;
+    text-align: center;
+  }
+  .skill-cast-layer .skill-cast-portrait {
+    width: 74px;
+    height: 111px;
+  }
+  .skill-cast-layer .skill-banner-skill {
+    font-size: 38px;
+    text-align: center;
+  }
+  .skill-cast-layer .skill-banner-hero {
+    text-align: center;
+  }
+}
