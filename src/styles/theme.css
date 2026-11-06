@@ -2826,9 +2826,9 @@ a:focus-visible {
   z-index: 45;
   pointer-events: none;
   box-shadow:
-    inset 0 0 120px 26px rgba(176, 32, 28, 0.52),
-    inset 0 0 280px 84px rgba(122, 14, 12, 0.3);
-  opacity: 0.5;
+    inset 0 0 72px 14px rgba(206, 42, 35, 0.62),
+    inset 0 0 240px 72px rgba(152, 22, 17, 0.36);
+  opacity: 0.55;
   animation: fxDyingBreath 1.8s ease-in-out infinite;
   will-change: opacity;
 }
