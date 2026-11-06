@@ -6970,7 +6970,7 @@ const App: React.FC = () => {
             const inner = Math.max(320, viewport.w - 32);
             const wantedPitch = Math.round((seatW + 12) * 1.32);
             const fitPitch = totalEnemies > 1 ? Math.floor((inner - seatW) / (totalEnemies - 1)) : 0;
-            const seatPitch = totalEnemies > 1 ? Math.min(wantedPitch, Math.max(fitPitch, seatW - 16)) : 0;
+            const seatPitch = totalEnemies > 1 ? Math.min(wantedPitch, Math.max(1, fitPitch)) : 0;
             // 6 个对手（7 人局）在 1440 宽下必然贴边，用 26px 上下错位拉开视觉
             const seatShift = totalEnemies >= 6 && index % 2 === 1 ? 26 : 0;
             const side = 'top';
