@@ -311,6 +311,10 @@ const App: React.FC = () => {
   const miaoJianUsedRef = useRef<boolean>(false); // 孙寒华「妙剑」出牌阶段限一次
   const lingrenUsedRef = useRef<boolean>(false); // 曹婴「凌人」出牌阶段限一次
   const lingrenBoostRef = useRef<Record<string, { targetId: number; bonus: number }>>({}); // 凌人伤害加成（按牌 id）
+  const runweiUsedRef = useRef<boolean>(false); // 陆郁生「润微」出牌阶段限一次
+  const runweiGiftRef = useRef<{ targetId: number; ids: string[] } | null>(null); // 润微本阶段给出的牌
+  const shuanghuaiUsedRef = useRef<boolean>(false); // 陆郁生「霜怀」每回合限一次
+  const lastShuanghuaiTargetRef = useRef<number | null>(null); // 霜怀上一次的目标
   const shenxianTurnRef = useRef<number>(-1); // 张星彩「甚贤」本回合是否已发动
   const doutuSkipRef = useRef<number | null>(null); // 伏皇后「惴恐」赢：目标跳过出牌阶段
   const doutuDistanceRef = useRef<Record<number, number>>({}); // 「惴恐」没赢：到伏皇后距离视为 1
@@ -1204,6 +1208,10 @@ const App: React.FC = () => {
     miaoJianUsedRef.current = false;
     lingrenUsedRef.current = false;
     lingrenBoostRef.current = {};
+    runweiUsedRef.current = false;
+    runweiGiftRef.current = null;
+    shuanghuaiUsedRef.current = false;
+    lastShuanghuaiTargetRef.current = null;
     
     // Lord starts
     const lordIndex = newPlayers.findIndex(p => p.identity === Identity.ZHUGONG);
@@ -1855,6 +1863,10 @@ const App: React.FC = () => {
           miaoJianUsedRef.current = false;
         }
 
+        // 陆郁生：每回合重置「霜怀」；自己的回合重置「润微」
+        shuanghuaiUsedRef.current = false;
+        if (currentPlayer.hero.name === '陆郁生') runweiUsedRef.current = false;
+
         // 曹婴：回合开始时重置「凌人」，并结束上一次「奸雄/行殇」
         if (currentPlayer.hero.name === '曹婴') {
           lingrenUsedRef.current = false;
@@ -2113,6 +2125,38 @@ const App: React.FC = () => {
           }
         }
 
+        // 陆郁生「润微」：出牌阶段限一次，展示牌堆顶至多五张，令一名角色获得其中一种颜色的所有牌
+        if (currentPlayer.hero.name === '陆郁生' && skillsOn(currentPlayer.id) && !runweiUsedRef.current) {
+          runweiUsedRef.current = true;
+          const top = deckRef.current.slice(0, 5);
+          if (top.length > 0) {
+            const red = top.filter(c => c.suit === Suit.HEART || c.suit === Suit.DIAMOND);
+            const black = top.filter(c => c.suit === Suit.SPADE || c.suit === Suit.CLUB);
+            const picked = red.length >= black.length ? red : black;
+            if (picked.length > 0) {
+              const allies = playersRef.current
+                .filter(p => !p.isDead && p.id !== currentPlayer.id && isAlly(currentPlayer, p))
+                .sort((a, b) => a.hand.length - b.hand.length);
+              const target = allies[0] ?? currentPlayer;
+              const rest = top.filter(c => !picked.some(pc => pc.id === c.id));
+              setDeck(prev => prev.slice(top.length));
+              deckRef.current = deckRef.current.slice(top.length);
+              if (rest.length > 0) {
+                setDiscardPile(prev => {
+                  const next = [...prev, ...rest];
+                  discardPileRef.current = next;
+                  return next;
+                });
+              }
+              mutateHand(target.id, h => [...h, ...picked]);
+              runweiGiftRef.current = { targetId: target.id, ids: picked.map(c => c.id) };
+              addLog(`【润微】陆郁生展示牌堆顶 ${top.length} 张，令 ${target.hero.name} 获得${red.length >= black.length ? '红' : '黑'}色牌 ${picked.map(c => `【${c.name}】`).join('、')}`, 'skill');
+              showSkillBanner('陆郁生', '润微');
+              await delay(450);
+            }
+          }
+        }
+
         // 何太后「鸩毒」：其他角色出牌阶段开始时，弃一张手牌令其视为使用【酒】，然后对其造成1点伤害
         const hetai = playersRef.current.find(p => !p.isDead && p.hero.name === '何太后'
           && p.id !== currentPlayer.id && skillsOn(p.id));
@@ -2275,6 +2319,20 @@ const App: React.FC = () => {
             addLog(`【伏间】曹婴观看 ${viewed.hero.name} 的 ${x} 张手牌：${cards}`, 'skill');
             showSkillBanner('曹婴', '伏间');
           }
+        }
+
+        // 陆郁生「润微」：本阶段结束时，弃置因此法获得的手牌
+        if (runweiGiftRef.current) {
+          const { targetId, ids } = runweiGiftRef.current;
+          const gifted = getPlayer(targetId);
+          if (gifted) {
+            const remain = gifted.hand.filter(c => ids.includes(c.id));
+            if (remain.length > 0) {
+              mutateHand(targetId, h => h.filter(c => !ids.includes(c.id)));
+              addLog(`【润微】阶段结束，${gifted.hero.name} 弃置未使用的 ${remain.length} 张润微牌`, 'skill');
+            }
+          }
+          runweiGiftRef.current = null;
         }
 
         // 曹节「惠民」（原版）：结束阶段摸 X 张牌（X 为手牌数小于体力值的角色数），
@@ -5845,6 +5903,36 @@ const App: React.FC = () => {
           updatePlayer(bmh.id, { juMarks: (bmh.juMarks ?? 0) + 1 });
           addLog(`【骨疽】${kuiVictim.hero.name} 受到伤害，卑弥呼摸一张牌并获得“疽”（${(bmh.juMarks ?? 0) + 1} 枚）`, 'skill');
           showSkillBanner('卑弥呼', '骨疽');
+          await delay(250);
+        }
+      }
+
+      // 陆郁生「霜怀」：距离 1 以内的其他角色受到伤害后，令其从弃牌堆获得一张【桃】；
+      // 与上次目标相同则双方摸一张，不同则陆郁生失去 1 点体力
+      if (!shuanghuaiUsedRef.current) {
+        const lys = playersRef.current.find(p => !p.isDead && p.id !== victimId
+          && p.hero.name === '陆郁生' && skillsOn(p.id) && getDistance(p.id, victimId) <= 1);
+        const tao = discardPileRef.current.find(c => c.name === CardName.TAO);
+        if (lys && tao) {
+          shuanghuaiUsedRef.current = true;
+          setDiscardPile(prev => {
+            const next = prev.filter(c => c.id !== tao.id);
+            discardPileRef.current = next;
+            return next;
+          });
+          mutateHand(victimId, h => [...h, tao]);
+          addLog(`【霜怀】陆郁生令 ${victim.hero.name} 从弃牌堆获得【桃】`, 'skill');
+          showSkillBanner('陆郁生', '霜怀');
+          await delay(300);
+          if (lastShuanghuaiTargetRef.current === victimId) {
+            drawCards(lys.id, 1);
+            drawCards(victimId, 1);
+            addLog('【霜怀】目标与上次相同，陆郁生与其各摸一张牌', 'skill');
+          } else {
+            lastShuanghuaiTargetRef.current = victimId;
+            updatePlayer(lys.id, { hp: lys.hp - 1 });
+            addLog(`【霜怀】目标与上次不同，陆郁生失去 1 点体力（${lys.hp - 1}/${lys.maxHp}）`, 'skill');
+          }
           await delay(250);
         }
       }
