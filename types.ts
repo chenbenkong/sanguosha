@@ -86,6 +86,8 @@ export interface Hero {
   /** 主公技（仅主公身份时生效） */
   lordSkillName?: string;
   lordSkillDesc?: string;
+  /** 技能尚未实装：可在图鉴/选将页查看，但不进入随机池、不可开局 */
+  pending?: boolean;
 }
 
 export interface Player {

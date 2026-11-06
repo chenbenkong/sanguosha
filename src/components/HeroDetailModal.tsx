@@ -70,6 +70,11 @@ export const HeroDetailModal: React.FC<HeroDetailModalProps> = ({ hero, onClose,
                 <span className="px-1.5 py-0.5 rounded-[3px] text-[11px] font-bold border border-[#9e2b25]/60 bg-[#2a1512] text-[#f0b8b0]">
                   体力上限 {hero.maxHp}
                 </span>
+                {hero.pending && (
+                  <span className="px-1.5 py-0.5 rounded-[3px] text-[11px] font-bold border border-[#c8a45c]/60 bg-[#3a2f14] text-[#f0d894]">
+                    技能实装中
+                  </span>
+                )}
               </div>
               <p className="mt-1.5 text-xs md:text-sm modal-text-dim tracking-wide">
                 {hero.description} · 性别{hero.gender === 'female' ? '女' : '男'} · 定位 {profile.roles.join(' / ')}
@@ -176,9 +181,10 @@ export const HeroDetailModal: React.FC<HeroDetailModalProps> = ({ hero, onClose,
           {onStart && (
             <button
               onClick={() => onStart(hero)}
-              className="btn-gold px-5 md:px-8 py-2.5 rounded-lg text-sm md:text-base font-bold tracking-wider flex-1 md:flex-none"
+              disabled={hero.pending}
+              className="btn-gold px-5 md:px-8 py-2.5 rounded-lg text-sm md:text-base font-bold tracking-wider flex-1 md:flex-none disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              出战
+              {hero.pending ? '技能实装中' : '出战'}
             </button>
           )}
         </div>

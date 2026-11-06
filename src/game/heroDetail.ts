@@ -162,12 +162,89 @@ function splitSkillDesc(desc: string, names: string[]): string[] {
 
 const FALLBACK_PROFILE: HeroProfile = { pack: '标准包', roles: ['均衡'], difficulty: 2, tip: '按技能描述的触发时机出牌，优先保证每回合都有稳定收益。' };
 
+/** 新增 30 名武将的技能类型/时机：技能逻辑尚未实装，仅用于详情面板如实展示 */
+const PENDING_SKILL_META: Record<string, { tags: SkillTag[]; timing: string; quote?: string }> = {
+  影箭: { tags: ['主动技'], timing: '准备阶段' },
+  释衅: { tags: ['锁定技'], timing: '常时生效' },
+  竭缘: { tags: ['主动技'], timing: '造成或受到伤害时' },
+  焚心: { tags: ['限定技'], timing: '杀死一名角色后' },
+  鸩毒: { tags: ['主动技'], timing: '其他角色的出牌阶段开始时' },
+  戚乱: { tags: ['被动技'], timing: '一名角色的回合结束时' },
+  穆穆: { tags: ['主动技'], timing: '出牌阶段开始时' },
+  魅步: { tags: ['主动技'], timing: '其他角色的出牌阶段开始时' },
+  甘露: { tags: ['主动技'], timing: '出牌阶段' },
+  补益: { tags: ['主动技'], timing: '一名角色进入濒死状态时' },
+  窃听: { tags: ['主动技'], timing: '其他角色的回合结束时' },
+  献州: { tags: ['限定技'], timing: '出牌阶段' },
+  樵拾: { tags: ['主动技'], timing: '其他角色的结束阶段' },
+  燕语: { tags: ['主动技'], timing: '出牌阶段' },
+  连诛: { tags: ['主动技'], timing: '出牌阶段' },
+  黠慧: { tags: ['锁定技'], timing: '常时生效' },
+  芳魂: { tags: ['被动技'], timing: '使用【杀】造成伤害后' },
+  扶汉: { tags: ['限定技'], timing: '回合开始时' },
+  矫诏: { tags: ['主动技'], timing: '出牌阶段' },
+  殚心: { tags: ['被动技'], timing: '受到伤害后' },
+  忠鉴: { tags: ['主动技'], timing: '出牌阶段' },
+  才识: { tags: ['主动技'], timing: '摸牌阶段' },
+  福绵: { tags: ['主动技'], timing: '准备阶段' },
+  怠宴: { tags: ['主动技'], timing: '结束阶段' },
+  问卦: { tags: ['主动技'], timing: '出牌阶段' },
+  伏诛: { tags: ['主动技'], timing: '男性角色的结束阶段' },
+  谮毁: { tags: ['主动技'], timing: '出牌阶段' },
+  骄矜: { tags: ['被动技'], timing: '受到男性角色造成的伤害时' },
+  谦冲: { tags: ['锁定技'], timing: '常时生效' },
+  尚俭: { tags: ['锁定技'], timing: '任一角色的结束阶段' },
+  姝勇: { tags: ['被动技'], timing: '使用或打出【杀】时' },
+  许身: { tags: ['限定技'], timing: '出牌阶段' },
+  镇南: { tags: ['被动技'], timing: '一张牌指定多个目标后' },
+  纵傀: { tags: ['主动技'], timing: '回合开始时' },
+  骨疽: { tags: ['锁定技'], timing: '拥有“傀”标记的角色受到伤害后' },
+  拜假: { tags: ['觉醒技'], timing: '准备阶段' },
+  凌人: { tags: ['主动技'], timing: '使用【杀】或伤害类锦囊指定目标后' },
+  伏间: { tags: ['锁定技'], timing: '结束阶段' },
+  仁释: { tags: ['锁定技'], timing: '已受伤时受到【杀】的伤害时' },
+  武缘: { tags: ['主动技'], timing: '出牌阶段' },
+  怀子: { tags: ['锁定技'], timing: '常时生效' },
+  淑慎: { tags: ['被动技'], timing: '回复体力后' },
+  神智: { tags: ['主动技'], timing: '准备阶段' },
+  祸水: { tags: ['主动技'], timing: '出牌阶段' },
+  倾城: { tags: ['主动技'], timing: '出牌阶段' },
+  闺秀: { tags: ['被动技'], timing: '明置/移除武将牌时' },
+  存嗣: { tags: ['主动技'], timing: '出牌阶段' },
+  良姻: { tags: ['被动技'], timing: '牌被置于/获得武将牌上时' },
+  箜声: { tags: ['主动技'], timing: '准备阶段 / 结束阶段' },
+  法箓: { tags: ['锁定技'], timing: '弃牌进入弃牌堆后' },
+  真仪: { tags: ['被动技'], timing: '判定/濒死/造成伤害/受到属性伤害时' },
+  点化: { tags: ['主动技'], timing: '准备阶段或结束阶段' },
+  弘仪: { tags: ['主动技'], timing: '出牌阶段' },
+  劝封: { tags: ['限定技'], timing: '一名其他角色死亡后' },
+  舍裔: { tags: ['主动技'], timing: '一名其他角色受到伤害时' },
+  天音: { tags: ['锁定技'], timing: '结束阶段' },
+  象阵: { tags: ['锁定技'], timing: '常时生效' },
+  芳踪: { tags: ['锁定技'], timing: '出牌阶段 / 结束阶段' },
+  嬉战: { tags: ['锁定技'], timing: '其他角色回合开始时' },
+  冲虚: { tags: ['主动技'], timing: '出牌阶段' },
+  妙剑: { tags: ['主动技'], timing: '出牌阶段' },
+  莲华: { tags: ['被动技'], timing: '成为其他角色【杀】的目标时' },
+  抵诽: { tags: ['被动技'], timing: '受到伤害后' },
+  严教: { tags: ['主动技'], timing: '出牌阶段' },
+  润微: { tags: ['主动技'], timing: '出牌阶段' },
+  霜怀: { tags: ['被动技'], timing: '与你距离1以内的其他角色受到伤害时' },
+};
+
+const PENDING_PROFILE: HeroProfile = {
+  pack: '新将·技能实装中',
+  roles: ['均衡'],
+  difficulty: 2,
+  tip: '本轮已开放图鉴与立绘，技能逻辑尚未实装，暂不进入随机池、不可开局；实装后将分批加入对局。',
+};
+
 /** 由武将数据生成详情面板所需的全部字段（不编造未实现技能） */
 export function getHeroDetail(hero: Hero): HeroDetailView {
   const names = hero.skillName.split('/').map(s => s.trim()).filter(Boolean);
   const descs = splitSkillDesc(hero.skillDesc, names);
   const skills: HeroSkillView[] = names.map((name, i) => {
-    const meta = SKILL_META[name];
+    const meta = SKILL_META[name] ?? PENDING_SKILL_META[name];
     return {
       name,
       tags: meta?.tags ?? ['主动技'],
@@ -187,5 +264,5 @@ export function getHeroDetail(hero: Hero): HeroDetailView {
       isLord: true,
     });
   }
-  return { hero, profile: HERO_PROFILES[hero.name] ?? FALLBACK_PROFILE, skills };
+  return { hero, profile: hero.pending ? PENDING_PROFILE : (HERO_PROFILES[hero.name] ?? FALLBACK_PROFILE), skills };
 }

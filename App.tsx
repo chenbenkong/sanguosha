@@ -197,6 +197,49 @@ const App: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase, turnIndex, screen, winnerSide]);
 
+  // 选将页：势力筛选 / 姓名搜索 / 分页。状态在切页与刷新后保留
+  type HeroKingdomFilter = '全部' | '魏' | '蜀' | '吴' | '群';
+  const HERO_PAGE_SIZE = 24;
+  const [heroKingdom, setHeroKingdom] = useState<HeroKingdomFilter>(() => {
+    const v = localStorage.getItem('sgs-hero-kingdom');
+    return v === '魏' || v === '蜀' || v === '吴' || v === '群' ? v : '全部';
+  });
+  const [heroQuery, setHeroQuery] = useState<string>(() => localStorage.getItem('sgs-hero-query') || '');
+  const [heroPage, setHeroPage] = useState<number>(() => Math.max(0, Number(localStorage.getItem('sgs-hero-page')) || 0));
+  useEffect(() => {
+    try { localStorage.setItem('sgs-hero-kingdom', heroKingdom); } catch { /* ignore */ }
+  }, [heroKingdom]);
+  useEffect(() => {
+    try { localStorage.setItem('sgs-hero-query', heroQuery); } catch { /* ignore */ }
+  }, [heroQuery]);
+  useEffect(() => {
+    try { localStorage.setItem('sgs-hero-page', String(heroPage)); } catch { /* ignore */ }
+  }, [heroPage]);
+
+  const kingdomCounts = useMemo(() => {
+    const c: Record<string, number> = { 全部: HEROES.length, 魏: 0, 蜀: 0, 吴: 0, 群: 0 };
+    for (const h of HEROES) c[h.kingdom] = (c[h.kingdom] || 0) + 1;
+    return c;
+  }, []);
+
+  const filteredHeroes = useMemo(() => {
+    const q = heroQuery.trim().toLowerCase();
+    return HEROES.filter(h => {
+      if (heroKingdom !== '全部' && h.kingdom !== heroKingdom) return false;
+      if (!q) return true;
+      return h.name.toLowerCase().includes(q) || h.skillName.toLowerCase().includes(q) || h.description.toLowerCase().includes(q);
+    });
+  }, [heroKingdom, heroQuery]);
+
+  const heroPageCount = Math.max(1, Math.ceil(filteredHeroes.length / HERO_PAGE_SIZE));
+  const heroPageClamped = Math.min(heroPage, heroPageCount - 1);
+  const pagedHeroes = filteredHeroes.slice(heroPageClamped * HERO_PAGE_SIZE, (heroPageClamped + 1) * HERO_PAGE_SIZE);
+
+  useEffect(() => {
+    if (heroPage !== heroPageClamped) setHeroPage(heroPageClamped);
+  }, [heroPage, heroPageClamped]);
+
+
   // Selection: Now supports multiple IDs for discard phase
   const [selectedCardIds, setSelectedCardIds] = useState<string[]>([]);
   // Strong single-selection source of truth for ACTION phase visuals
@@ -882,6 +925,8 @@ const App: React.FC = () => {
   };
 
   const startGame = (hero: Hero, opts?: { playerCount?: 5 | 7; tutorial?: boolean }) => {
+    // 技能实装中的武将：只开放图鉴，不进入对局
+    if (hero.pending) return;
     const totalPlayers: 5 | 7 = opts?.playerCount ?? playerCount;
     initAudio();
     isGameOverRef.current = false; // 重置结束标志，支持"再来一局"
@@ -932,7 +977,7 @@ const App: React.FC = () => {
     }
 
     // Heroes
-    const otherHeroes = HEROES.filter(h => h.id !== hero.id).sort(() => Math.random() - 0.5);
+    const otherHeroes = HEROES.filter(h => h.id !== hero.id && !h.pending).sort(() => Math.random() - 0.5);
     // 仅本地开发：?ai=关银屏,诸葛果,... 指定 AI 武将，用于逐个验证新技能。
     // 生产构建里 import.meta.env.DEV 为 false，这段会被移除，不影响线上。
     const debugDev = (import.meta as unknown as { env?: { DEV?: boolean } }).env?.DEV === true;
@@ -5879,10 +5924,65 @@ const App: React.FC = () => {
           </div>
         </div>
 
+        {/* 筛选栏：独立一行，不覆盖/挤占卡片区域；移动端横向滚动，触控高度 ≥44px */}
+        <div className="flex-none relative z-20 px-4 pt-1.5">
+          <div className="max-w-[1440px] mx-auto flex flex-col sm:flex-row sm:items-center gap-2">
+            <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-thin pb-0.5" role="tablist" aria-label="按势力筛选武将">
+              {(['全部', '魏', '蜀', '吴', '群'] as HeroKingdomFilter[]).map(k => (
+                <button
+                  key={k}
+                  role="tab"
+                  aria-selected={heroKingdom === k}
+                  onClick={() => { setHeroKingdom(k); setHeroPage(0); }}
+                  className={`shrink-0 min-h-[44px] min-w-[44px] px-3 rounded-md text-sm font-bold border transition-colors ${
+                    heroKingdom === k
+                      ? (theme === 'dark' ? 'bg-[#c8a45c] text-[#1a1410] border-[#f0d894]' : 'bg-[#6b4a1a] text-[#f7e9c8] border-[#a8842c]')
+                      : (theme === 'dark' ? 'bg-[#1a1410]/80 text-[#c8bda8] border-[#8b7355]/50 hover:border-[#c8a45c]' : 'bg-[#f3ead8]/80 text-[#6b4a1a] border-[#c4a77d]/60 hover:border-[#a8842c]')
+                  }`}
+                >
+                  {k}<span className="ml-1 text-[10px] opacity-75">{kingdomCounts[k] ?? 0}</span>
+                </button>
+              ))}
+            </div>
+
+            <div className={`relative w-full sm:w-64 sm:ml-auto`}>
+              <input
+                value={heroQuery}
+                onChange={(e) => { setHeroQuery(e.target.value); setHeroPage(0); }}
+                placeholder="搜索姓名 / 技能"
+                aria-label="搜索武将姓名或技能"
+                className={`w-full min-h-[44px] pl-3 pr-11 rounded-md text-sm border outline-none ${
+                  theme === 'dark'
+                    ? 'bg-[#1a1410]/85 text-[#e8cf94] border-[#8b7355]/60 placeholder:text-[#7d6f5a] focus:border-[#c8a45c]'
+                    : 'bg-[#f7f0e2]/90 text-[#4a3a22] border-[#c4a77d]/70 placeholder:text-[#9b8a6c] focus:border-[#a8842c]'
+                }`}
+              />
+              {heroQuery && (
+                <button
+                  onClick={() => { setHeroQuery(''); setHeroPage(0); }}
+                  aria-label="清空搜索"
+                  className={`absolute right-0.5 top-1/2 -translate-y-1/2 min-w-[44px] min-h-[44px] flex items-center justify-center rounded text-lg ${theme === 'dark' ? 'text-[#c8bda8]' : 'text-[#6b4a1a]'}`}
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+
+            <div className={`flex-none text-[11px] text-center sm:text-right ${theme === 'dark' ? 'text-[#9a8b74]' : 'text-[#8a7a60]'}`}>
+              {filteredHeroes.length} / {HEROES.length} 名{heroPageCount > 1 ? ` · 第 ${heroPageClamped + 1}/${heroPageCount} 页` : ''}
+            </div>
+          </div>
+        </div>
+
         {/* 武将网格：桌面端一屏 3 行，整张牌面裁切，技能名压在牌角 */}
-        <div className="flex-1 overflow-y-auto px-4 pb-28 relative z-10 scrollbar-thin">
+        <div className="flex-1 overflow-y-auto px-4 pb-8 relative z-10 scrollbar-thin">
+          {filteredHeroes.length === 0 ? (
+            <div className={`py-16 text-center text-sm ${theme === 'dark' ? 'text-[#9a8b74]' : 'text-[#8a7a60]'}`}>
+              没有匹配的武将，试试清空搜索或切换势力
+            </div>
+          ) : (
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 min-[1200px]:grid-cols-8 gap-3 w-full max-w-[1440px] mx-auto pt-2">
-            {HEROES.map(hero => (
+            {pagedHeroes.map(hero => (
               <button
                 key={hero.id}
                 onClick={() => { setSelectedHero(hero); setDetailHero(hero); }}
@@ -5928,6 +6028,7 @@ const App: React.FC = () => {
                   </div>
                   <div className="hero-pick-skill">
                     <span className="truncate">【{hero.skillName}】</span>
+                    {hero.pending && <span className="hero-lord-chip">实装中</span>}
                     {hero.lordSkillName && <span className="hero-lord-chip">主公技</span>}
                   </div>
                   <div className="hero-pick-desc line-clamp-3">{hero.skillDesc}</div>
@@ -5935,6 +6036,43 @@ const App: React.FC = () => {
               </button>
             ))}
           </div>
+          )}
+
+          {/* 分页：默认每页 24，切页记住位置；按钮触控高度 ≥44px */}
+          {heroPageCount > 1 && (
+            <div className="flex items-center justify-center gap-2 pb-4 pt-1">
+              <button
+                onClick={() => setHeroPage(Math.max(0, heroPageClamped - 1))}
+                disabled={heroPageClamped === 0}
+                className={`min-h-[44px] min-w-[64px] px-3 rounded-md text-sm border disabled:opacity-40 disabled:cursor-not-allowed ${theme === 'dark' ? 'bg-[#1a1410]/80 text-[#c8bda8] border-[#8b7355]/50' : 'bg-[#f3ead8]/80 text-[#6b4a1a] border-[#c4a77d]/60'}`}
+                aria-label="上一页"
+              >
+                上一页
+              </button>
+              {Array.from({ length: heroPageCount }).map((_, i) => (
+                <button
+                  key={i}
+                  onClick={() => setHeroPage(i)}
+                  aria-current={heroPageClamped === i ? 'page' : undefined}
+                  className={`min-h-[44px] min-w-[44px] rounded-md text-sm font-bold border ${
+                    heroPageClamped === i
+                      ? (theme === 'dark' ? 'bg-[#c8a45c] text-[#1a1410] border-[#f0d894]' : 'bg-[#6b4a1a] text-[#f7e9c8] border-[#a8842c]')
+                      : (theme === 'dark' ? 'bg-[#1a1410]/80 text-[#c8bda8] border-[#8b7355]/50' : 'bg-[#f3ead8]/80 text-[#6b4a1a] border-[#c4a77d]/60')
+                  }`}
+                >
+                  {i + 1}
+                </button>
+              ))}
+              <button
+                onClick={() => setHeroPage(Math.min(heroPageCount - 1, heroPageClamped + 1))}
+                disabled={heroPageClamped >= heroPageCount - 1}
+                className={`min-h-[44px] min-w-[64px] px-3 rounded-md text-sm border disabled:opacity-40 disabled:cursor-not-allowed ${theme === 'dark' ? 'bg-[#1a1410]/80 text-[#c8bda8] border-[#8b7355]/50' : 'bg-[#f3ead8]/80 text-[#6b4a1a] border-[#c4a77d]/60'}`}
+                aria-label="下一页"
+              >
+                下一页
+              </button>
+            </div>
+          )}
         </div>
 
         {/* 底部详情条：始终存在，未选将时提示并可直接天命随机
@@ -5995,22 +6133,22 @@ const App: React.FC = () => {
             <div className="flex items-center gap-2 flex-none w-full md:w-auto">
               <button
                 onClick={() => {
-                  const pool = HEROES.filter(h => h.id !== selectedHero?.id);
+                  const pool = HEROES.filter(h => h.id !== selectedHero?.id && !h.pending);
                   const pick = pool[Math.floor(Math.random() * pool.length)];
                   startGame(pick);
                 }}
                 className="btn-ink flex-1 md:flex-none flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg font-ancient text-base tracking-wider"
-                title="随机挑选一名武将立即出战"
+                title="从已实装武将中随机挑选一名立即出战"
               >
                 <IconDice />
                 天命随机
               </button>
               <button
                 onClick={() => selectedHero && startGame(selectedHero)}
-                disabled={!selectedHero}
+                disabled={!selectedHero || selectedHero.pending}
                 className="btn-gold flex-1 md:flex-none px-7 py-2.5 rounded-lg font-ancient text-lg tracking-[0.18em]"
               >
-                确认出战
+                {selectedHero?.pending ? '技能实装中' : '确认出战'}
               </button>
             </div>
           </div>
