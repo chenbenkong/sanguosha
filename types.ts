@@ -120,6 +120,10 @@ export interface Player {
   miaoJianLevel?: number;
   /** 孙寒华「莲华」等级（1~3） */
   lianHuaLevel?: number;
+  /** 曹婴「凌人」猜中三项后临时获得「奸雄」 */
+  hasJianxiong?: boolean;
+  /** 曹婴「凌人」猜中三项后临时获得「行殇」 */
+  hasXingshang?: boolean;
 }
 
 /** 装备区：武器 / 防具 / +1马 / -1马 */

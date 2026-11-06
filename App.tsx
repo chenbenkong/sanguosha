@@ -309,6 +309,8 @@ const App: React.FC = () => {
   const shouxiDeclaredRef = useRef<Set<string>>(new Set()); // 曹节「守玺」已声明牌名（每种限一次）
   const chongxuUsedRef = useRef<boolean>(false); // 孙寒华「冲虚」出牌阶段限一次
   const miaoJianUsedRef = useRef<boolean>(false); // 孙寒华「妙剑」出牌阶段限一次
+  const lingrenUsedRef = useRef<boolean>(false); // 曹婴「凌人」出牌阶段限一次
+  const lingrenBoostRef = useRef<Record<string, { targetId: number; bonus: number }>>({}); // 凌人伤害加成（按牌 id）
   const shenxianTurnRef = useRef<number>(-1); // 张星彩「甚贤」本回合是否已发动
   const doutuSkipRef = useRef<number | null>(null); // 伏皇后「惴恐」赢：目标跳过出牌阶段
   const doutuDistanceRef = useRef<Record<number, number>>({}); // 「惴恐」没赢：到伏皇后距离视为 1
@@ -1198,6 +1200,8 @@ const App: React.FC = () => {
     shenxianTurnRef.current = -1;
     chongxuUsedRef.current = false;
     miaoJianUsedRef.current = false;
+    lingrenUsedRef.current = false;
+    lingrenBoostRef.current = {};
     
     // Lord starts
     const lordIndex = newPlayers.findIndex(p => p.identity === Identity.ZHUGONG);
@@ -1539,6 +1543,15 @@ const App: React.FC = () => {
       if (!playDeathVoice(victim.hero.id)) playSound('death');
     }
     addLog(`${victim.hero.name} 阵亡！身份是：【${victim.identity}】`, 'danger');
+
+    // 曹婴「行殇」（凌人猜中三项临时获得）：其他角色死亡时，获得其所有手牌
+    const xingshangOwner = playersRef.current.find(p => !p.isDead && p.id !== victimId && p.hasXingshang);
+    if (xingshangOwner && victim.hand.length > 0) {
+      const cards = victim.hand;
+      mutateHand(xingshangOwner.id, h => [...h, ...cards]);
+      addLog(`【行殇】${xingshangOwner.hero.name} 获得 ${victim.hero.name} 的所有手牌（${cards.length} 张）`, 'skill');
+      showSkillBanner(xingshangOwner.hero.name, '行殇');
+    }
     
     // 先更新状态
     updatePlayer(victimId, { isDead: true, isRevealed: true, hand: [] }); 
@@ -1838,6 +1851,15 @@ const App: React.FC = () => {
         if (currentPlayer.hero.name === '孙寒华') {
           chongxuUsedRef.current = false;
           miaoJianUsedRef.current = false;
+        }
+
+        // 曹婴：回合开始时重置「凌人」，并结束上一次「奸雄/行殇」
+        if (currentPlayer.hero.name === '曹婴') {
+          lingrenUsedRef.current = false;
+          if (currentPlayer.hasJianxiong || currentPlayer.hasXingshang) {
+            updatePlayer(currentPlayer.id, { hasJianxiong: false, hasXingshang: false });
+            addLog('曹婴的「奸雄/行殇」效果结束', 'skill');
+          }
         }
 
         // 甘夫人「神智」：准备阶段弃置所有手牌，弃置数不小于体力值则回复1点
@@ -2228,6 +2250,18 @@ const App: React.FC = () => {
           addLog(`${endingPlayer.hero.name} 发动「闭月」，摸一张牌`, 'skill');
           showSkillBanner(endingPlayer.hero.name, '闭月');
           drawCards(endingPlayer.id, 1);
+        }
+
+        // 曹婴「伏间」：结束阶段观看一名其他角色 X 张手牌（X 为全场手牌数最少者）
+        if (endingPlayer && !endingPlayer.isDead && endingPlayer.hero.name === '曹婴' && skillsOn(endingPlayer.id)) {
+          const others = playersRef.current.filter(p => !p.isDead && p.id !== endingPlayer.id && p.hand.length > 0);
+          if (others.length > 0) {
+            const x = Math.min(...others.map(p => p.hand.length));
+            const viewed = others.slice().sort((a, b) => a.hand.length - b.hand.length)[0];
+            const cards = viewed.hand.slice(0, x).map(c => `【${c.name}】`).join('、');
+            addLog(`【伏间】曹婴观看 ${viewed.hero.name} 的 ${x} 张手牌：${cards}`, 'skill');
+            showSkillBanner('曹婴', '伏间');
+          }
         }
 
         // 曹节「惠民」（原版）：结束阶段摸 X 张牌（X 为手牌数小于体力值的角色数），
@@ -3997,6 +4031,37 @@ const App: React.FC = () => {
         return;
       }
 
+      // 曹婴「凌人」：出牌阶段限一次，使用【杀】或伤害类锦囊指定目标后，猜测其手牌类别
+      // 猜对至少 1 项则此伤害 +1；至少 2 项摸两张牌；3 项获得「奸雄」「行殇」直到下回合开始
+      const lingrenCards: CardName[] = [CardName.SHA, CardName.JUEDOU, CardName.HUOGONG, CardName.NANMAN, CardName.WANJIAN];
+      if (source.hero.name === '曹婴' && skillsOn(source.id) && !lingrenUsedRef.current
+          && targets.length > 0 && lingrenCards.includes(card.name)) {
+        const tgt = targets.find(t => t.id !== source.id && !t.isDead);
+        if (tgt) {
+          lingrenUsedRef.current = true;
+          const cats = { 基本牌: false, 锦囊牌: false, 装备牌: false };
+          for (const c of tgt.hand) {
+            if (c.type === CardType.BASIC) cats['基本牌'] = true;
+            else if (c.type === CardType.SCROLL) cats['锦囊牌'] = true;
+            else if (c.type === CardType.EQUIPMENT) cats['装备牌'] = true;
+          }
+          const guessed = (Object.keys(cats) as (keyof typeof cats)[]).filter(k => cats[k]);
+          const correct = guessed.length;
+          addLog(`【凌人】曹婴猜测 ${tgt.hero.name} 的手牌：${guessed.join('、') || '无'}（猜对 ${correct} 项）`, 'skill');
+          showSkillBanner('曹婴', '凌人');
+          lingrenBoostRef.current[card.id] = { targetId: tgt.id, bonus: correct > 0 ? 1 : 0 };
+          await delay(350);
+          if (correct >= 2) {
+            drawCards(source.id, 2);
+            addLog('【凌人】猜对至少两项，曹婴摸两张牌', 'skill');
+          }
+          if (correct >= 3) {
+            updatePlayer(source.id, { hasJianxiong: true, hasXingshang: true });
+            addLog('【凌人】猜中三项，曹婴获得「奸雄」「行殇」直到下回合开始', 'skill');
+          }
+        }
+      }
+
       // Log construction
       const targetNames = targets.map(t => t.hero.name).join('、');
       if (targets.length === 1 && targets[0].id === source.id) {
@@ -5609,6 +5674,14 @@ const App: React.FC = () => {
         addLog(`【凤魄】伤害 +${bonus}`, 'danger');
       }
 
+      // 曹婴「凌人」：猜对的伤害加成（仅对应被猜测的目标）
+      const lingrenBoost = damageCard ? lingrenBoostRef.current[damageCard.id] : undefined;
+      if (lingrenBoost && lingrenBoost.targetId === victimId) {
+        delete lingrenBoostRef.current[damageCard!.id];
+        finalAmount += lingrenBoost.bonus;
+        if (lingrenBoost.bonus > 0) addLog('【凌人】猜测成功，此伤害 +1', 'danger');
+      }
+
       // 张琪瑛「真仪·玉清」：造成伤害时弃置标记判定，黑色则伤害+1
       const zqySrc = getPlayer(sourceId);
       if (zqySrc && zqySrc.hero.name === '张琪瑛' && sourceId !== victimId
@@ -5819,8 +5892,8 @@ const App: React.FC = () => {
         }
       }
 
-      // 曹操的「奸雄」技能：受到伤害后，你可以获得造成伤害的牌
-      if (victim.hero.name === '曹操' && damageCard) {
+      // 曹操的「奸雄」技能：受到伤害后，你可以获得造成伤害的牌（曹婴「凌人」可临时获得）
+      if ((victim.hero.name === '曹操' || victim.hasJianxiong) && damageCard) {
         const me = getPlayer(victimId);
         const alreadyHas = !!me?.hand.some(c => c.id === damageCard.id);
         // 同一张牌不能在「手牌 + 弃牌堆」同时存在，否则洗回牌堆后会出现重复卡（React 也会报重复 key）
