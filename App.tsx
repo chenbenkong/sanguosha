@@ -2984,6 +2984,9 @@ const App: React.FC = () => {
         if (updatedPlayer.hero.name === '董白' && rawExcess > excess) {
           addLog(`董白「黠慧」：黑色牌不计入手牌上限（应弃 ${excess} 张，原为 ${rawExcess} 张）`, 'skill');
         }
+        if (updatedPlayer.hero.name === '胡金定' && updatedPlayer.hand.length > updatedPlayer.maxHp && rawExcess > excess) {
+          addLog(`胡金定 发动「怀子」，手牌上限视为体力上限（应弃 ${excess} 张，原为 ${rawExcess} 张）`, 'skill');
+        }
         
         // 吕蒙「克己」：本回合出牌阶段未使用【杀】，可跳过弃牌阶段
         if (updatedPlayer.hero.name === '吕蒙' && (slashUsageRef.current[updatedPlayer.id] ?? 0) === 0) {
