@@ -3046,7 +3046,7 @@ const App: React.FC = () => {
     const b = center(toEl.getBoundingClientRect());
     setFlightFx({ card, id: Date.now(), x0: a.x, y0: a.y, x1: b.x, y1: b.y });
     if (flightTimerRef.current) clearTimeout(flightTimerRef.current);
-    flightTimerRef.current = setTimeout(() => setFlightFx(null), Math.round(620 / speedRef.current));
+    flightTimerRef.current = setTimeout(() => setFlightFx(null), Math.max(700, Math.round(780 / speedRef.current)));
   };
 
   // 判定演出：翻牌 0.62s + 停留 0.6s，合计约 1.2s；不随倍速压到看不清
