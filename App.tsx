@@ -2157,6 +2157,24 @@ const App: React.FC = () => {
           }
         }
 
+        // 徐氏「问卦」：其他角色的出牌阶段开始时，可以交给徐氏一张牌，徐氏置于牌堆底，双方各摸一张
+        const xushi = playersRef.current.find(p => !p.isDead && p.id !== currentPlayer.id
+          && p.hero.name === '徐氏' && skillsOn(p.id));
+        if (xushi && isAlly(currentPlayer, xushi) && currentPlayer.hand.length > 0) {
+          const gift = [...currentPlayer.hand].sort((a, b) => a.value - b.value)[0];
+          mutateHand(currentPlayer.id, h => h.filter(c => c.id !== gift.id));
+          setDeck(prev => {
+            const next = [...prev, gift];
+            deckRef.current = next;
+            return next;
+          });
+          addLog(`【问卦】${currentPlayer.hero.name} 交给徐氏【${gift.name}】，徐氏将其置于牌堆底`, 'skill');
+          showSkillBanner('徐氏', '问卦');
+          drawCards(xushi.id, 1);
+          drawCards(currentPlayer.id, 1);
+          await delay(350);
+        }
+
         // 何太后「鸩毒」：其他角色出牌阶段开始时，弃一张手牌令其视为使用【酒】，然后对其造成1点伤害
         const hetai = playersRef.current.find(p => !p.isDead && p.hero.name === '何太后'
           && p.id !== currentPlayer.id && skillsOn(p.id));
@@ -2318,6 +2336,38 @@ const App: React.FC = () => {
             const cards = viewed.hand.slice(0, x).map(c => `【${c.name}】`).join('、');
             addLog(`【伏间】曹婴观看 ${viewed.hero.name} 的 ${x} 张手牌：${cards}`, 'skill');
             showSkillBanner('曹婴', '伏间');
+          }
+        }
+
+        // 徐氏「伏诛」：一名男性角色的结束阶段内，若牌堆剩余牌数不大于徐氏体力值的十倍，
+        // 则依次对该角色使用牌堆中的 X 张【杀】（X 为场上人数），然后将牌堆洗牌
+        if (endingPlayer && !endingPlayer.isDead && endingPlayer.hero.gender === 'male') {
+          const xs = playersRef.current.find(p => !p.isDead && p.id !== endingPlayer.id
+            && p.hero.name === '徐氏' && skillsOn(p.id));
+          if (xs && deckRef.current.length <= xs.hp * 10) {
+            const x = playersRef.current.filter(p => !p.isDead).length;
+            const slashes = deckRef.current.filter(c => c.name === CardName.SHA).slice(0, x);
+            if (slashes.length > 0) {
+              setDeck(prev => {
+                const next = prev.filter(c => !slashes.some(s => s.id === c.id));
+                deckRef.current = next;
+                return next;
+              });
+              addLog(`【伏诛】徐氏对 ${endingPlayer.hero.name} 依次使用牌堆中的 ${slashes.length} 张【杀】`, 'skill');
+              showSkillBanner('徐氏', '伏诛');
+              await delay(400);
+              const xsNow = getPlayer(xs.id);
+              for (const s of slashes) {
+                const victimNow = getPlayer(endingPlayer.id);
+                if (!xsNow || !victimNow || xsNow.isDead || victimNow.isDead) break;
+                await resolveCardEffect(xsNow, [victimNow], s);
+              }
+              const reshuffled = shuffle(deckRef.current);
+              setDeck(reshuffled);
+              deckRef.current = reshuffled;
+              addLog('【伏诛】结算完毕，牌堆重新洗牌', 'info');
+              await delay(300);
+            }
           }
         }
 
