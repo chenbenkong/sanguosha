@@ -316,6 +316,8 @@ const App: React.FC = () => {
   const shuanghuaiUsedRef = useRef<boolean>(false); // 陆郁生「霜怀」每回合限一次
   const lastShuanghuaiTargetRef = useRef<number | null>(null); // 霜怀上一次的目标
   const yanyuCountRef = useRef<number>(0); // 夏侯氏「燕语」本阶段重铸【杀】数
+  const turnUsedOnOthersRef = useRef<Record<number, boolean>>({}); // 蔡夫人「窃听」：本回合是否用牌指定过其他角色
+  const lianzhuUsedRef = useRef<boolean>(false); // 董白「连诛」本回合已发动
   const shenxianTurnRef = useRef<number>(-1); // 张星彩「甚贤」本回合是否已发动
   const doutuSkipRef = useRef<number | null>(null); // 伏皇后「惴恐」赢：目标跳过出牌阶段
   const doutuDistanceRef = useRef<Record<number, number>>({}); // 「惴恐」没赢：到伏皇后距离视为 1
@@ -653,8 +655,12 @@ const App: React.FC = () => {
   // 从ref中获取最新的玩家信息
   const getPlayer = (id: number) => playersRef.current.find(p => p.id === id);
 
-  // 诸葛果「羽化」：非基本牌不计入手牌上限
-  const nonBasicCount = (p: Player) => p.hero.name === '诸葛果' ? p.hand.filter(c => c.type !== CardType.BASIC).length : 0;
+  // 诸葛果「羽化」：非基本牌不计入手牌上限；董白「黠慧」：黑色牌不计入手牌上限
+  const nonBasicCount = (p: Player) => {
+    if (p.hero.name === '诸葛果') return p.hand.filter(c => c.type !== CardType.BASIC).length;
+    if (p.hero.name === '董白') return p.hand.filter(c => c.suit === Suit.SPADE || c.suit === Suit.CLUB).length;
+    return 0;
+  };
   const excessCards = (p: Player) => {
     const nb = nonBasicCount(p);
     if (nb > 0 && (import.meta as unknown as { env?: { DEV?: boolean } }).env?.DEV === true) {
@@ -1880,6 +1886,12 @@ const App: React.FC = () => {
         // 夏侯氏：回合开始时重置「燕语」重铸计数
         if (currentPlayer.hero.name === '夏侯氏') yanyuCountRef.current = 0;
 
+        // 蔡夫人「窃听」：记录本回合是否用牌指定过其他角色
+        turnUsedOnOthersRef.current[currentPlayer.id] = false;
+
+        // 董白「连诛」：回合开始时重置限一次
+        if (currentPlayer.hero.name === '董白') lianzhuUsedRef.current = false;
+
         // 曹婴：回合开始时重置「凌人」，并结束上一次「奸雄/行殇」
         if (currentPlayer.hero.name === '曹婴') {
           lingrenUsedRef.current = false;
@@ -2170,6 +2182,145 @@ const App: React.FC = () => {
           }
         }
 
+        // 董白「连诛」：出牌阶段限一次，展示并交给一名其他角色一张牌；若为黑色，其选择让董白摸两张或自己弃两张
+        if (currentPlayer.hero.name === '董白' && skillsOn(currentPlayer.id) && !lianzhuUsedRef.current) {
+          const me = getPlayer(currentPlayer.id);
+          if (me && me.hand.length >= 2) {
+            const card = [...me.hand].sort((a, b) => a.value - b.value)[0];
+            const rival = playersRef.current
+              .filter(p => !p.isDead && p.id !== me.id && isEnemy(me, p))
+              .sort((a, b) => b.hand.length - a.hand.length)[0];
+            const target = rival ?? playersRef.current.find(p => !p.isDead && p.id !== me.id);
+            if (target) {
+              lianzhuUsedRef.current = true;
+              mutateHand(me.id, h => h.filter(c => c.id !== card.id));
+              mutateHand(target.id, h => [...h, card]);
+              addLog(`【连诛】董白展示并交给 ${target.hero.name} 【${card.name}】`, 'skill');
+              showSkillBanner('董白', '连诛');
+              await delay(400);
+              const black = card.suit === Suit.SPADE || card.suit === Suit.CLUB;
+              if (black) {
+                const targetNow = getPlayer(target.id);
+                if (targetNow && isEnemy(targetNow, me) && targetNow.hand.length >= 2) {
+                  discardCards(targetNow.id, targetNow.hand.slice(0, 2).map(c => c.id));
+                  addLog(`【连诛】${targetNow.hero.name} 选择弃置两张牌`, 'skill');
+                } else {
+                  drawCards(me.id, 2);
+                  addLog('【连诛】董白摸两张牌', 'skill');
+                }
+                await delay(300);
+              }
+            }
+          }
+        }
+
+        // 孙鲁育「魅步」：其他角色出牌阶段开始时，若孙鲁育在其攻击范围内，可弃一张牌令其本回合获得「止息」
+        {
+          const luyu = playersRef.current.find(p => !p.isDead && p.id !== currentPlayer.id
+            && p.hero.name === '孙鲁育' && skillsOn(p.id));
+          if (luyu && luyu.hand.length >= 2 && isEnemy(luyu, currentPlayer)
+              && getDistance(currentPlayer.id, luyu.id) <= getAttackRange(currentPlayer)) {
+            // AI：优先弃【杀】或黑色锦囊，避免把「距离为1」的副作用送给对方；无则弃非关键牌
+            const prefer = luyu.hand.find(c => c.name === CardName.SHA
+                || (c.type === CardType.SCROLL && (c.suit === Suit.SPADE || c.suit === Suit.CLUB)))
+              ?? luyu.hand.find(c => c.name !== CardName.TAO && c.name !== CardName.SHAN);
+            if (prefer) {
+              discardCards(luyu.id, [prefer]);
+              addLog(`【魅步】孙鲁育弃置【${prefer.name}】，令 ${currentPlayer.hero.name} 本回合获得「止息」（至多使用 ${currentPlayer.hp} 张牌，使用锦囊后结束出牌阶段）`, 'skill');
+              showSkillBanner('孙鲁育', '魅步');
+              if (!(prefer.name === CardName.SHA
+                  || (prefer.type === CardType.SCROLL && (prefer.suit === Suit.SPADE || prefer.suit === Suit.CLUB)))) {
+                addLog(`【魅步】弃置的牌不是【杀】或黑色锦囊牌，本回合 ${currentPlayer.hero.name} 与孙鲁育的距离为 1`, 'info');
+              }
+              await delay(300);
+            }
+          }
+        }
+
+        // 孙鲁育「穆穆」：出牌阶段开始时，弃置场上一张装备牌，或获得场上一张防具牌（后者本回合不能使用【杀】）
+        if (currentPlayer.hero.name === '孙鲁育' && skillsOn(currentPlayer.id)) {
+          const rivals = playersRef.current.filter(p => !p.isDead && p.id !== currentPlayer.id && isEnemy(currentPlayer, p));
+          const rivalEquips: { ownerId: number; owner: string; card: Card }[] = [];
+          for (const r of rivals) {
+            for (const c of Object.values(r.equipment ?? {})) {
+              if (c) rivalEquips.push({ ownerId: r.id, owner: r.hero.name, card: c as Card });
+            }
+          }
+          if (rivalEquips.length > 0) {
+            // AI 取舍：优先拆敌方武器/防具，收益高于自己拿防具后不能出【杀】的代价
+            const pick = rivalEquips.find(e => EQUIP_META[e.card.name]?.slot === 'armor')
+              ?? rivalEquips.find(e => EQUIP_META[e.card.name]?.slot === 'weapon')
+              ?? rivalEquips[0];
+            const slot = EQUIP_META[pick.card.name]?.slot;
+            const owner = getPlayer(pick.ownerId);
+            if (slot && owner) {
+              const nextEquip = { ...(owner.equipment ?? {}) };
+              delete nextEquip[slot];
+              updatePlayer(owner.id, { equipment: nextEquip });
+              addLog(`孙鲁育发动「穆穆」，弃置 ${pick.owner} 的【${pick.card.name}】`, 'skill');
+              showSkillBanner('孙鲁育', '穆穆');
+              await delay(300);
+            }
+          } else if (!currentPlayer.equipment?.armor) {
+            const armorOwner = playersRef.current.find(p => !p.isDead && p.id !== currentPlayer.id
+              && (p.equipment?.armor as Card | undefined) && isAlly(currentPlayer, p));
+            if (armorOwner?.equipment?.armor) {
+              const armor = armorOwner.equipment.armor;
+              const nextEquip = { ...(armorOwner.equipment ?? {}) };
+              delete nextEquip.armor;
+              updatePlayer(armorOwner.id, { equipment: nextEquip });
+              updatePlayer(currentPlayer.id, {
+                equipment: { ...(currentPlayer.equipment ?? {}), armor },
+              });
+              addLog(`孙鲁育发动「穆穆」，获得 ${armorOwner.hero.name} 的【${armor.name}】，本回合不能使用或打出【杀】`, 'skill');
+              showSkillBanner('孙鲁育', '穆穆');
+              await delay(300);
+            }
+          }
+        }
+
+        // 蔡夫人「献州」：限定技，出牌阶段将装备区所有牌交给一名其他角色，
+        // 然后其选择：令蔡夫人回复 X 点体力，或对其攻击范围内至多 X 名角色各造成 1 点伤害
+        if (currentPlayer.hero.name === '蔡夫人' && skillsOn(currentPlayer.id) && !currentPlayer.xianzhouUsed) {
+          const equips = Object.values(currentPlayer.equipment ?? {}).filter((c): c is Card => !!c);
+          const wantUse = equips.length > 0 && (currentPlayer.hp < currentPlayer.maxHp || equips.length >= 2);
+          if (wantUse) {
+            const ally = playersRef.current
+              .filter(p => !p.isDead && p.id !== currentPlayer.id && isAlly(currentPlayer, p))
+              .sort((a, b) => a.hp - b.hp)[0];
+            const receiver = ally ?? playersRef.current.find(p => !p.isDead && p.id !== currentPlayer.id);
+            if (receiver) {
+              updatePlayer(currentPlayer.id, { equipment: {}, xianzhouUsed: true });
+              mutateHand(receiver.id, h => [...h, ...equips]);
+              const x = equips.length;
+              addLog(`【献州】蔡夫人将装备区的 ${x} 张牌交给 ${receiver.hero.name}（${equips.map(c => `【${c.name}】`).join('、')}）`, 'skill');
+              showSkillBanner('蔡夫人', '献州');
+              await delay(400);
+              // 受牌者 AI 选择：盟友且蔡夫人已受伤则回复；否则对攻击范围内的敌人造成伤害
+              const caifurenNow = getPlayer(currentPlayer.id);
+              const receiverNow = getPlayer(receiver.id);
+              if (caifurenNow && receiverNow && isAlly(receiverNow, caifurenNow)
+                  && caifurenNow.hp < caifurenNow.maxHp) {
+                const heal = Math.min(x, caifurenNow.maxHp - caifurenNow.hp);
+                recoverHp(caifurenNow.id, heal);
+                addLog(`【献州】${receiverNow.hero.name} 令蔡夫人回复 ${heal} 点体力`, 'skill');
+              } else if (receiverNow) {
+                const victims = playersRef.current
+                  .filter(p => !p.isDead && p.id !== receiverNow.id && isEnemy(receiverNow, p)
+                    && getDistance(receiverNow, p) <= getAttackRange(receiverNow))
+                  .sort((a, b) => a.hp - b.hp)
+                  .slice(0, x);
+                for (const t of victims) {
+                  addLog(`【献州】${receiverNow.hero.name} 对 ${t.hero.name} 造成 1 点伤害`, 'skill');
+                  await takeDamage(t.id, receiverNow.id, 1);
+                  await delay(250);
+                }
+              }
+              await delay(300);
+            }
+          }
+        }
+
         // 夏侯氏「燕语」（出牌阶段部分）：重铸【杀】（弃一张【杀】后摸一张牌），每阶段至多两张
         if (currentPlayer.hero.name === '夏侯氏' && skillsOn(currentPlayer.id)) {
           let guard = 0;
@@ -2447,6 +2598,41 @@ const App: React.FC = () => {
             drawCards(ender.id, 1);
             drawCards(xiahou.id, 1);
             await delay(300);
+          }
+        }
+
+        // 蔡夫人「窃听」：其他角色的回合结束时，若其没有用牌指定过其他角色，可取其一张装备或摸一张牌
+        {
+          const cfr = playersRef.current.find(p => !p.isDead && p.id !== turnIndex
+            && p.hero.name === '蔡夫人' && skillsOn(p.id));
+          const ender2 = getPlayer(turnIndex);
+          if (cfr && ender2 && !ender2.isDead && !turnUsedOnOthersRef.current[turnIndex]) {
+            const eqs = Object.values(ender2.equipment ?? {}).filter((c): c is Card => !!c);
+            // AI：敌方装备优先夺取，盟友则改用摸牌选项
+            const steal = eqs.length > 0 && isEnemy(cfr, ender2);
+            const pick = steal
+              ? (eqs.find(c => EQUIP_META[c.name]?.slot === 'weapon') ?? eqs[0])
+              : null;
+            const slot = pick ? EQUIP_META[pick.name]?.slot : undefined;
+            if (pick && slot) {
+              const nextEq = { ...(ender2.equipment ?? {}) };
+              delete nextEq[slot];
+              updatePlayer(ender2.id, { equipment: nextEq });
+              if (cfr.equipment?.[slot]) {
+                mutateHand(cfr.id, h => [...h, pick]);
+                addLog(`【窃听】蔡夫人已有同部位装备，改为获得 ${ender2.hero.name} 的【${pick.name}】到手牌`, 'skill');
+              } else {
+                updatePlayer(cfr.id, { equipment: { ...(cfr.equipment ?? {}), [slot]: pick } });
+                addLog(`【窃听】蔡夫人获得 ${ender2.hero.name} 装备区的【${pick.name}】`, 'skill');
+              }
+              showSkillBanner('蔡夫人', '窃听');
+              await delay(300);
+            } else {
+              drawCards(cfr.id, 1);
+              addLog('【窃听】蔡夫人摸一张牌', 'skill');
+              showSkillBanner('蔡夫人', '窃听');
+              await delay(200);
+            }
           }
         }
 
@@ -4201,6 +4387,11 @@ const App: React.FC = () => {
           addLog(`【蚕食】卑弥呼令 ${extras.map(p => p.hero.name).join('、')} 成为额外目标（失去“傀”）`, 'skill');
           showSkillBanner('卑弥呼', '蚕食');
         }
+      }
+
+      // 蔡夫人「窃听」记录：本回合是否用牌指定过其他角色（含蚕食追加目标）
+      if (source.id >= 0 && targets.some(t => t.id !== source.id)) {
+        turnUsedOnOthersRef.current[source.id] = true;
       }
 
       // 卑弥呼「蚕食」防御：敌方以单体基本牌/普通锦囊指定卑弥呼时，可取消并移除其“傀”

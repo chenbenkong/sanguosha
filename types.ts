@@ -128,6 +128,8 @@ export interface Player {
   xushenUsed?: boolean;
   /** 灵雎「焚心」限定技已使用 */
   fenxinUsed?: boolean;
+  /** 蔡夫人「献州」限定技已使用 */
+  xianzhouUsed?: boolean;
 }
 
 /** 装备区：武器 / 防具 / +1马 / -1马 */
