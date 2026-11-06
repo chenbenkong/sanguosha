@@ -749,11 +749,22 @@ const App: React.FC = () => {
   const onGeneralCardRevealed = (id: number) => {
     const p = getPlayer(id);
     if (!p || p.isDead) return;
+    // 糜夫人「闺秀」：明置此武将牌时，摸两张牌
+    if (p.hero.name === '糜夫人' && skillsOn(id)) {
+      drawCards(id, 2);
+      addLog(`【闺秀】${p.hero.name} 明置武将牌，摸两张牌`, 'skill');
+      showSkillBanner('糜夫人', '闺秀');
+    }
   };
 
   const onGeneralCardRemoved = (id: number) => {
     const p = getPlayer(id);
-    if (!p) return;
+    if (!p || p.isDead) return;
+    // 糜夫人「闺秀」：移除此武将牌时，回复1点体力
+    if (p.hero.name === '糜夫人' && recoverHp(id, 1) > 0) {
+      addLog(`【闺秀】${p.hero.name} 移除武将牌，回复1点体力`, 'skill');
+      showSkillBanner('糜夫人', '闺秀');
+    }
   };
 
   const setGeneralRevealed = (id: number, revealed: boolean, reason: string, silent = false) => {
@@ -2354,6 +2365,24 @@ const App: React.FC = () => {
             addLog(`【谦冲】王元姬选择「${label}」，本回合使用此类牌无次数与距离限制`, 'skill');
             showSkillBanner('王元姬', '谦冲');
             await delay(300);
+          }
+        }
+
+        // 糜夫人「存嗣」：出牌阶段，移除此武将牌并令一名角色获得「勇决」，其摸两张牌
+        if (currentPlayer.hero.name === '糜夫人' && skillsOn(currentPlayer.id)) {
+          const p = getPlayer(currentPlayer.id);
+          if (p && !p.generalRemoved) {
+            const others = playersRef.current.filter(o => !o.isDead && o.id !== p.id);
+            if (others.length > 0) {
+              const target = others.slice().sort((a, b) => (isAlly(p, a) ? 0 : 1) - (isAlly(p, b) ? 0 : 1))[0];
+              if (removeGeneralCard(p.id, '存嗣')) {
+                grantSkill(target.id, '勇决', '存嗣');
+                drawCards(target.id, 2);
+                addLog(`【存嗣】${p.hero.name} 移除此武将牌，${target.hero.name} 获得技能「勇决」并摸两张牌`, 'skill');
+                showSkillBanner('糜夫人', '存嗣');
+                await delay(500);
+              }
+            }
           }
         }
 
@@ -4910,6 +4939,23 @@ const App: React.FC = () => {
     if (fxFly && targets.length > 0) spawnCardFlight(card, source.id, targets[0].id);
     setIsProcessing(p => p + 1);
     try {
+      // 通用「勇决」（存嗣授予）：同势力角色本回合使用的第一张牌为【杀】时，结算后获得之
+      {
+        const key = `${source.id}-${turnCountRef.current}`;
+        if (!firstUsedCardRef.current.has(key)) {
+          firstUsedCardRef.current.add(key);
+          if (card.name === CardName.SHA) {
+            const enabler = playersRef.current.find(p => hasGrantedSkill(p, '勇决')
+              && p.hero.kingdom === source.hero.kingdom && p.id !== source.id);
+            if (enabler) {
+              mutateHand(source.id, h => (h.some(c => c.id === card.id) ? h : [...h, card]));
+              addLog(`【勇决】${source.hero.name} 本回合使用的第一张牌为【杀】，结算后获得之（「勇决」持有者 ${enabler.hero.name}）`, 'skill');
+              showSkillBanner(source.hero.name, '勇决');
+            }
+          }
+        }
+      }
+
       // 卑弥呼「蚕食」：觉醒后，单体基本牌/普通锦囊可额外指定带“傀”的敌人
       const canShiOffense = source.hero.name === '卑弥呼' && source.baiJiaAwakened
         && targets.length === 1 && targets[0].id !== source.id
