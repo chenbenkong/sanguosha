@@ -2202,7 +2202,7 @@ const App: React.FC = () => {
               if (black) {
                 const targetNow = getPlayer(target.id);
                 if (targetNow && isEnemy(targetNow, me) && targetNow.hand.length >= 2) {
-                  discardCards(targetNow.id, targetNow.hand.slice(0, 2).map(c => c.id));
+                  discardCards(targetNow.id, targetNow.hand.slice(0, 2));
                   addLog(`【连诛】${targetNow.hero.name} 选择弃置两张牌`, 'skill');
                 } else {
                   drawCards(me.id, 2);
@@ -2434,6 +2434,9 @@ const App: React.FC = () => {
               discardHit: true, rawExcess, excess,
             };
           }
+        }
+        if (updatedPlayer.hero.name === '董白' && rawExcess > excess) {
+          addLog(`董白「黠慧」：黑色牌不计入手牌上限（应弃 ${excess} 张，原为 ${rawExcess} 张）`, 'skill');
         }
         
         // 吕蒙「克己」：本回合出牌阶段未使用【杀】，可跳过弃牌阶段
