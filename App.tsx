@@ -318,6 +318,7 @@ const App: React.FC = () => {
   const yanyuCountRef = useRef<number>(0); // 夏侯氏「燕语」本阶段重铸【杀】数
   const turnUsedOnOthersRef = useRef<Record<number, boolean>>({}); // 蔡夫人「窃听」：本回合是否用牌指定过其他角色
   const lianzhuUsedRef = useRef<boolean>(false); // 董白「连诛」本回合已发动
+  const wuyuanUsedRef = useRef<boolean>(false); // 胡金定「武缘」本回合已发动
   const fumianTargetUsedRef = useRef<boolean>(false); // 吴苋「福绵」本回合额外目标已用
   const cangHuiUsedRef = useRef<boolean>(false); // 孙鲁班「谮毁」本回合已发动
   const shenxianTurnRef = useRef<number>(-1); // 张星彩「甚贤」本回合是否已发动
@@ -669,7 +670,9 @@ const App: React.FC = () => {
       const w = window as unknown as { __r4yuhua?: Record<string, unknown> };
       w.__r4yuhua = { ...(w.__r4yuhua || {}), hero: p.hero.name, hand: p.hand.length, hp: p.hp, nonBasic: nb, sample: p.hand.map(c => c.type) };
     }
-    return Math.max(0, p.hand.length - p.hp - nb - (p.handLimitDelta ?? 0));
+    // 胡金定「怀子」：手牌上限等于体力上限
+    const limitHp = p.hero.name === '胡金定' ? p.maxHp : p.hp;
+    return Math.max(0, p.hand.length - limitHp - nb - (p.handLimitDelta ?? 0));
   };
   // 供 mutateHand 的延时回调使用，避免在 drawCards 声明前引用它
   const drawCardsRef = useRef<((playerId: number, count: number) => Card[]) | null>(null);
@@ -732,6 +735,23 @@ const App: React.FC = () => {
     return !!until && until > turnCountRef.current;
   };
   const skillsOn = (id: number) => !isSkillSealed(id);
+
+  // ── 王元姬「谦冲 / 帷幕 / 明哲」──
+  // 装备区牌列表；「谦冲」按全黑/全红派生“帷幕 / 明哲”
+  const equipList = (p: Player): Card[] => {
+    const e = p.equipment;
+    if (!e) return [];
+    return [e.weapon, e.armor, e.horsePlus, e.horseMinus].filter((c): c is Card => !!c);
+  };
+  const allEquipBlack = (p: Player) => {
+    const cs = equipList(p);
+    return cs.length > 0 && cs.every(c => c.suit === Suit.SPADE || c.suit === Suit.CLUB);
+  };
+  const allEquipRed = (p: Player) => {
+    const cs = equipList(p);
+    return cs.length > 0 && cs.every(c => c.suit === Suit.HEART || c.suit === Suit.DIAMOND);
+  };
+  const hasWeimu = (p: Player) => p.hero.name === '王元姬' && skillsOn(p.id) && allEquipBlack(p);
 
   // 相邻存活角色（按座位顺序），“距离最近”的近似：优先下家，其次上家
   const nearestOtherPlayer = (id: number) => {
@@ -997,6 +1017,8 @@ const App: React.FC = () => {
   const canPlaySlash = useCallback((p: Player, card?: Card) => {
     if (p.equipment?.weapon?.name === CardName.ZHUGE) return true;
     if (p.hero.name === '张飞') return true;
+    // 王元姬「谦冲」：本回合选择基本牌则【杀】无次数限制
+    if (p.hero.name === '王元姬' && p.qianchongType === 'basic') return true;
     const used = slashUsageRef.current[p.id] ?? 0;
     if (used < 1) return true;
     if (card && p.hero.name === '张星彩' && qiangwuPointRef.current !== null
@@ -1506,6 +1528,18 @@ const App: React.FC = () => {
       showSkillBanner(xingcai.hero.name, '甚贤');
       drawCardsRef.current?.(xingcai.id, 1);
     }
+
+    // 王元姬「尚俭 / 明哲」：记录本回合失去的牌；回合外因弃置失去红色牌且装备区全红时摸一张
+    const wj = playersRef.current.find(p => !p.isDead && p.hero.name === '王元姬');
+    if (wj && wj.id === playerId && cardsToDiscard.length > 0) {
+      updatePlayer(playerId, { lostCardsThisTurn: (wj.lostCardsThisTurn ?? 0) + cardsToDiscard.length });
+      if (turnIndex !== wj.id && skillsOn(wj.id) && allEquipRed(wj)
+          && cardsToDiscard.some(c => c.suit === Suit.HEART || c.suit === Suit.DIAMOND)) {
+        addLog(`【明哲】王元姬于回合外因弃置失去红色牌，摸一张牌`, 'skill');
+        showSkillBanner(wj.hero.name, '明哲');
+        drawCardsRef.current?.(wj.id, 1);
+      }
+    }
   };
 
   // --- Game Loop ---
@@ -1764,6 +1798,12 @@ const App: React.FC = () => {
         qingchengUsedRef.current = false;
         setHasUsedQingcheng(false);
         setIsQingchengMode(false);
+        wuyuanUsedRef.current = false; // 重置「武缘」
+        // 王元姬「尚俭」：每回合开始清零“本回合失去的牌”
+        {
+          const wj = playersRef.current.find(p => !p.isDead && p.hero.name === '王元姬');
+          if (wj) updatePlayer(wj.id, { lostCardsThisTurn: 0, qianchongType: null });
+        }
         jiaozhaoUsedRef.current = false;
         setHasUsedJiaozhao(false);
         addLog(`>>> ${currentPlayer.hero.name} (${currentPlayer.isHuman ? '你' : 'AI'}) 回合开始 <<<`, 'info');
@@ -2145,6 +2185,50 @@ const App: React.FC = () => {
 
       // ACTION PHASE
       else if (currentPhase === GamePhase.ACTION) {
+        // 王元姬「谦冲」：出牌阶段开始时，若装备区不全黑/不全红，选一种牌型本回合无次数与距离限制
+        if (currentPlayer.hero.name === '王元姬' && skillsOn(currentPlayer.id)) {
+          const p = getPlayer(currentPlayer.id)!;
+          const allBlack = allEquipBlack(p);
+          const allRed = allEquipRed(p);
+          if (!allBlack && !allRed) {
+            const counts = { basic: 0, trick: 0, equip: 0 };
+            p.hand.forEach(c => {
+              if (c.type === CardType.BASIC) counts.basic += 1;
+              else if (c.type === CardType.SCROLL) counts.trick += 1;
+              else counts.equip += 1;
+            });
+            const type = (Object.keys(counts) as Array<'basic' | 'trick' | 'equip'>)
+              .sort((a, b) => counts[b] - counts[a])[0];
+            updatePlayer(p.id, { qianchongType: type });
+            const label = type === 'basic' ? '基本牌' : type === 'trick' ? '锦囊牌' : '装备牌';
+            addLog(`【谦冲】王元姬选择「${label}」，本回合使用此类牌无次数与距离限制`, 'skill');
+            showSkillBanner('王元姬', '谦冲');
+            await delay(300);
+          }
+        }
+
+        // 胡金定「武缘」：出牌阶段限一次，交给其他角色一张【杀】，自己回复1点；红色其额外回复1，属性杀其额外摸一张
+        if (currentPlayer.hero.name === '胡金定' && skillsOn(currentPlayer.id) && !wuyuanUsedRef.current) {
+          const p = getPlayer(currentPlayer.id);
+          const slash = p?.hand.find(c => c.name === CardName.SHA);
+          const others = playersRef.current.filter(o => !o.isDead && o.id !== currentPlayer.id);
+          if (p && slash && others.length > 0) {
+            const target = others.slice().sort((a, b) => (isAlly(p, a) ? 0 : 1) - (isAlly(p, b) ? 0 : 1))[0];
+            wuyuanUsedRef.current = true;
+            mutateHand(p.id, h => h.filter(c => c.id !== slash.id));
+            mutateHand(target.id, h => [...h, slash]);
+            const red = slash.suit === Suit.HEART || slash.suit === Suit.DIAMOND;
+            const elemental = !!slash.attribute;
+            const healed = Math.min(p.maxHp, p.hp + 1);
+            updatePlayer(p.id, { hp: healed });
+            if (red) updatePlayer(target.id, { hp: Math.min(target.maxHp, target.hp + 1) });
+            drawCards(target.id, 1 + (elemental ? 1 : 0));
+            addLog(`【武缘】胡金定将【${slash.name}】交给 ${target.hero.name}，自己回复1点体力（${healed}/${p.maxHp}）${red ? '，其额外回复1点体力' : ''}${elemental ? '，其额外摸一张牌' : ''}`, 'skill');
+            showSkillBanner('胡金定', '武缘');
+            await delay(500);
+          }
+        }
+
         // 孙寒华「冲虚」：出牌阶段限一次，集灵获得分数，用于升级妙剑/莲华或摸牌
         if (currentPlayer.hero.name === '孙寒华' && skillsOn(currentPlayer.id) && !chongxuUsedRef.current) {
           chongxuUsedRef.current = true;
@@ -2647,6 +2731,21 @@ const App: React.FC = () => {
       // END PHASE
       else if (currentPhase === GamePhase.END) {
         await delay(500);
+
+        // 王元姬「尚俭」：任一角色结束阶段，若本回合失去的牌数不大于体力值，摸等量牌
+        {
+          const wj = playersRef.current.find(p => !p.isDead && p.hero.name === '王元姬' && skillsOn(p.id));
+          if (wj) {
+            const lost = wj.lostCardsThisTurn ?? 0;
+            if (lost > 0 && lost <= wj.hp) {
+              updatePlayer(wj.id, { lostCardsThisTurn: 0 });
+              drawCards(wj.id, lost);
+              addLog(`【尚俭】王元姬本回合失去 ${lost} 张牌（不大于体力 ${wj.hp}），摸 ${lost} 张牌`, 'skill');
+              showSkillBanner('王元姬', '尚俭');
+              await delay(400);
+            }
+          }
+        }
 
         // 张春华「伤逝」：回合结束时，手牌少于已损失体力则补至该值
         const endingPlayer = getPlayer(turnIndex);
@@ -4024,10 +4123,11 @@ const App: React.FC = () => {
 
     if (!target || !card || target.isDead) return;
 
-    // 距离限制：顺手牵羊 / 兵粮寸断 仅限距离 1（黄月英「奇才」无距离限制）
+    // 距离限制：顺手牵羊 / 兵粮寸断 仅限距离 1（黄月英「奇才」、王元姬「谦冲」选锦囊牌时无距离限制）
     if (card.name === CardName.SHUNSHOU || card.name === CardName.BINGLIANG) {
       const dist = getDistance(me.id, target.id);
-      if (dist > 1 && me.hero.name !== '黄月英') {
+      if (dist > 1 && me.hero.name !== '黄月英'
+          && !(me.hero.name === '王元姬' && me.qianchongType === 'trick')) {
         addLog(`【${card.name}】只能对距离为1的角色使用（当前距离 ${dist}）`, 'warning');
         setTimeout(() => { clickGuard.current = false; }, 200);
         return;
@@ -4043,7 +4143,8 @@ const App: React.FC = () => {
       const dist = getDistance(me.id, target.id);
       const qiangwuLong = me.hero.name === '张星彩' && qiangwuPointRef.current !== null
         && rankValue(card.rank) < qiangwuPointRef.current;
-      if (dist > reach && !qiangwuLong) {
+      const qianchongLong = me.hero.name === '王元姬' && me.qianchongType === 'basic';
+      if (dist > reach && !qiangwuLong && !qianchongLong) {
         addLog(`距离不足：你与 ${target.hero.name} 距离 ${dist}，攻击范围 ${reach}`, 'warning');
         setTimeout(() => { clickGuard.current = false; }, 200);
         return;
@@ -4610,6 +4711,24 @@ const App: React.FC = () => {
           cangHuiUsedRef.current = true;
           addLog(`【谮毁】孙鲁班令 ${chosen.hero.name} 选择成为【${card.name}】的目标`, 'skill');
           showSkillBanner('孙鲁班', '谮毁');
+        }
+      }
+
+      // 王元姬「帷幕」：装备区全黑时，不能成为黑色锦囊牌的目标
+      if (card.type === CardType.SCROLL && (card.suit === Suit.SPADE || card.suit === Suit.CLUB)) {
+        const weimuTarget = targets.find(t => hasWeimu(t) && t.id !== source.id);
+        if (weimuTarget) {
+          const rest = targets.filter(t => t.id !== weimuTarget.id);
+          if (rest.length === 0) {
+            playCard(source.id, card);
+            addLog(`【帷幕】${weimuTarget.hero.name} 不能成为黑色锦囊牌的目标，【${card.name}】对其无效`, 'skill');
+            showSkillBanner(weimuTarget.hero.name, '帷幕');
+            await delay(300);
+            return;
+          }
+          targets = rest;
+          addLog(`【帷幕】${weimuTarget.hero.name} 不能成为黑色锦囊牌的目标，已从【${card.name}】的目标中移除`, 'skill');
+          showSkillBanner(weimuTarget.hero.name, '帷幕');
         }
       }
 
@@ -6411,6 +6530,21 @@ const App: React.FC = () => {
           addLog(`【骄矜】孙鲁班弃置【${cost.name}】，此伤害 -1`, 'skill');
           showSkillBanner('孙鲁班', '骄矜');
         }
+      }
+
+      // 胡金定「仁释」：已受伤时受到【杀】伤害，防止并获得此【杀】，体力上限 -1
+      const rjVictim = getPlayer(victimId);
+      if (rjVictim && rjVictim.hero.name === '胡金定' && skillsOn(victimId)
+          && sourceId !== victimId && damageCard?.name === CardName.SHA
+          && rjVictim.hp < rjVictim.maxHp) {
+        const gained = damageCard;
+        mutateHand(victimId, h => [...h, gained]);
+        const newMax = Math.max(1, rjVictim.maxHp - 1);
+        updatePlayer(victimId, { maxHp: newMax, hp: Math.min(rjVictim.hp, newMax) });
+        addLog(`【仁释】胡金定防止此【杀】造成的伤害并获得【${gained.name}】，体力上限 -1（${newMax}）`, 'skill');
+        showSkillBanner('胡金定', '仁释');
+        await delay(400);
+        return;
       }
 
       // 寒冰剑：造成伤害时，可防止伤害并改为弃置目标两张牌

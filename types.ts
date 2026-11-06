@@ -142,6 +142,10 @@ export interface Player {
   handLimitDelta?: number;
   /** 辛宪英「才识」本回合用牌限制 */
   caiShiMode?: 'limitOther' | 'limitSelf' | null;
+  /** 王元姬「尚俭」本回合失去的牌数（每回合开始清零） */
+  lostCardsThisTurn?: number;
+  /** 王元姬「谦冲」本回合选择的无次数/无距离限制牌型 */
+  qianchongType?: 'basic' | 'trick' | 'equip' | null;
   /** 吴苋「福绵」本回合选项（1 额外摸牌 / 2 额外目标） */
   fumianChoice?: number;
   /** 吴苋「福绵」选项 1 数值（额外摸牌数） */
