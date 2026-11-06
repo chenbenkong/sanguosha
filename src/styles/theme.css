@@ -2845,20 +2845,24 @@ a:focus-visible {
   padding-right: clamp(18px, 7vw, 112px);
 }
 .skill-cast-layer .skill-cast {
-  display: flex;
-  flex-direction: row-reverse;
+  display: grid;
+  grid-template-columns: auto auto;
+  grid-template-rows: auto auto;
   align-items: center;
-  gap: clamp(14px, 2.2vw, 34px);
+  column-gap: clamp(14px, 2.2vw, 34px);
   padding: 0;
   text-align: left;
 }
 .skill-cast-layer .skill-cast-portrait {
+  grid-column: 2;
+  grid-row: 1 / span 2;
   width: clamp(120px, 15vw, 198px);
   height: clamp(180px, 22.5vw, 297px);
   margin: 0;
-  flex: 0 0 auto;
 }
 .skill-cast-layer .skill-banner-skill {
+  grid-column: 1;
+  grid-row: 1;
   font-size: clamp(54px, 6.4vw, 92px);
   line-height: 1.08;
   letter-spacing: 0.16em;
@@ -2866,6 +2870,8 @@ a:focus-visible {
   text-align: left;
 }
 .skill-cast-layer .skill-banner-hero {
+  grid-column: 1;
+  grid-row: 2;
   margin-top: 12px;
   font-size: clamp(12px, 1.1vw, 15px);
   letter-spacing: 0.26em;
@@ -2878,6 +2884,7 @@ a:focus-visible {
     padding-right: 0;
   }
   .skill-cast-layer .skill-cast {
+    display: flex;
     flex-direction: column;
     gap: 8px;
     text-align: center;
