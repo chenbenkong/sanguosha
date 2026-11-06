@@ -177,7 +177,26 @@ const App: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [checkpoint]);
 
-  
+  // 阶段切换横幅：短促 0.8s，pointer-events-none，不阻塞任何操作
+  const [phaseBanner, setPhaseBanner] = useState<{ text: string; sub: string; id: string } | null>(null);
+  const phaseBannerTimerRef = useRef<NodeJS.Timeout | null>(null);
+  useEffect(() => {
+    if (screen !== 'game' || winnerSide) return;
+    const label =
+      phase === GamePhase.START ? '回合开始' :
+      phase === GamePhase.DRAW ? '摸牌阶段' :
+      phase === GamePhase.ACTION ? '出牌阶段' :
+      phase === GamePhase.DISCARD ? '弃牌阶段' :
+      phase === GamePhase.END ? '结束阶段' : '';
+    if (!label) return;
+    const p = players.find(x => x.id === turnIndex);
+    if (!p) return;
+    if (phaseBannerTimerRef.current) clearTimeout(phaseBannerTimerRef.current);
+    setPhaseBanner({ text: label, sub: p.hero.name + (p.isHuman ? '（你）' : ''), id: Date.now().toString(36) });
+    phaseBannerTimerRef.current = setTimeout(() => setPhaseBanner(null), 760);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, turnIndex, screen, winnerSide]);
+
   // Selection: Now supports multiple IDs for discard phase
   const [selectedCardIds, setSelectedCardIds] = useState<string[]>([]);
   // Strong single-selection source of truth for ACTION phase visuals
@@ -235,6 +254,15 @@ const App: React.FC = () => {
   const [hasUsedQiangwu, setHasUsedQiangwu] = useState<boolean>(false);
   // 卞夫人「挽危」：每回合限一次
   const wanweiUsedRef = useRef<boolean>(false);
+  // 本轮补齐的第二技能状态
+  const xuejiUsedRef = useRef<boolean>(false); // 关银屏「血祭」出牌阶段限一次
+  const [hasUsedXueji, setHasUsedXueji] = useState<boolean>(false);
+  const fengpoUsedRef = useRef<boolean>(false); // 马云禄「凤魄」回合内首张【杀】
+  const fengpoBoostRef = useRef<Record<string, number>>({}); // 凤魄伤害加成（按牌 id）
+  const shouxiDeclaredRef = useRef<Set<string>>(new Set()); // 曹节「守玺」已声明牌名（每种限一次）
+  const shenxianTurnRef = useRef<number>(-1); // 张星彩「甚贤」本回合是否已发动
+  const doutuSkipRef = useRef<number | null>(null); // 伏皇后「惴恐」赢：目标跳过出牌阶段
+  const doutuDistanceRef = useRef<Record<number, number>>({}); // 「惴恐」没赢：到伏皇后距离视为 1
 
   // 孙尚香「结姻」技能状态
   const [isJieyinMode, setIsJieyinMode] = useState<boolean>(false);
@@ -534,6 +562,17 @@ const App: React.FC = () => {
 
   // 从ref中获取最新的玩家信息
   const getPlayer = (id: number) => playersRef.current.find(p => p.id === id);
+
+  // 诸葛果「羽化」：非基本牌不计入手牌上限
+  const nonBasicCount = (p: Player) => p.hero.name === '诸葛果' ? p.hand.filter(c => c.type !== CardType.BASIC).length : 0;
+  const excessCards = (p: Player) => {
+    const nb = nonBasicCount(p);
+    if (nb > 0 && (import.meta as unknown as { env?: { DEV?: boolean } }).env?.DEV === true) {
+      const w = window as unknown as { __r4yuhua?: Record<string, unknown> };
+      w.__r4yuhua = { ...(w.__r4yuhua || {}), hero: p.hero.name, hand: p.hand.length, hp: p.hp, nonBasic: nb, sample: p.hand.map(c => c.type) };
+    }
+    return Math.max(0, p.hand.length - p.hp - nb);
+  };
   // 供 mutateHand 的延时回调使用，避免在 drawCards 声明前引用它
   const drawCardsRef = useRef<((playerId: number, count: number) => Card[]) | null>(null);
 
@@ -712,6 +751,8 @@ const App: React.FC = () => {
     if (from?.hero.name === '马超' || from?.hero.name === '马云禄') d -= 1; // 马术
     if (from?.equipment?.horseMinus) d -= 1;
     if (to?.equipment?.horsePlus) d += 1;
+    // 伏皇后「惴恐」没赢：该角色与她本回合的距离视为 1
+    if (doutuDistanceRef.current[fromId] === toId) return 1;
     return Math.max(1, d);
   }, []);
 
@@ -938,6 +979,15 @@ const App: React.FC = () => {
     playersRef.current = newPlayers;
     setDiscardPile([]);
     setIsAiTakeover(false);
+    // 清空跨局技能状态（否则第二局起守玺等「每种牌名限一次」会被旧局记录吞掉）
+    shouxiDeclaredRef.current = new Set();
+    fengpoBoostRef.current = {};
+    doutuSkipRef.current = null;
+    doutuDistanceRef.current = {};
+    xuejiUsedRef.current = false;
+    setHasUsedXueji(false);
+    fengpoUsedRef.current = false;
+    shenxianTurnRef.current = -1;
     
     // Lord starts
     const lordIndex = newPlayers.findIndex(p => p.identity === Identity.ZHUGONG);
@@ -1127,6 +1177,17 @@ const App: React.FC = () => {
       addLog(`${before.hero.name} 发动「${sk}」，摸一张牌`, 'skill');
       showSkillBanner(before.hero.name, sk);
       drawCards(playerId, 1);
+    }
+
+    // 张星彩「甚贤」：回合外其他角色因弃置失去牌且其中有基本牌时，摸一张（每回合限一次）
+    const xingcai = playersRef.current.find(p => !p.isDead && p.hero.name === '张星彩');
+    if (xingcai && xingcai.id !== playerId && turnIndex !== xingcai.id
+        && shenxianTurnRef.current !== turnIndex
+        && cardsToDiscard.some(c => c.type === CardType.BASIC)) {
+      shenxianTurnRef.current = turnIndex;
+      addLog(`${xingcai.hero.name} 发动「甚贤」，摸一张牌`, 'skill');
+      showSkillBanner(xingcai.hero.name, '甚贤');
+      drawCardsRef.current?.(xingcai.id, 1);
     }
   };
 
@@ -1326,6 +1387,13 @@ const App: React.FC = () => {
     setQiangwuPoint(null);
     setHasUsedQiangwu(false);
     wanweiUsedRef.current = false; // 重置「挽危」
+        xuejiUsedRef.current = false; // 重置「血祭」
+        setHasUsedXueji(false);
+        fengpoUsedRef.current = false; // 重置「凤魄」
+        fengpoBoostRef.current = {};
+        shenxianTurnRef.current = -1; // 重置「甚贤」
+        doutuSkipRef.current = null; // 重置「惴恐」
+        delete doutuDistanceRef.current[currentPlayer.id];
         setIsJiedaoMode(false); // 重置借刀杀人模式
         setJiedaoWeaponTarget(null); // 重置借刀目标
         setJiedaoVictimTarget(null); // 重置被攻击目标
@@ -1351,6 +1419,28 @@ const App: React.FC = () => {
         setAnxuTargets([]);
         luoyiPlayerRef.current = null;
         addLog(`>>> ${currentPlayer.hero.name} (${currentPlayer.isHuman ? '你' : 'AI'}) 回合开始 <<<`, 'info');
+
+        // 伏皇后「惴恐」：其他角色的回合开始时，若她已受伤，可与其拼点。
+        // 赢：该角色本回合跳过出牌阶段；没赢：该角色与她的距离视为 1。
+        const fu = playersRef.current.find(p => !p.isDead && p.hero.name === '伏皇后');
+        if (fu && fu.id !== currentPlayer.id && fu.hp < fu.maxHp
+            && fu.hand.length > 0 && currentPlayer.hand.length > 0) {
+          const fuCard = [...fu.hand].sort((a, b) => rankValue(b.rank) - rankValue(a.rank))[0];
+          const tp = getPlayer(currentPlayer.id)!;
+          const tCard = [...tp.hand].sort((a, b) => rankValue(b.rank) - rankValue(a.rank))[0];
+          discardCards(fu.id, [fuCard]);
+          discardCards(tp.id, [tCard]);
+          addLog(`伏皇后发动「惴恐」，与 ${tp.hero.name} 拼点：${fuCard.name}${fuCard.rank} vs ${tCard.name}${tCard.rank}`, 'skill');
+          showSkillBanner('伏皇后', '惴恐');
+          if (rankValue(fuCard.rank) > rankValue(tCard.rank)) {
+            doutuSkipRef.current = tp.id;
+            addLog(`「惴恐」获胜，${tp.hero.name} 本回合跳过出牌阶段`, 'danger');
+          } else {
+            doutuDistanceRef.current[tp.id] = fu.id;
+            addLog(`「惴恐」未获胜，${tp.hero.name} 本回合与伏皇后的距离视为 1`, 'info');
+          }
+          await delay(700);
+        }
 
         // 甄姬「洛神」：回合开始时判定，黑色则获得该判定牌并可继续（最多 3 次）
         if (currentPlayer.hero.name === '甄姬') {
@@ -1515,8 +1605,15 @@ const App: React.FC = () => {
 
       // ACTION PHASE
       else if (currentPhase === GamePhase.ACTION) {
+        // 伏皇后「惴恐」获胜：本回合跳过出牌阶段
+        if (doutuSkipRef.current === currentPlayer.id) {
+          doutuSkipRef.current = null;
+          addLog(`${currentPlayer.hero.name} 受「惴恐」影响，本回合跳过出牌阶段`, 'warning');
+          await delay(600);
+          setPhase(GamePhase.DISCARD);
+        }
         // 检查是否有"乐不思蜀"效果：判定为红桃则解除，否则跳过出牌阶段
-        if (currentPlayer.isLeBuSiShu) {
+        else if (currentPlayer.isLeBuSiShu) {
           updatePlayer(currentPlayer.id, { isLeBuSiShu: false });
           const jc = await performJudgment(currentPlayer.id, '乐不思蜀');
           if (jc && jc.suit === Suit.HEART) {
@@ -1545,7 +1642,17 @@ const App: React.FC = () => {
         const updatedPlayer = getPlayer(turnIndex);
         if (!updatedPlayer) return;
         
-        const excess = updatedPlayer.hand.length - updatedPlayer.hp;
+        const rawExcess = updatedPlayer.hand.length - updatedPlayer.hp;
+        const excess = excessCards(updatedPlayer);
+        if (updatedPlayer.hero.name === '诸葛果' && rawExcess > excess) {
+          addLog(`${updatedPlayer.hero.name} 发动「羽化」，非基本牌不计入手牌上限（应弃 ${excess} 张，原为 ${rawExcess} 张）`, 'skill');
+          if ((import.meta as unknown as { env?: { DEV?: boolean } }).env?.DEV === true) {
+            (window as unknown as { __r4yuhua?: Record<string, unknown> }).__r4yuhua = {
+              ...((window as unknown as { __r4yuhua?: Record<string, unknown> }).__r4yuhua || {}),
+              discardHit: true, rawExcess, excess,
+            };
+          }
+        }
         
         // 吕蒙「克己」：本回合出牌阶段未使用【杀】，可跳过弃牌阶段
         if (updatedPlayer.hero.name === '吕蒙' && (slashUsageRef.current[updatedPlayer.id] ?? 0) === 0) {
@@ -1573,7 +1680,7 @@ const App: React.FC = () => {
             playersRef.current = players;
             const finalPlayer = getPlayer(turnIndex);
             if (finalPlayer) {
-              const finalExcess = finalPlayer.hand.length - finalPlayer.hp;
+              const finalExcess = excessCards(finalPlayer);
               if (finalExcess > 0) {
                 // AI 智能弃牌：优先弃置低价值牌，保留桃/闪/杀等关键牌
                 // AI 弃牌：困难保留桃/闪/无懈/酒等关键牌；简单有概率乱弃
@@ -2904,7 +3011,7 @@ const App: React.FC = () => {
     if (phase !== GamePhase.DISCARD) return;
     const me = players.find(p => p.isHuman) || players[0];
     const cards = me.hand.filter(c => selectedCardIds.includes(c.id));
-    const excess = me.hand.length - me.hp;
+    const excess = excessCards(me);
     
     if (cards.length !== excess) {
       addLog(`需弃置 ${excess} 张牌，已选 ${cards.length} 张`, 'warning');
@@ -3063,6 +3170,11 @@ const App: React.FC = () => {
 
   // 技能发动横幅：武将名 + 技能名 金色大字短暂展示
   const showSkillBanner = useCallback((hero: string, skill: string) => {
+    // 仅本地开发：把技能发动记录挂到 window，便于 headless 实测取证（生产构建移除）
+    if ((import.meta as unknown as { env?: { DEV?: boolean } }).env?.DEV === true) {
+      const w = window as unknown as { __r4skills?: Array<{ hero: string; skill: string; t: number }> };
+      (w.__r4skills ||= []).push({ hero, skill, t: Date.now() });
+    }
     if (!isMutedRef.current) playSkillVoice(skill);
     // 找到发动者并高亮头像
     const caster = playersRef.current.find(p => p.hero.name === hero);
@@ -3196,6 +3308,25 @@ const App: React.FC = () => {
           }
         }
 
+        // 马云禄「凤魄」：回合内第一张【杀】仅指定唯一目标后，
+        // 可令自己摸 X 张牌或此【杀】伤害 +X（X 为目标方块手牌数）。
+        if (source.hero.name === '马云禄' && !fengpoUsedRef.current && slashTargets.length === 1) {
+          fengpoUsedRef.current = true;
+          const t0 = getPlayer(slashTargets[0].id);
+          const x = t0 ? t0.hand.filter(c => c.suit === Suit.DIAMOND).length : 0;
+          if (t0 && x > 0) {
+            if (t0.hp <= x + 1) {
+              fengpoBoostRef.current[card.id] = x;
+              addLog(`${source.hero.name} 发动「凤魄」，${t0.hero.name} 有 ${x} 张方块手牌，此【杀】伤害 +${x}`, 'skill');
+            } else {
+              drawCards(source.id, x);
+              addLog(`${source.hero.name} 发动「凤魄」，${t0.hero.name} 有 ${x} 张方块手牌，${source.hero.name} 摸 ${x} 张牌`, 'skill');
+            }
+            showSkillBanner(source.hero.name, '凤魄');
+            await delay(400);
+          }
+        }
+
         for (const target of slashTargets) {
           if (target.isDead) continue;
 
@@ -3212,6 +3343,34 @@ const App: React.FC = () => {
               addLog(`${target.hero.name} 发动「流离」，弃置【${cost.name}】将【杀】转移给 ${effectiveTarget.hero.name}`, 'skill');
               showSkillBanner(target.hero.name, '流离');
               await delay(500);
+            }
+          }
+
+          // 曹节「守玺」：成为【杀】的目标后，声明一种牌名（简化：声明【杀】），
+          // 除非使用者弃置一张该牌名的牌并获得曹节一张牌，否则此【杀】无效。
+          if (effectiveTarget.hero.name === '曹节' && source.id !== effectiveTarget.id) {
+            const declared = CardName.SHA;
+            if (!shouxiDeclaredRef.current.has(declared)) {
+              shouxiDeclaredRef.current.add(declared);
+              const payer = getPlayer(source.id);
+              const payCard = payer?.hand.find(c => c.name === declared);
+              const gainable = effectiveTarget.hand.length > 0;
+              // 简化：使用者手牌充裕（≥4）且曹节有牌可被获得时才支付
+              const pay = !!payCard && gainable && (payer?.hand.length ?? 0) >= 4;
+              if (pay && payCard && payer) {
+                discardCards(payer.id, [payCard]);
+                const gained = effectiveTarget.hand[Math.floor(Math.random() * effectiveTarget.hand.length)];
+                mutateHand(effectiveTarget.id, h => h.filter(c => c.id !== gained.id));
+                mutateHand(payer.id, h => [...h, gained]);
+                addLog(`${effectiveTarget.hero.name} 发动「守玺」声明【${declared}】，${payer.hero.name} 弃置【${payCard.name}】并获得一张牌，此【杀】继续`, 'skill');
+                showSkillBanner(effectiveTarget.hero.name, '守玺');
+                await delay(450);
+              } else {
+                addLog(`${effectiveTarget.hero.name} 发动「守玺」声明【${declared}】，${source.hero.name} 未支付，此【杀】无效`, 'skill');
+                showSkillBanner(effectiveTarget.hero.name, '守玺');
+                await delay(450);
+                continue;
+              }
             }
           }
 
@@ -4630,6 +4789,14 @@ const App: React.FC = () => {
         addLog(`【裸衣】触发，${source?.hero.name ?? ''} 的伤害+1`, 'danger');
       }
 
+      // 马云禄「凤魄」：首张【杀】的伤害加成（按牌 id 一次性结算）
+      if (damageCard && fengpoBoostRef.current[damageCard.id]) {
+        const bonus = fengpoBoostRef.current[damageCard.id];
+        delete fengpoBoostRef.current[damageCard.id];
+        finalAmount += bonus;
+        addLog(`【凤魄】伤害 +${bonus}`, 'danger');
+      }
+
       // 张春华「绝情」：造成的伤害改为失去体力（不触发防具/伤害后技能）
       if (source?.hero.name === '张春华' && sourceId !== victimId && finalAmount > 0) {
         const target = getPlayer(victimId)!;
@@ -4851,6 +5018,34 @@ const App: React.FC = () => {
     }
   };
 
+  // 关银屏「血祭」：出牌阶段限一次，弃置一张红色牌，
+  // 对攻击范围内至多 X 名其他角色各造成 1 点伤害，这些角色各摸一张牌（X = 已损失体力值）。
+  const resolveXueji = async (ownerId: number) => {
+    const owner = getPlayer(ownerId);
+    if (!owner || owner.isDead || owner.hero.name !== '关银屏' || xuejiUsedRef.current) return;
+    const lost = owner.maxHp - owner.hp;
+    if (lost <= 0) return;
+    const cost = owner.hand.find(c => c.suit === Suit.HEART || c.suit === Suit.DIAMOND);
+    if (!cost) return;
+    const victims = playersRef.current
+      .filter(p => !p.isDead && p.id !== ownerId && canReach(owner, p) && isEnemy(owner, p))
+      .sort((a, b) => a.hp - b.hp || a.hand.length - b.hand.length)
+      .slice(0, lost);
+    if (victims.length === 0) return;
+    xuejiUsedRef.current = true;
+    setHasUsedXueji(true);
+    discardCards(ownerId, [cost]);
+    addLog(`${owner.hero.name} 发动「血祭」，弃置【${cost.name}】，对 ${victims.map(t => t.hero.name).join('、')} 各造成 1 点伤害`, 'skill');
+    showSkillBanner(owner.hero.name, '血祭');
+    await delay(500);
+    for (const t of victims) {
+      if (getPlayer(t.id)?.isDead) continue;
+      await takeDamage(t.id, ownerId, 1);
+      const after = getPlayer(t.id);
+      if (after && !after.isDead) drawCards(t.id, 1);
+    }
+  };
+
   // --- AI Logic ---
   
   const cpuAI = async (aiPlayer: Player) => {
@@ -4864,6 +5059,14 @@ const App: React.FC = () => {
     // 0. 黄盖「苦肉」：手牌少且体力充足时卖血摸牌
     if (aiPlayer.hero.name === '黄盖' && aiPlayer.hp > 2 && aiPlayer.hand.length <= 3) {
       await resolveKurou(aiPlayer.id);
+      const refreshed = getPlayer(aiPlayer.id);
+      if (refreshed) aiPlayer = refreshed;
+      await delay(600);
+    }
+
+    // 0. 关银屏「血祭」：已受伤且范围内有敌人时发动
+    if (aiPlayer.hero.name === '关银屏' && !xuejiUsedRef.current && aiPlayer.maxHp > aiPlayer.hp) {
+      await resolveXueji(aiPlayer.id);
       const refreshed = getPlayer(aiPlayer.id);
       if (refreshed) aiPlayer = refreshed;
       await delay(600);
@@ -5291,7 +5494,7 @@ const App: React.FC = () => {
   const autoDiscardLowestCards = () => {
     const self = playersRef.current.find(p => p.isHuman) || players[0];
     if (!self) return;
-    const excess = self.hand.length - self.hp;
+    const excess = excessCards(self);
     if (excess <= 0) {
       setPhase(GamePhase.END);
       return;
@@ -5941,6 +6144,12 @@ const App: React.FC = () => {
       <div className="absolute bottom-20 left-1/2 -translate-x-1/2 w-1/3 h-px bg-gradient-to-r from-transparent via-[#d4af37]/50 to-transparent pointer-events-none z-10"></div>
       
       {/* 命中 / 治疗全屏闪光：用 id 作为 key 保证每次伤害都能重新触发动画 */}
+      {phaseBanner && fxLevel !== 'classic' && (
+        <div key={`phase-${phaseBanner.id}`} className="phase-banner" aria-live="polite">
+          <span className="phase-banner-text">{phaseBanner.text}</span>
+          <span className="phase-banner-sub">{phaseBanner.sub}</span>
+        </div>
+      )}
       {damageNumber && (
         <div key={`hit-${damageNumber.id}`} className="absolute inset-0 z-[70] pointer-events-none animate-hit-flash" />
       )}
@@ -8233,6 +8442,19 @@ const App: React.FC = () => {
                          </button>
                        )}
 
+                       {/* 关银屏「血祭」 */}
+                       {players[0].hero.name === '关银屏' && !hasUsedXueji
+                         && players[0].maxHp > players[0].hp
+                         && players[0].hand.some(c => c.suit === Suit.HEART || c.suit === Suit.DIAMOND) && (
+                         <button
+                           disabled={!!isProcessing || !!dyingState}
+                           onClick={() => { void resolveXueji(players[0].id); }}
+                           className="skill-btn text-base"
+                         >
+                           血祭
+                         </button>
+                       )}
+
                        {/* Diaochan's Lijian Skill Button */}
                        {players[0].hero.name === '貂蝉' && !isLijianMode && !hasUsedLijian && (
                          <button 
@@ -8331,7 +8553,7 @@ const App: React.FC = () => {
 
                 {/* Discard Button - 弃牌阶段（附「需弃置 N 张」提示，避免不知道点几张） */}
                 {isMyTurn && phase === GamePhase.DISCARD && !isAiTakeover && (() => {
-                  const excess = me.hand.length - me.hp;
+                  const excess = excessCards(me);
                   const picked = selectedCardIds.length;
                   const exact = excess === picked && excess > 0;
                   const over = picked > excess;

@@ -403,8 +403,8 @@ export const HEROES: Hero[] = [
     maxHp: 3,
     avatarUrl: 'images/heroes/关银屏.webp',
     description: '将门虎女',
-    skillName: '虎啸',
-    skillDesc: '虎啸：锁定技，你每造成一次伤害后，摸一张牌。',
+    skillName: '血祭 / 虎啸',
+    skillDesc: '血祭：出牌阶段限一次，弃置一张红色牌，对攻击范围内至多X名其他角色各造成1点伤害，这些角色各摸一张牌（X为你已损失的体力值）。虎啸：锁定技，你每造成一次伤害后，摸一张牌。',
     gender: 'female',
   },
   {
@@ -414,8 +414,8 @@ export const HEROES: Hero[] = [
     maxHp: 3,
     avatarUrl: 'images/heroes/张星彩.webp',
     description: '星之少女',
-    skillName: '枪舞',
-    skillDesc: '枪舞：出牌阶段限一次，你可以进行判定；直到回合结束，你使用点数小于判定结果的【杀】无距离限制，使用点数大于判定结果的【杀】不计入使用次数。',
+    skillName: '甚贤 / 枪舞',
+    skillDesc: '甚贤：每名角色的回合限一次，你的回合外，当其他角色因弃置而失去牌且其中有基本牌时，你可以摸一张牌。枪舞：出牌阶段限一次，你可以进行判定；直到回合结束，你使用点数小于判定结果的【杀】无距离限制，使用点数大于判定结果的【杀】不计入使用次数。',
     gender: 'female',
   },
   {
@@ -436,8 +436,8 @@ export const HEROES: Hero[] = [
     maxHp: 3,
     avatarUrl: 'images/heroes/诸葛果.webp',
     description: '羽化登仙',
-    skillName: '祈禳',
-    skillDesc: '祈禳：当一张装备牌置入你的装备区后，你从牌堆获得一张锦囊牌；牌堆中没有锦囊牌则改为摸一张牌。',
+    skillName: '祈禳 / 羽化',
+    skillDesc: '祈禳：当一张装备牌置入你的装备区后，你从牌堆获得一张锦囊牌；牌堆中没有锦囊牌则改为摸一张牌。羽化：锁定技，非基本牌不计入手牌上限（本作实现部分；结束阶段的观顶分支尚未实现）。',
     gender: 'female',
   },
   {
@@ -447,8 +447,8 @@ export const HEROES: Hero[] = [
     maxHp: 3,
     avatarUrl: 'images/heroes/曹节.webp',
     description: '汉室皇后',
-    skillName: '惠民',
-    skillDesc: '惠民：结束阶段，你可以摸X张牌（X为手牌数小于体力值的角色数），然后依次交给这些角色各一张手牌。',
+    skillName: '守玺 / 惠民',
+    skillDesc: '守玺：当你成为【杀】的目标后，可声明一种未以此法声明过的基本牌或锦囊牌牌名（本作固定声明【杀】），除非使用者弃置一张你声明的牌并获得你的一张牌，否则此【杀】无效。惠民：结束阶段，你可以摸X张牌（X为手牌数小于体力值的角色数），然后依次交给这些角色各一张手牌。',
     gender: 'female',
   },
   {
@@ -458,8 +458,8 @@ export const HEROES: Hero[] = [
     maxHp: 3,
     avatarUrl: 'images/heroes/伏皇后.webp',
     description: '汉献帝皇后',
-    skillName: '求援',
-    skillDesc: '求援：当你成为【杀】的目标时，你可以指定另一名其他角色，除非该角色交给你一张【闪】，否则其也成为此【杀】的目标。',
+    skillName: '惴恐 / 求援',
+    skillDesc: '惴恐：其他角色的回合开始时，若你已受伤，你可以与其拼点；若你赢，该角色本回合跳过出牌阶段；若你没赢，该角色本回合与你的距离视为1。求援：当你成为【杀】的目标时，你可以指定另一名其他角色，除非该角色交给你一张【闪】，否则其也成为此【杀】的目标。',
     gender: 'female',
   },
   {
@@ -469,8 +469,8 @@ export const HEROES: Hero[] = [
     maxHp: 4,
     avatarUrl: 'images/heroes/马云禄.webp',
     description: '马踏西凉',
-    skillName: '马术',
-    skillDesc: '马术：锁定技，你计算与其他角色的距离-1。',
+    skillName: '凤魄 / 马术',
+    skillDesc: '凤魄：你在回合内使用第一张【杀】或【决斗】仅指定唯一目标后，你可选择一项：1.你摸X张牌；2.此牌的伤害+X（X为该目标的方块手牌数）。本作仅覆盖【杀】。马术：锁定技，你计算与其他角色的距离-1。',
     gender: 'female',
   }
 ];

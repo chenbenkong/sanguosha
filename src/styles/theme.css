@@ -2901,3 +2901,47 @@ a:focus-visible {
     text-align: center;
   }
 }
+
+/* ===== 阶段切换横幅：≤0.8s，pointer-events-none，不阻塞操作 ===== */
+@keyframes phaseBannerIn {
+  0% { opacity: 0; transform: translate(-50%, -10px); }
+  18% { opacity: 1; transform: translate(-50%, 0); }
+  72% { opacity: 1; transform: translate(-50%, 0); }
+  100% { opacity: 0; transform: translate(-50%, -6px); }
+}
+.phase-banner {
+  position: fixed;
+  top: clamp(140px, 24vh, 230px);
+  left: 50%;
+  transform: translate(-50%, 0);
+  z-index: 80;
+  pointer-events: none;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 6px 18px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, rgba(20, 15, 10, 0.84) 0%, rgba(12, 9, 6, 0.78) 100%);
+  border: 1px solid rgba(212, 175, 55, 0.45);
+  box-shadow: 0 6px 22px rgba(0, 0, 0, 0.42), inset 0 0 18px rgba(212, 175, 55, 0.08);
+  animation: phaseBannerIn 0.76s ease-out both;
+  white-space: nowrap;
+}
+.phase-banner-text {
+  font-family: 'Ma Shan Zheng', 'STKaiti', 'KaiTi', serif;
+  font-size: 19px;
+  letter-spacing: 0.22em;
+  color: #f0dfae;
+}
+.phase-banner-sub {
+  font-size: 12px;
+  letter-spacing: 0.12em;
+  color: rgba(232, 220, 195, 0.72);
+}
+@media (max-width: 640px) {
+  .phase-banner { top: clamp(110px, 18vh, 160px); padding: 5px 12px; }
+  .phase-banner-text { font-size: 16px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .phase-banner { animation: none; opacity: 0.92; }
+}
