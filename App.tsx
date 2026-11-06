@@ -325,6 +325,7 @@ const App: React.FC = () => {
   const hongyiUsedRef = useRef<boolean>(false); // 羊徽瑜「弘仪」本回合已发动
   const firstUsedCardRef = useRef<Set<string>>(new Set()); // 通用：每名角色每回合的第一张牌
   const turnOwnerIdRef = useRef<number>(-1); // 当前回合角色（供明置锁定等机制使用）
+  const fangzongDisabledTurnRef = useRef<number>(-1); // 花鬘「芳踪」失效的回合
   const fumianTargetUsedRef = useRef<boolean>(false); // 吴苋「福绵」本回合额外目标已用
   const cangHuiUsedRef = useRef<boolean>(false); // 孙鲁班「谮毁」本回合已发动
   const shenxianTurnRef = useRef<number>(-1); // 张星彩「甚贤」本回合是否已发动
@@ -867,6 +868,53 @@ const App: React.FC = () => {
     addLog(`【虚拟牌】${actor.hero.name} 视为使用${opts.ignoreDistance ? '无距离限制的' : ''}【${cardName}】${targets.length ? ` → ${targets.map(t => t.hero.name).join('、')}` : ''}`, 'info');
     await resolveCardEffect(actor, targets.length ? targets : [actor], card);
     return true;
+  };
+
+  // ── 花鬘「象阵 / 芳踪 / 嬉战」──
+  // 「芳踪」双向目标限制：每帧刷新规则闭包，确保读到最新状态
+  targetLegalityRulesRef.current = [(src, tgt, card) => {
+    if (src.id === tgt.id) return null;
+    const isDamage = card.name === CardName.SHA || card.name === CardName.JUEDOU || card.name === CardName.HUOGONG;
+    if (!isDamage) return null;
+    const active = (p: Player) => p.hero.name === '花鬘' && !p.isDead && skillsOn(p.id)
+      && fangzongDisabledTurnRef.current !== turnCountRef.current;
+    if (active(src) && canReach(src, tgt)) return '芳踪';
+    const hm = playersRef.current.find(p => p.id === tgt.id);
+    if (hm && active(hm) && src.id !== hm.id && canReach(src, hm)) return '芳踪';
+    return null;
+  }];
+  // 「嬉战」：其他角色回合开始时，弃一张牌令本回合「芳踪」失效，按花色结算；无牌则流失1点体力
+  turnStartHookRef.current = async (owner: Player) => {
+    const hm = playersRef.current.find(p => !p.isDead && p.hero.name === '花鬘' && skillsOn(p.id));
+    if (!hm || hm.id === owner.id) return;
+    const hmNow = getPlayer(hm.id);
+    const ownerNow = getPlayer(owner.id);
+    if (!hmNow || !ownerNow) return;
+    if (hmNow.hand.length > 0) {
+      const low = [...hmNow.hand].sort((a, b) => rankValue(a.rank) - rankValue(b.rank))[0];
+      discardCards(hmNow.id, [low]);
+      fangzongDisabledTurnRef.current = turnCountRef.current;
+      addLog(`【嬉战】花鬘 弃置【${low.name}】（${low.suit}），本回合「芳踪」失效`, 'skill');
+      showSkillBanner('花鬘', '嬉战');
+      await delay(250);
+      if (low.suit === Suit.SPADE) {
+        if (!window.jiuBoost) window.jiuBoost = {};
+        window.jiuBoost[ownerNow.id] = true;
+        addLog(`【嬉战】黑桃：${ownerNow.hero.name} 视为使用【酒】`, 'skill');
+      } else if (low.suit === Suit.HEART) {
+        drawCards(hmNow.id, 2);
+        addLog('【嬉战】红桃：花鬘 视为使用【无中生有】，摸两张牌', 'skill');
+      } else if (low.suit === Suit.CLUB) {
+        updatePlayer(hmNow.id, { isChained: true });
+        updatePlayer(ownerNow.id, { isChained: true });
+        addLog(`【嬉战】梅花：花鬘 视为对 ${ownerNow.hero.name} 使用【铁索连环】，两人横置`, 'skill');
+      } else {
+        await castVirtualCard(hmNow.id, CardName.SHA, [ownerNow.id], { attribute: 'fire', ignoreDistance: true, reason: '嬉战·方块' });
+      }
+    } else {
+      addLog('【嬉战】花鬘 没有牌可弃，流失1点体力', 'skill');
+      await takeDamage(hmNow.id, hmNow.id, 1);
+    }
   };
 
   // ── 王元姬「谦冲 / 帷幕 / 明哲」──
@@ -3005,6 +3053,22 @@ const App: React.FC = () => {
               drawCards(wj.id, lost);
               addLog(`【尚俭】王元姬本回合失去 ${lost} 张牌（不大于体力 ${wj.hp}），摸 ${lost} 张牌`, 'skill');
               showSkillBanner('王元姬', '尚俭');
+              await delay(400);
+            }
+          }
+        }
+
+        // 花鬘「芳踪」：结束阶段，将手牌摸至X张（X为场上存活人数；嬉战弃牌则本回合失效）
+        if (currentPlayer.hero.name === '花鬘' && skillsOn(currentPlayer.id)
+            && fangzongDisabledTurnRef.current !== turnCountRef.current) {
+          const hm = getPlayer(currentPlayer.id);
+          if (hm) {
+            const alive = playersRef.current.filter(p => !p.isDead).length;
+            const need = Math.max(0, alive - hm.hand.length);
+            if (need > 0) {
+              drawCards(hm.id, need);
+              addLog(`【芳踪】花鬘 结束阶段将手牌摸至 ${alive} 张（摸 ${need} 张）`, 'skill');
+              showSkillBanner('花鬘', '芳踪');
               await delay(400);
             }
           }
@@ -5452,7 +5516,15 @@ const App: React.FC = () => {
       else if (card.name === CardName.NANMAN) {
         playCard(source.id, card);
         addLog('南蛮入侵！全场需打出【杀】', 'danger');
+        const nanmanHpBefore = new Map(targets.map(t => [t.id, t.hp] as [number, number]));
         for (const t of targets) {
+          // 花鬘「象阵」：南蛮入侵对其无效
+          if (t.hero.name === '花鬘' && skillsOn(t.id)) {
+            addLog(`${t.hero.name} 发动「象阵」，「南蛮入侵」对其无效`, 'skill');
+            showSkillBanner('花鬘', '象阵');
+            await delay(400);
+            continue;
+          }
           // 祝融「巨象」：南蛮入侵对其无效，并摸一张牌
           if (t.hero.name === '祝融') {
             addLog(`${t.hero.name} 发动「巨象」，「南蛮入侵」对其无效`, 'skill');
@@ -5475,6 +5547,20 @@ const App: React.FC = () => {
             await triggerReaction(t.id, source.id, CardName.SHA, card);
           }
           await delay(500);
+        }
+        // 花鬘「象阵」：结算结束后若此牌造成过伤害，花鬘与伤害来源各摸一张牌
+        const xiangzhenOwner = playersRef.current.find(p => !p.isDead && p.hero.name === '花鬘' && skillsOn(p.id));
+        if (xiangzhenOwner) {
+          const hurt = targets.some(t => {
+            const now = getPlayer(t.id);
+            return !!now && now.hp < (nanmanHpBefore.get(t.id) ?? now.hp);
+          });
+          if (hurt) {
+            drawCards(xiangzhenOwner.id, 1);
+            if (xiangzhenOwner.id !== source.id) drawCards(source.id, 1);
+            addLog(`【象阵】南蛮入侵造成过伤害，${xiangzhenOwner.hero.name}${xiangzhenOwner.id !== source.id ? ` 与 ${source.hero.name}` : ''}各摸一张牌`, 'skill');
+            showSkillBanner('花鬘', '象阵');
+          }
         }
       }
       // TAO
@@ -7673,6 +7759,12 @@ const App: React.FC = () => {
           && (!slash || !getTargetLegalityVeto(aiNow, p, slash)))
         .sort((a, b) => a.hp - b.hp)[0];
       if (!slash || !target || !canPlaySlash(aiNow, slash)) break;
+      // 花鬘「芳踪」：AI 规避——无法指定攻击范围内的目标时不使用【杀】
+      if (!target && slash && aiNow.hero.name === '花鬘') {
+        addLog('【芳踪】花鬘 受「芳踪」限制，无法指定攻击范围内的角色，本回合不使用【杀】', 'skill');
+        showSkillBanner('花鬘', '芳踪');
+        break;
+      }
       if (zhangbaCost.length === 2) {
         discardCards(aiNow.id, [zhangbaCost[1]]);
         addLog(`${aiNow.hero.name} 发动【丈八蛇矛】，将两张手牌当【杀】使用`, 'skill');
