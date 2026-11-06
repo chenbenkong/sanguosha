@@ -319,6 +319,10 @@ const App: React.FC = () => {
   const turnUsedOnOthersRef = useRef<Record<number, boolean>>({}); // 蔡夫人「窃听」：本回合是否用牌指定过其他角色
   const lianzhuUsedRef = useRef<boolean>(false); // 董白「连诛」本回合已发动
   const wuyuanUsedRef = useRef<boolean>(false); // 胡金定「武缘」本回合已发动
+  const sheyiUsedRef = useRef<boolean>(false); // 蔡贞姬「舍裔」本轮已发动
+  const yanjiaoUsedRef = useRef<boolean>(false); // 张昌蒲「严教」本回合已发动
+  const usedTypesRef = useRef<Set<CardType>>(new Set()); // 蔡贞姬「天音」本回合使用过的牌类型
+  const hongyiUsedRef = useRef<boolean>(false); // 羊徽瑜「弘仪」本回合已发动
   const fumianTargetUsedRef = useRef<boolean>(false); // 吴苋「福绵」本回合额外目标已用
   const cangHuiUsedRef = useRef<boolean>(false); // 孙鲁班「谮毁」本回合已发动
   const shenxianTurnRef = useRef<number>(-1); // 张星彩「甚贤」本回合是否已发动
@@ -1619,6 +1623,22 @@ const App: React.FC = () => {
       humanReactionResolver.current = null;
     }
 
+    // 羊徽瑜「劝封」：其他角色死亡后，可失去「弘仪」并获得其所有技能（替换武将牌），体力上限+1、回复1
+    const quanfengOwner = playersRef.current.find(p => !p.isDead && p.id !== victimId && p.hero.name === '羊徽瑜' && skillsOn(p.id) && !p.quanfengUsed);
+    if (quanfengOwner) {
+      const newMax = quanfengOwner.maxHp + 1;
+      const healed = Math.min(newMax, quanfengOwner.hp + 1);
+      updatePlayer(quanfengOwner.id, {
+        hero: victim.hero,
+        maxHp: newMax,
+        hp: healed,
+        quanfengUsed: true,
+        hongyiTargetId: null,
+      });
+      addLog(`【劝封】羊徽瑜失去「弘仪」，获得 ${victim.hero.name} 的全部技能，体力上限+1并回复1点体力（${healed}/${newMax}）`, 'skill');
+      showSkillBanner('羊徽瑜', '劝封');
+    }
+
     if (killerId !== undefined && killerId !== victimId) {
       const killer = getPlayer(killerId)!;
       // 灵雎「焚心」：限定技，杀死角色后若自己不为主公，可与死者交换身份牌（AI 仅在击杀主公时使用）
@@ -1803,6 +1823,50 @@ const App: React.FC = () => {
         {
           const wj = playersRef.current.find(p => !p.isDead && p.hero.name === '王元姬');
           if (wj) updatePlayer(wj.id, { lostCardsThisTurn: 0, qianchongType: null });
+        }
+        usedTypesRef.current = new Set(); // 蔡贞姬「天音」：每回合重置用牌类型记录
+        if (currentPlayer.hero.name === '蔡贞姬') sheyiUsedRef.current = false;
+        if (currentPlayer.hero.name === '张昌蒲') yanjiaoUsedRef.current = false;
+        if (currentPlayer.hero.name === '羊徽瑜') {
+          hongyiUsedRef.current = false;
+          updatePlayer(currentPlayer.id, { hongyiTargetId: null }); // 弘仪持续至羊徽瑜的下个回合开始
+        }
+
+        // 张昌蒲「严教」：上回合交出牌数，在下回合开始时摸回
+        {
+          const zcp = playersRef.current.find(p => !p.isDead && p.hero.name === '张昌蒲');
+          if (zcp && (zcp.yanjiaoCount ?? 0) > 0) {
+            const n = zcp.yanjiaoCount!;
+            updatePlayer(zcp.id, { yanjiaoCount: 0 });
+            drawCards(zcp.id, n);
+            addLog(`【严教】张昌蒲下回合开始，摸 ${n} 张牌`, 'skill');
+            showSkillBanner('张昌蒲', '严教');
+            await delay(300);
+          }
+        }
+
+        // 周妃「箜声」：准备阶段将至多两张牌置于武将牌上；「良姻」令手牌多于她的一名角色摸一张
+        if (currentPlayer.hero.name === '周妃' && skillsOn(currentPlayer.id)) {
+          const p = getPlayer(currentPlayer.id);
+          if (p && p.hand.length > 0) {
+            const keepValue = (c: Card) => (c.name === CardName.SHA ? 2 : c.type === CardType.BASIC ? 1 : 3);
+            const picked = [...p.hand].sort((a, b) => keepValue(a) - keepValue(b)).slice(0, 2);
+            if (picked.length > 0) {
+              mutateHand(p.id, h => h.filter(c => !picked.some(x => x.id === c.id)));
+              updatePlayer(p.id, { placedCards: [...(p.placedCards ?? []), ...picked] });
+              addLog(`【箜声】周妃将 ${picked.length} 张牌置于武将牌上`, 'skill');
+              showSkillBanner('周妃', '箜声');
+              const myHandAfter = p.hand.length - picked.length;
+              const richer = playersRef.current.filter(o => !o.isDead && o.id !== p.id && o.hand.length > myHandAfter);
+              if (richer.length > 0) {
+                const t = richer.sort((a, b) => b.hand.length - a.hand.length)[0];
+                drawCards(t.id, 1);
+                addLog(`【良姻】周妃令手牌多于自己的 ${t.hero.name} 摸一张牌`, 'skill');
+                showSkillBanner('周妃', '良姻');
+              }
+              await delay(300);
+            }
+          }
         }
         jiaozhaoUsedRef.current = false;
         setHasUsedJiaozhao(false);
@@ -2204,6 +2268,44 @@ const App: React.FC = () => {
             addLog(`【谦冲】王元姬选择「${label}」，本回合使用此类牌无次数与距离限制`, 'skill');
             showSkillBanner('王元姬', '谦冲');
             await delay(300);
+          }
+        }
+
+        // 羊徽瑜「弘仪」：出牌阶段限一次，指定一名其他角色，直至你的下回合开始
+        if (currentPlayer.hero.name === '羊徽瑜' && skillsOn(currentPlayer.id) && !hongyiUsedRef.current) {
+          const p = getPlayer(currentPlayer.id)!;
+          const others = playersRef.current.filter(o => !o.isDead && o.id !== p.id);
+          if (others.length > 0) {
+            const target = others.sort((a, b) => (isEnemy(p, a) ? 0 : 1) - (isEnemy(p, b) ? 0 : 1))[0];
+            hongyiUsedRef.current = true;
+            updatePlayer(p.id, { hongyiTargetId: target.id });
+            addLog(`【弘仪】羊徽瑜指定 ${target.hero.name}，直至下回合开始其造成伤害时进行判定`, 'skill');
+            showSkillBanner('羊徽瑜', '弘仪');
+            await delay(300);
+          }
+        }
+
+        // 张昌蒲「严教」：将某花色的所有手牌交给一名敌方角色，然后对其造成1点伤害，下回合摸回等量牌
+        if (currentPlayer.hero.name === '张昌蒲' && skillsOn(currentPlayer.id) && !yanjiaoUsedRef.current) {
+          const p = getPlayer(currentPlayer.id);
+          if (p && p.hand.length > 0) {
+            const suits = [Suit.SPADE, Suit.HEART, Suit.CLUB, Suit.DIAMOND];
+            const best = suits.map(s => ({ s, n: p.hand.filter(c => c.suit === s).length }))
+              .sort((a, b) => b.n - a.n)[0];
+            const enemies = playersRef.current.filter(o => !o.isDead && o.id !== p.id && isEnemy(p, o));
+            if (best.n > 0 && enemies.length > 0) {
+              const target = enemies.sort((a, b) => a.hp - b.hp)[0];
+              const cards = p.hand.filter(c => c.suit === best.s);
+              yanjiaoUsedRef.current = true;
+              mutateHand(p.id, h => h.filter(c => c.suit !== best.s));
+              mutateHand(target.id, h => [...h, ...cards]);
+              updatePlayer(p.id, { yanjiaoCount: cards.length });
+              addLog(`【严教】张昌蒲将 ${cards.length} 张${best.s}牌交给 ${target.hero.name}，并对其造成1点伤害`, 'skill');
+              showSkillBanner('张昌蒲', '严教');
+              await delay(300);
+              await takeDamage(target.id, p.id, 1, undefined, undefined);
+              await delay(300);
+            }
           }
         }
 
@@ -2744,6 +2846,58 @@ const App: React.FC = () => {
               showSkillBanner('王元姬', '尚俭');
               await delay(400);
             }
+          }
+        }
+
+        // 周妃「箜声」：结束阶段使用置于武将牌上的装备牌，并获得其余的牌；「良姻」令手牌少者弃一张
+        if (currentPlayer.hero.name === '周妃' && skillsOn(currentPlayer.id)) {
+          const zf = getPlayer(currentPlayer.id);
+          if (zf && (zf.placedCards?.length ?? 0) > 0) {
+            const placed = zf.placedCards!;
+            const equips = placed.filter(c => c.type === CardType.EQUIPMENT);
+            const rest = placed.filter(c => c.type !== CardType.EQUIPMENT);
+            const eq = { ...(zf.equipment ?? {}) };
+            const equipped: Card[] = [];
+            for (const c of equips) {
+              const slot = EQUIP_META[c.name]?.slot;
+              if (slot && !eq[slot]) { eq[slot] = c; equipped.push(c); } else { rest.push(c); }
+            }
+            updatePlayer(zf.id, { placedCards: [], equipment: eq });
+            if (rest.length > 0) mutateHand(zf.id, h => [...h, ...rest]);
+            addLog(`【箜声】周妃收回武将牌上的 ${placed.length} 张牌${equipped.length ? `（其中 ${equipped.map(c => `【${c.name}】`).join('')} 已装备）` : ''}`, 'skill');
+            showSkillBanner('周妃', '箜声');
+            const zfAfter = getPlayer(zf.id);
+            const poorer = playersRef.current.filter(o => !o.isDead && o.id !== zf.id && o.hand.length < (zfAfter?.hand.length ?? 0) && o.hand.length > 0);
+            if (poorer.length > 0) {
+              const t = poorer.sort((a, b) => a.hand.length - b.hand.length)[0];
+              const low = [...t.hand].sort((a, b) => rankValue(a.rank) - rankValue(b.rank))[0];
+              discardCards(t.id, [low]);
+              addLog(`【良姻】周妃令手牌少于自己的 ${t.hero.name} 弃置一张牌`, 'skill');
+              showSkillBanner('周妃', '良姻');
+            }
+            await delay(300);
+          }
+        }
+
+        // 蔡贞姬「天音」：结束阶段，从牌堆获得本回合未使用过的牌类型各一张
+        if (currentPlayer.hero.name === '蔡贞姬' && skillsOn(currentPlayer.id)) {
+          const missingTypes = [CardType.BASIC, CardType.SCROLL, CardType.EQUIPMENT]
+            .filter(t => !usedTypesRef.current.has(t));
+          const picks: Card[] = [];
+          for (const t of missingTypes) {
+            const c = deckRef.current.find(x => x.type === t && !picks.some(p => p.id === x.id));
+            if (c) picks.push(c);
+          }
+          if (picks.length > 0) {
+            setDeck(prev => {
+              const next = prev.filter(c => !picks.some(p => p.id === c.id));
+              deckRef.current = next;
+              return next;
+            });
+            picks.forEach(c => mutateHand(currentPlayer.id, h => [...h, c]));
+            addLog(`【天音】蔡贞姬从牌堆获得 ${picks.map(c => `【${c.name}】`).join('')}`, 'skill');
+            showSkillBanner('蔡贞姬', '天音');
+            await delay(300);
           }
         }
 
@@ -4658,6 +4812,7 @@ const App: React.FC = () => {
   };
 
   const playCard = (playerId: number, card: Card) => {
+    usedTypesRef.current.add(card.type); // 蔡贞姬「天音」：记录本回合使用过的牌类型
     discardCards(playerId, [card]);
     showCardVisual(card, getPlayer(playerId)?.hero.name || '', 1200, getPlayer(playerId)?.hero.gender);
   };
@@ -6547,6 +6702,40 @@ const App: React.FC = () => {
         return;
       }
 
+      // 羊徽瑜「弘仪」：被指定角色造成伤害时判定，红色受伤角色摸一张，黑色此伤害-1
+      const hyOwner = playersRef.current.find(p => !p.isDead && p.hero.name === '羊徽瑜' && skillsOn(p.id));
+      if (hyOwner && hyOwner.hongyiTargetId === sourceId && sourceId !== victimId && finalAmount > 0) {
+        const hongyiJudge = await performJudgment(hyOwner.id, '弘仪');
+        if (hongyiJudge) {
+          if (hongyiJudge.suit === Suit.HEART || hongyiJudge.suit === Suit.DIAMOND) {
+            drawCards(victimId, 1);
+            addLog(`【弘仪】判定为红色，${getPlayer(victimId)?.hero.name} 摸一张牌`, 'skill');
+          } else {
+            finalAmount = Math.max(0, finalAmount - 1);
+            addLog(`【弘仪】判定为黑色，此伤害 -1`, 'skill');
+          }
+          showSkillBanner('羊徽瑜', '弘仪');
+          await delay(300);
+          if (finalAmount === 0) return;
+        }
+      }
+
+      // 蔡贞姬「舍裔」：其他角色受到伤害时，若其体力小于蔡贞姬，可交给其X张牌防止此伤害（每轮一次）
+      const czy = playersRef.current.find(p => !p.isDead && p.hero.name === '蔡贞姬' && skillsOn(p.id));
+      if (czy && czy.id !== victimId && finalAmount > 0 && !sheyiUsedRef.current && czy.hp > 0) {
+        const v = getPlayer(victimId);
+        if (v && v.hp < czy.hp && v.hp - finalAmount <= 1 && czy.hand.length >= czy.hp) {
+          const give = czy.hand.slice(0, czy.hp);
+          sheyiUsedRef.current = true;
+          mutateHand(czy.id, h => h.filter(c => !give.some(g => g.id === c.id)));
+          mutateHand(victimId, h => [...h, ...give]);
+          addLog(`【舍裔】蔡贞姬将 ${give.length} 张牌交给 ${v.hero.name}，防止此伤害`, 'skill');
+          showSkillBanner('蔡贞姬', '舍裔');
+          await delay(300);
+          return;
+        }
+      }
+
       // 寒冰剑：造成伤害时，可防止伤害并改为弃置目标两张牌
       if (damageCard?.name === CardName.SHA && source?.equipment?.weapon?.name === CardName.HANBING) {
         const v = getPlayer(victimId);
@@ -6679,6 +6868,27 @@ const App: React.FC = () => {
         await delay(400);
       }
 
+      // 张昌蒲「抵诽」：受到伤害后摸或弃一张并展示手牌，若无伤害牌花色则回复1点体力
+      const zcpVictim = getPlayer(victimId);
+      if (zcpVictim && !zcpVictim.isDead && zcpVictim.hero.name === '张昌蒲' && skillsOn(victimId) && damageCard) {
+        const wantDraw = zcpVictim.hand.length < zcpVictim.hp;
+        if (wantDraw) {
+          drawCards(victimId, 1);
+        } else if (zcpVictim.hand.length > 0) {
+          const low = [...zcpVictim.hand].sort((a, b) => rankValue(a.rank) - rankValue(b.rank))[0];
+          discardCards(victimId, [low]);
+        }
+        const shown = (getPlayer(victimId)?.hand ?? []).map(c => `【${c.name}】`).join('');
+        addLog(`【抵诽】张昌蒲${wantDraw ? '摸一张牌' : '弃置一张牌'}，展示手牌：${shown || '（无）'}`, 'skill');
+        showSkillBanner('张昌蒲', '抵诽');
+        const zcpAfter = getPlayer(victimId);
+        if (zcpAfter && !zcpAfter.isDead && !zcpAfter.hand.some(c => c.suit === damageCard.suit)) {
+          recoverHp(victimId, 1);
+          addLog(`【抵诽】张昌蒲手牌均无${damageCard.suit}花色，回复1点体力`, 'skill');
+        }
+        await delay(300);
+      }
+
       // 郭皇后「殚心」：受到伤害后，摸一张牌或升级「矫诏」（最多升级两次）
       if (victim.hero.name === '郭皇后' && skillsOn(victimId)) {
         const curLevel = guohuanghouLevelRef.current[victimId] ?? 1;
@@ -6772,8 +6982,19 @@ const App: React.FC = () => {
         }
       }
 
+      // 羊徽瑜「劝封」：处于濒死状态时，可加2点体力上限并回复4点体力（限定技）
+      const hyDying = getPlayer(victimId);
+      if (hyDying && hyDying.hero.name === '羊徽瑜' && skillsOn(victimId) && !hyDying.quanfengUsed && newHp <= 0) {
+        const newMax = hyDying.maxHp + 2;
+        const healed = Math.min(newMax, Math.max(0, hyDying.hp) + 4);
+        updatePlayer(victimId, { maxHp: newMax, hp: healed, quanfengUsed: true });
+        addLog(`【劝封】羊徽瑜加2点体力上限并回复4点体力（${healed}/${newMax}）`, 'skill');
+        showSkillBanner('羊徽瑜', '劝封');
+        await delay(400);
+      }
+
       // 当体力值小于等于0时，进入濒死状态
-      if (newHp <= 0) {
+      if ((getPlayer(victimId)?.hp ?? 0) <= 0) {
         addLog(`${victim.hero.name} 进入濒死状态，需要求桃！`, 'danger');
         // 进入濒死状态，开始求桃
         const isSaved = await askForPeaches(victimId);

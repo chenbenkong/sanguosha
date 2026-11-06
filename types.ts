@@ -146,6 +146,14 @@ export interface Player {
   lostCardsThisTurn?: number;
   /** 王元姬「谦冲」本回合选择的无次数/无距离限制牌型 */
   qianchongType?: 'basic' | 'trick' | 'equip' | null;
+  /** 周妃「箜声」置于武将牌上的牌 */
+  placedCards?: Card[];
+  /** 张昌蒲「严教」下回合开始应摸的牌数 */
+  yanjiaoCount?: number;
+  /** 羊徽瑜「弘仪」指定的角色（直至其下回合开始） */
+  hongyiTargetId?: number | null;
+  /** 羊徽瑜「劝封」限定技已使用 */
+  quanfengUsed?: boolean;
   /** 吴苋「福绵」本回合选项（1 额外摸牌 / 2 额外目标） */
   fumianChoice?: number;
   /** 吴苋「福绵」选项 1 数值（额外摸牌数） */
