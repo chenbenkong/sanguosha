@@ -44,10 +44,13 @@ declare global {
 }
 
 
-// 特效强度：关 / 克制（默认）/ 完整
-type FxLevel = 'off' | 'subtle' | 'full';
-const FX_LABEL: Record<FxLevel, string> = { off: '特效·关', subtle: '特效·克制', full: '特效·完整' };
-const FX_TAG: Record<FxLevel, string> = { off: '关', subtle: '克', full: '全' };
+// 特效强度：经典（全无）/ 纯净（默认，干净卡面 + 翻牌 + 濒死）/ 克制（+ 技能特写）/ 完整（+ 出牌飞行、扫光）
+type FxLevel = 'classic' | 'pure' | 'subtle' | 'full';
+const FX_LABEL: Record<FxLevel, string> = {
+  classic: '特效·经典', pure: '特效·纯净', subtle: '特效·克制', full: '特效·完整',
+};
+const FX_TAG: Record<FxLevel, string> = { classic: '典', pure: '净', subtle: '克', full: '全' };
+const FX_ORDER: FxLevel[] = ['classic', 'pure', 'subtle', 'full'];
 
 const App: React.FC = () => {
   // --- Theme ---
@@ -301,6 +304,14 @@ const App: React.FC = () => {
   const [detailHero, setDetailHero] = useState<Hero | null>(null);
   // 对局战报折叠（桌面）
   const [logCollapsed, setLogCollapsed] = useState<boolean>(true);
+  // 出牌顺序条折叠（桌面竖条 / 手机顶部横条共用同一偏好，默认展开）
+  const [orderCollapsed, setOrderCollapsed] = useState<boolean>(() => {
+    try { return localStorage.getItem('sgs-order-collapsed') === '1'; } catch { return false; }
+  });
+  const setOrderCollapsedPersist = (v: boolean) => {
+    setOrderCollapsed(v);
+    try { localStorage.setItem('sgs-order-collapsed', v ? '1' : '0'); } catch { /* ignore */ }
+  };
 
   // 玩法说明弹窗（首页）
   const [showRules, setShowRules] = useState<boolean>(false);
@@ -341,6 +352,9 @@ const App: React.FC = () => {
   const [healAnimTarget, setHealAnimTarget] = useState<number | null>(null);
   const [healNumber, setHealNumber] = useState<{ targetId: number, amount: number, id: string } | null>(null);
   const [visualCard, setVisualCard] = useState<{ card: Card, playerName: string } | null>(null);
+  // 出牌飞行（仅「完整」档）：牌从出牌者座位飞向目标座位
+  const [flightFx, setFlightFx] = useState<{ card: Card, id: number, x0: number, y0: number, x1: number, y1: number } | null>(null);
+  const flightTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   // 判定演出：判定牌翻面 + 判定原因（区别于普通出牌）
   const [judgmentVisual, setJudgmentVisual] = useState<{ card: Card, playerName: string, reason: string, id: number } | null>(null);
@@ -377,18 +391,25 @@ const App: React.FC = () => {
     setMotionOn(next);
     try { localStorage.setItem('sgs-motion', next ? '1' : '0'); } catch { /* ignore */ }
   };
-  // 特效强度：默认「克制」；关档位与动效开关都整体关闭静态质感与动态
+  // 特效强度：默认「纯净」；经典档等同于全无装饰
   const [fxLevel, setFxLevel] = useState<FxLevel>(() => {
     try {
       const v = localStorage.getItem('sgs-fx');
-      return v === 'off' || v === 'full' || v === 'subtle' ? v : 'subtle';
-    } catch { return 'subtle'; }
+      return v === 'classic' || v === 'pure' || v === 'subtle' || v === 'full' ? v : 'pure';
+    } catch { return 'pure'; }
   });
   const cycleFx = () => {
-    const next: FxLevel = fxLevel === 'subtle' ? 'full' : fxLevel === 'full' ? 'off' : 'subtle';
+    const i = FX_ORDER.indexOf(fxLevel);
+    const next = FX_ORDER[(i + 1) % FX_ORDER.length];
     setFxLevel(next);
     try { localStorage.setItem('sgs-fx', next); } catch { /* ignore */ }
   };
+  // 各效果按档位放开（纯净 = 翻牌 + 濒死；克制 + 技能特写；完整再加出牌飞行与扫光/粒子）
+  const fxJudge = fxLevel !== 'classic';
+  const fxDying = fxLevel !== 'classic';
+  const fxSkill = fxLevel === 'subtle' || fxLevel === 'full';
+  const fxFly = fxLevel === 'full';
+  const fxFlourish = fxLevel === 'full';
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const bgmModeRef = useRef<'start' | 'battle' | 'climax'>('start');
   const audioReadyRef = useRef<boolean>(false);
@@ -3009,9 +3030,27 @@ const App: React.FC = () => {
     setTimeout(() => setVisualCard(null), duration / speedRef.current);
   };
 
-  // 判定演出：判定牌翻面展示（与普通出牌区分开）
-  // 演出时长不跟随倍速压缩过多，否则翻牌 + 盖章会被截断
-  const showJudgmentVisual = (card: Card, playerName: string, reason: string, duration: number = 1600) => {
+  // 出牌飞行（完整档）：实测两座位中心（扣除根节点缩放），走一段二次曲线到目标
+  const spawnCardFlight = (card: Card, fromId: number, toId: number) => {
+    const root = document.querySelector('[data-seat-stagger]') as HTMLElement | null;
+    const fromEl = document.querySelector(`[data-seat-id="${fromId}"]`) as HTMLElement | null;
+    const toEl = document.querySelector(`[data-seat-id="${toId}"]`) as HTMLElement | null;
+    if (!root || !fromEl || !toEl) return;
+    const rr = root.getBoundingClientRect();
+    const scale = root.offsetWidth > 0 ? rr.width / root.offsetWidth : 1;
+    const center = (r: DOMRect) => ({
+      x: Math.round((r.left + r.width / 2 - rr.left) / scale),
+      y: Math.round((r.top + r.height / 2 - rr.top) / scale),
+    });
+    const a = center(fromEl.getBoundingClientRect());
+    const b = center(toEl.getBoundingClientRect());
+    setFlightFx({ card, id: Date.now(), x0: a.x, y0: a.y, x1: b.x, y1: b.y });
+    if (flightTimerRef.current) clearTimeout(flightTimerRef.current);
+    flightTimerRef.current = setTimeout(() => setFlightFx(null), Math.round(620 / speedRef.current));
+  };
+
+  // 判定演出：翻牌 0.62s + 停留 0.6s，合计约 1.2s；不随倍速压到看不清
+  const showJudgmentVisual = (card: Card, playerName: string, reason: string, duration: number = 1300) => {
     if (judgmentTimerRef.current) clearTimeout(judgmentTimerRef.current);
     // 洛神 / 八卦阵这类「技能带判定」会同时出技能特写，会把判定牌压住
     // 判定演出优先，收起技能横幅（技能名已写在判定名牌里）
@@ -3019,7 +3058,7 @@ const App: React.FC = () => {
     setSkillBanner(null);
     setJudgmentVisual({ card, playerName, reason, id: Date.now() });
     if (!isMutedRef.current) playSfx('flip');
-    judgmentTimerRef.current = setTimeout(() => setJudgmentVisual(null), Math.max(950, duration / speedRef.current));
+    judgmentTimerRef.current = setTimeout(() => setJudgmentVisual(null), Math.max(1220, duration / speedRef.current));
   };
 
   // 技能发动横幅：武将名 + 技能名 金色大字短暂展示
@@ -3034,7 +3073,7 @@ const App: React.FC = () => {
     }
     if (skillBannerTimerRef.current) clearTimeout(skillBannerTimerRef.current);
     setSkillBanner({ hero, skill, id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6) });
-    skillBannerTimerRef.current = setTimeout(() => setSkillBanner(null), 1500);
+    skillBannerTimerRef.current = setTimeout(() => setSkillBanner(null), 1200);
   }, []);
 
   // 卞夫人「挽危」（原版）：每回合限一次，当你的牌被其他角色弃置或获得后，
@@ -3118,6 +3157,7 @@ const App: React.FC = () => {
   };
 
   const resolveCardEffect = async (source: Player, targets: Player[], card: Card) => {
+    if (fxFly && targets.length > 0) spawnCardFlight(card, source.id, targets[0].id);
     setIsProcessing(p => p + 1);
     try {
       // Log construction
@@ -5838,6 +5878,7 @@ const App: React.FC = () => {
       data-size-tier={sizeTier}
       data-motion={motionOn ? 'on' : 'off'}
       data-fx={fxLevel}
+      data-seat-stagger={enemies.length >= 6 ? 'true' : 'false'}
       className={`h-screen w-full flex flex-col overflow-hidden relative ${theme === 'light' ? 'parchment-bg' : 'bg-[#1c1c1c]'}`}
       style={scaleStyle}
     >
@@ -5910,15 +5951,15 @@ const App: React.FC = () => {
       {/* Visual Effect Overlay - 优化版卡牌动画（判定演出期间让位，避免两层卡牌叠影） */}
       {visualCard && !judgmentVisual && (
         <div className="absolute inset-0 z-50 flex items-center justify-center pointer-events-none overflow-hidden" style={{ contain: 'layout style paint' }}>
-          {/* 出牌聚光：中心微亮 / 四周压暗，视线聚焦到牌面 */}
-          <div className="absolute inset-0 card-spotlight"></div>
+          {/* 出牌聚光：中心微亮 / 四周压暗，视线聚焦到牌面（仅完整档） */}
+          {fxFlourish && <div className="absolute inset-0 card-spotlight"></div>}
 
           {/* 卡牌飞入动画容器 */}
           <div className="relative animate-card-fly-in" style={{ willChange: 'transform' }}>
-            {/* 金色冲击环：牌落桌时向外扩散一次 */}
-            <div className="card-burst" />
+            {/* 金色冲击环：牌落桌时向外扩散一次（仅完整档） */}
+            {fxFlourish && <div className="card-burst" />}
             {/* 卡牌光晕 - 简化 */}
-            <div className="absolute -inset-6 bg-yellow-400/20 blur-xl rounded-full"></div>
+            {fxFlourish && <div className="absolute -inset-6 bg-yellow-400/20 blur-xl rounded-full"></div>}
 
             {/* 卡牌主体 */}
             <div className="relative scale-110 md:scale-125 animate-card-bounce">
@@ -5934,22 +5975,26 @@ const App: React.FC = () => {
               </div>
             </div>
 
-            {/* 粒子效果 - 减少数量 */}
-            <div className="absolute top-0 left-0 w-1.5 h-1.5 bg-yellow-400 rounded-full animate-particle-1"></div>
-            <div className="absolute top-0 right-0 w-1.5 h-1.5 bg-amber-400 rounded-full animate-particle-2"></div>
-            <div className="absolute bottom-0 left-0 w-1.5 h-1.5 bg-orange-400 rounded-full animate-particle-3"></div>
-            <div className="absolute bottom-0 right-0 w-1.5 h-1.5 bg-yellow-300 rounded-full animate-particle-4"></div>
+            {/* 粒子效果 - 仅完整档，最多 4 个，随卡面一起销毁 */}
+            {fxFlourish && (
+              <>
+                <div className="absolute top-0 left-0 w-1.5 h-1.5 bg-yellow-400 rounded-full animate-particle-1"></div>
+                <div className="absolute top-0 right-0 w-1.5 h-1.5 bg-amber-400 rounded-full animate-particle-2"></div>
+                <div className="absolute bottom-0 left-0 w-1.5 h-1.5 bg-orange-400 rounded-full animate-particle-3"></div>
+                <div className="absolute bottom-0 right-0 w-1.5 h-1.5 bg-yellow-300 rounded-full animate-particle-4"></div>
+              </>
+            )}
           </div>
         </div>
       )}
 
       {/* 判定演出：判定牌翻面 + 朱印「判」 */}
-      {judgmentVisual && (
+      {judgmentVisual && fxJudge && (
         <div key={judgmentVisual.id} className="absolute inset-0 z-[60] flex items-center justify-center pointer-events-none overflow-hidden">
           <div className="absolute inset-0 judge-backdrop" />
           <div className="relative flex items-center gap-5 md:gap-9">
             <div className="judge-seal font-ancient">判</div>
-            <div className="relative judge-flip">
+            <div className={`relative judge-flip ${['♥', '♦'].includes(String(judgmentVisual.card.suit)) ? 'judge-red' : 'judge-black'} ${fxFlourish ? 'judge-flourish' : ''}`}>
               <div className="judge-halo" />
               <div className="scale-105 md:scale-125">
                 <CardComponent card={judgmentVisual.card} />
@@ -5973,12 +6018,38 @@ const App: React.FC = () => {
         </div>
       )}
 
-      {/* 技能发动特写：武将头像 + 技能名一起出场（不再是纯文字横幅） */}
-      {skillBanner && (() => {
+      {/* 出牌飞行（仅「完整」档）：牌沿二次曲线从出牌者飞向目标 */}
+      {flightFx && (
+        <div className="absolute inset-0 z-[54] pointer-events-none overflow-hidden" style={{ contain: 'layout style paint' }}>
+          <div
+            key={flightFx.id}
+            className="fx-flight-card"
+            style={{
+              '--x0': `${flightFx.x0}px`, '--y0': `${flightFx.y0}px`,
+              '--x1': `${flightFx.x1}px`, '--y1': `${flightFx.y1}px`,
+            } as React.CSSProperties}
+          >
+            <span className="fx-flight-name font-ancient">{flightFx.card.name}</span>
+          </div>
+        </div>
+      )}
+
+      {/* 濒死：只在屏幕四边做低透明度红色呼吸，不整屏压红（纯净档起启用） */}
+      {fxDying && dyingState?.isActive && <div className="fx-dying-edge" aria-hidden="true" />}
+
+      {/* 技能发动特写：立绘从右侧切入 + 技能名大字（纯 CSS，≤1.2s，点击可跳过） */}
+      {skillBanner && fxSkill && (() => {
         const caster = players.find(p => p.hero.name === skillBanner.hero)?.hero;
         return (
-          <div key={skillBanner.id} className="absolute inset-0 z-[80] flex items-center justify-center pointer-events-none">
-            <div className="skill-cast text-center">
+          <div key={skillBanner.id} className="absolute inset-0 z-[80] flex items-center justify-center pointer-events-none skill-cast-layer">
+            <div
+              className={`skill-cast text-center ${fxFlourish ? 'has-sweep' : ''}`}
+              onClick={() => {
+                if (skillBannerTimerRef.current) clearTimeout(skillBannerTimerRef.current);
+                setSkillBanner(null);
+              }}
+              role="presentation"
+            >
               {caster && (
                 <div className="skill-cast-portrait">
                   <span className="skill-cast-ring" />
@@ -6893,11 +6964,18 @@ const App: React.FC = () => {
               : layoutDensity === 'normal' ? 240
               : layoutDensity === 'compact' ? 210
               : layoutDensity === 'tight' ? 190 : 178;
-            const seatW = totalEnemies >= 5 ? Math.min(baseW, 220) : baseW;
-            const seatGap = totalEnemies >= 5 ? 8 : 12;
+            // 座位不再缩卡：保持基准宽度，用「加大中心间距 + 用满横向空间」把座位拉开。
+            // 中心间距目标 = 原基准间距 × 1.32（+32%），若视口放不下再退让（7 人局最多允许 16px 横向压叠）
+            const seatW = baseW;
+            const inner = Math.max(320, viewport.w - 32);
+            const wantedPitch = Math.round((seatW + 12) * 1.32);
+            const fitPitch = totalEnemies > 1 ? Math.floor((inner - seatW) / (totalEnemies - 1)) : 0;
+            const seatPitch = totalEnemies > 1 ? Math.min(wantedPitch, Math.max(fitPitch, seatW - 16)) : 0;
+            // 6 个对手（7 人局）在 1440 宽下必然贴边，用 26px 上下错位拉开视觉
+            const seatShift = totalEnemies >= 6 && index % 2 === 1 ? 26 : 0;
             const side = 'top';
             const offset = index - (totalEnemies - 1) / 2;
-            const leftPercent = `calc(50% + ${Math.round(offset * (seatW + seatGap))}px)`;
+            const leftPercent = `calc(50% + ${Math.round(offset * seatPitch)}px)`;
             // 选中【杀】类牌时，超出攻击范围的目标灰显
             const outOfRange = !p.isDead && isSelectingTarget && slashLikeActive && getDistance(me.id, p.id) > getAttackRange(me);
             // 正处于「选择目标」流程时，给合法目标一个明确的候选标记
@@ -6909,8 +6987,10 @@ const App: React.FC = () => {
               key={p.id} 
               className="ring-seat"
               data-side={side}
+              data-seat-id={p.id}
               style={{
                 '--seat-left': leftPercent,
+                '--seat-shift': `${seatShift}px`,
               } as React.CSSProperties}
             >
               {/* 回合指示器 - 朱红小匾 */}
@@ -6969,7 +7049,9 @@ const App: React.FC = () => {
                 ${dyingState && dyingState.isActive && dyingState.victimId === p.id ? 'is-dying' : ''}
                 ${turnIndex === p.id && !(dyingState && dyingState.isActive && dyingState.victimId === p.id) ? 'is-current-turn' : ''}
                 ${turnIndex === p.id
-                  ? 'border-[#c8a45c] shadow-[0_0_22px_rgba(200,164,92,0.30)] scale-105'
+                  ? (fxLevel === 'pure'
+                    ? 'border-[#e8cf94]/70'
+                    : 'border-[#c8a45c] shadow-[0_0_22px_rgba(200,164,92,0.30)] scale-105')
                   : ''
                 }
                 ${(isSelectingTarget || isLijianMode || (isRendeMode && rendeSelectedCardIds.length > 0) || isJiedaoMode) && !p.isDead
@@ -7001,7 +7083,7 @@ const App: React.FC = () => {
                     : 'ring-4 ring-red-500 scale-110'
                   : ''
                 }
-                ${damageAnimTarget === p.id ? 'animate-damage-shake' : ''}
+                ${damageAnimTarget === p.id && fxLevel !== 'pure' && fxLevel !== 'classic' ? 'animate-damage-shake' : ''}
                 ${healAnimTarget === p.id ? 'animate-heal-pulse' : ''}
                 ${outOfRange ? 'opacity-40 saturate-[0.6]' : ''}
                 ${selectableTarget && !outOfRange ? 'target-candidate' : ''}
@@ -7064,7 +7146,7 @@ const App: React.FC = () => {
                   {/* 势力 + 身份：卡面左上 / 右上角章 */}
                   <div className="seat-topline">
                     <span className="seat-kingdom">{p.hero.kingdom}</span>
-                    {(p.isRevealed || p.isHuman || p.identity === Identity.ZHUGONG) && (
+                    {(p.isRevealed || p.isHuman || p.identity === Identity.ZHUGONG || p.isDead) && (
                       <span className={`seat-identity ${
                         p.identity === Identity.ZHUGONG ? 'is-lord' :
                         p.identity === Identity.ZHONGCHEN ? 'is-loyal' :
@@ -7303,28 +7385,82 @@ const App: React.FC = () => {
 
         {/* Center Decks - 牌堆和弃牌堆 - 原版三国杀风格 */}
         {/* 出牌顺序：右侧竖向顺序条（桌面）；手机端折叠为一条横排 */}
-        <div data-region="turn-rail" data-count={players.length} className="hidden md:flex flex-col">
-          <div className="turn-rail-head">出牌顺序</div>
-          {players.map((p, i) => {
-            const isCur = turnIndex === p.id;
-            const nextId = players[(turnIndex + 1) % Math.max(1, players.length)]?.id;
-            const state = p.isDead ? '阵亡' : isCur ? '当前' : p.id === nextId ? '下家' : p.id < turnIndex ? '已行动' : '待行动';
-            return (
-              <div key={p.id} className={`turn-rail-row ${KINGDOM_CLASS[p.hero.kingdom] || 'kingdom-qun'}`} data-active={isCur ? 'true' : 'false'} data-dead={p.isDead ? 'true' : 'false'} title={`${p.hero.name} · ${p.hero.kingdom} · ${state}`}>
-                <span className="turn-rail-idx">{i + 1}</span>
-                <img className="turn-rail-avatar" src={p.hero.avatarUrl} alt="" />
-                <span className="turn-rail-name">{p.hero.name}</span>
-                <span className="turn-rail-state">{state}</span>
+        <div data-region="turn-rail" data-count={players.length} data-collapsed={orderCollapsed ? 'true' : 'false'} className="hidden md:flex flex-col">
+          {orderCollapsed ? (
+            <button
+              type="button"
+              onClick={() => setOrderCollapsedPersist(false)}
+              className="turn-rail-mini"
+              aria-label="展开出牌顺序"
+              aria-expanded={false}
+              title="展开出牌顺序"
+            >
+              <span className="turn-rail-mini-idx">{Math.max(1, players.findIndex(p => p.id === turnIndex) + 1)}</span>
+              {players.find(p => p.id === turnIndex) && (
+                <img className="turn-rail-mini-avatar" src={players.find(p => p.id === turnIndex)!.hero.avatarUrl} alt="" />
+              )}
+              <span className="turn-rail-mini-hint">顺序</span>
+            </button>
+          ) : (
+            <>
+              <div className="turn-rail-head">
+                <span>出牌顺序</span>
+                <button
+                  type="button"
+                  onClick={() => setOrderCollapsedPersist(true)}
+                  className="turn-rail-fold"
+                  aria-label="收起出牌顺序"
+                  aria-expanded={true}
+                  title="收起出牌顺序"
+                >收</button>
               </div>
-            );
-          })}
+              {players.map((p, i) => {
+                const isCur = turnIndex === p.id;
+                const nextId = players[(turnIndex + 1) % Math.max(1, players.length)]?.id;
+                const state = p.isDead ? '阵亡' : isCur ? '当前' : p.id === nextId ? '下家' : p.id < turnIndex ? '已行动' : '待行动';
+                return (
+                  <div key={p.id} className={`turn-rail-row ${KINGDOM_CLASS[p.hero.kingdom] || 'kingdom-qun'}`} data-active={isCur ? 'true' : 'false'} data-dead={p.isDead ? 'true' : 'false'} title={`${p.hero.name} · ${p.hero.kingdom} · ${state}`}>
+                    <span className="turn-rail-idx">{i + 1}</span>
+                    <img className="turn-rail-avatar" src={p.hero.avatarUrl} alt="" />
+                    <span className="turn-rail-name">{p.hero.name}</span>
+                    <span className="turn-rail-state">{state}</span>
+                  </div>
+                );
+              })}
+            </>
+          )}
         </div>
-        <div data-region="turn-strip" className="md:hidden flex items-center gap-1">
-          {players.map((p) => (
-            <span key={p.id} className={`turn-chip ${KINGDOM_CLASS[p.hero.kingdom] || 'kingdom-qun'}`} data-active={turnIndex === p.id ? 'true' : 'false'}>
-              {p.hero.name}
-            </span>
-          ))}
+        <div data-region="turn-strip" data-collapsed={orderCollapsed ? 'true' : 'false'} className="md:hidden flex items-center gap-1">
+          {orderCollapsed ? (
+            <button
+              type="button"
+              onClick={() => setOrderCollapsedPersist(false)}
+              className={`turn-strip-mini ${KINGDOM_CLASS[players.find(p => p.id === turnIndex)?.hero.kingdom ?? ''] || 'kingdom-qun'}`}
+              aria-label="展开出牌顺序"
+              aria-expanded={false}
+              title="展开出牌顺序"
+            >
+              <span className="turn-strip-mini-tag">顺序</span>
+              <span className="turn-strip-mini-name">{players.find(p => p.id === turnIndex)?.hero.name ?? '—'}</span>
+              <span className="turn-strip-mini-arrow" aria-hidden="true">▾</span>
+            </button>
+          ) : (
+            <>
+              {players.map((p) => (
+                <span key={p.id} className={`turn-chip ${KINGDOM_CLASS[p.hero.kingdom] || 'kingdom-qun'}`} data-active={turnIndex === p.id ? 'true' : 'false'}>
+                  {p.hero.name}
+                </span>
+              ))}
+              <button
+                type="button"
+                onClick={() => setOrderCollapsedPersist(true)}
+                className="turn-strip-fold"
+                aria-label="收起出牌顺序"
+                aria-expanded={true}
+                title="收起出牌顺序"
+              >▴</button>
+            </>
+          )}
         </div>
 
         <div data-region="center-decks" className="relative flex items-center gap-12 max-md:gap-6 z-[1]">
@@ -7458,6 +7594,7 @@ const App: React.FC = () => {
         <div data-region="player-info" className="player-info-row flex flex-col md:flex-row md:justify-between md:items-start gap-1 md:gap-6 px-2 md:px-4 mb-1 md:mb-2">
           {/* 主视角座位：与敌方座位卡同一套卡面（势力框 + 全幅立绘 + 左竖姓名 + 右上勾玉 + 底部信息层） */}
           <div
+            data-seat-id={0}
             className={`
               own-seat seat-card relative rounded-xl border-2 kingdom-frame hero-card ${KINGDOM_CLASS[me.hero.kingdom] ?? ''}
               focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#e8cf94]
@@ -7474,10 +7611,12 @@ const App: React.FC = () => {
               ${dyingState && dyingState.isActive && dyingState.victimId === me.id ? 'is-dying' : ''}
               ${isMyTurn && !(dyingState && dyingState.isActive && dyingState.victimId === me.id) ? 'is-current-turn' : ''}
               ${isMyTurn
-                ? 'border-[#c8a45c] shadow-[0_0_22px_rgba(200,164,92,0.30)] scale-105'
+                ? (fxLevel === 'pure'
+                  ? 'border-[#e8cf94]/70'
+                  : 'border-[#c8a45c] shadow-[0_0_22px_rgba(200,164,92,0.30)] scale-105')
                 : ''
               }
-              ${damageAnimTarget === 0 ? 'animate-damage-shake' : ''}
+              ${damageAnimTarget === 0 && fxLevel !== 'pure' && fxLevel !== 'classic' ? 'animate-damage-shake' : ''}
               ${healAnimTarget === 0 ? 'animate-heal-pulse' : ''}
             `}
           >
