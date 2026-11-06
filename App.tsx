@@ -1177,6 +1177,8 @@ const App: React.FC = () => {
       if (p.hero.name === '卑弥呼') { p.hasKui = false; p.juMarks = 0; p.baiJiaAwakened = false; }
       // 孙寒华：妙剑/莲华初始 1 级
       if (p.hero.name === '孙寒华') { p.miaoJianLevel = 1; p.lianHuaLevel = 1; }
+      // 鲍三娘：许身限定技状态
+      if (p.hero.name === '鲍三娘') { p.xushenUsed = false; }
     });
 
     setDeck(shuffledDeck);
@@ -2097,6 +2099,17 @@ const App: React.FC = () => {
                 }
               }
             }
+          }
+        }
+
+        // 鲍三娘「许身」：限定技，出牌阶段失去等同存活男性角色数的体力（AI 仅在体力充足时使用）
+        if (currentPlayer.hero.name === '鲍三娘' && skillsOn(currentPlayer.id) && !currentPlayer.xushenUsed) {
+          const males = playersRef.current.filter(o => !o.isDead && o.id !== currentPlayer.id && o.hero.gender === 'male').length;
+          if (males > 0 && currentPlayer.hp >= males + 3) {
+            updatePlayer(currentPlayer.id, { xushenUsed: true, hp: currentPlayer.hp - males });
+            addLog(`【许身】鲍三娘失去 ${males} 点体力（存活男性角色数），当前体力 ${currentPlayer.hp - males}/${currentPlayer.maxHp}`, 'skill');
+            showSkillBanner('鲍三娘', '许身');
+            await delay(400);
           }
         }
 
@@ -4059,6 +4072,34 @@ const App: React.FC = () => {
             updatePlayer(source.id, { hasJianxiong: true, hasXingshang: true });
             addLog('【凌人】猜中三项，曹婴获得「奸雄」「行殇」直到下回合开始', 'skill');
           }
+        }
+      }
+
+      // 鲍三娘「姝勇」：使用【杀】时，获得一名其他角色区域内的一张牌，然后其摸一张牌
+      if (source.hero.name === '鲍三娘' && card.name === CardName.SHA && skillsOn(source.id)) {
+        const victim = targets.find(t => t.id !== source.id && !t.isDead && t.hand.length > 0);
+        if (victim) {
+          const stolen = [...victim.hand].sort((a, b) => a.value - b.value)[0];
+          mutateHand(victim.id, h => h.filter(c => c.id !== stolen.id));
+          mutateHand(source.id, h => [...h, stolen]);
+          addLog(`【姝勇】鲍三娘获得 ${victim.hero.name} 的【${stolen.name}】，其摸一张牌`, 'skill');
+          showSkillBanner('鲍三娘', '姝勇');
+          drawCards(victim.id, 1);
+          await delay(300);
+        }
+      }
+
+      // 鲍三娘「镇南」：成为多目标牌的目标且目标数大于使用者体力值时，弃一张牌对其造成1点伤害
+      if (targets.length > 1 && card.name !== CardName.SHA) {
+        const bao = targets.find(t => t.hero.name === '鲍三娘' && t.id !== source.id && skillsOn(t.id) && !t.isDead);
+        const srcNow = getPlayer(source.id);
+        if (bao && srcNow && !srcNow.isDead && targets.length > srcNow.hp && bao.hand.length > 0) {
+          const cost = [...bao.hand].sort((a, b) => a.value - b.value)[0];
+          discardCards(bao.id, [cost]);
+          addLog(`【镇南】鲍三娘弃置【${cost.name}】，对 ${source.hero.name} 造成 1 点伤害`, 'skill');
+          showSkillBanner('鲍三娘', '镇南');
+          await delay(300);
+          await takeDamage(source.id, bao.id, 1, card);
         }
       }
 

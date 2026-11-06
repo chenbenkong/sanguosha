@@ -124,6 +124,8 @@ export interface Player {
   hasJianxiong?: boolean;
   /** 曹婴「凌人」猜中三项后临时获得「行殇」 */
   hasXingshang?: boolean;
+  /** 鲍三娘「许身」限定技已使用 */
+  xushenUsed?: boolean;
 }
 
 /** 装备区：武器 / 防具 / +1马 / -1马 */
