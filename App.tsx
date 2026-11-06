@@ -319,6 +319,7 @@ const App: React.FC = () => {
   const turnUsedOnOthersRef = useRef<Record<number, boolean>>({}); // 蔡夫人「窃听」：本回合是否用牌指定过其他角色
   const lianzhuUsedRef = useRef<boolean>(false); // 董白「连诛」本回合已发动
   const fumianTargetUsedRef = useRef<boolean>(false); // 吴苋「福绵」本回合额外目标已用
+  const cangHuiUsedRef = useRef<boolean>(false); // 孙鲁班「谮毁」本回合已发动
   const shenxianTurnRef = useRef<number>(-1); // 张星彩「甚贤」本回合是否已发动
   const doutuSkipRef = useRef<number | null>(null); // 伏皇后「惴恐」赢：目标跳过出牌阶段
   const doutuDistanceRef = useRef<Record<number, number>>({}); // 「惴恐」没赢：到伏皇后距离视为 1
@@ -1898,6 +1899,9 @@ const App: React.FC = () => {
         if (currentPlayer.hero.name === '辛宪英') {
           updatePlayer(currentPlayer.id, { zhongjianCount: 0, zhongjianLimit: 1, caiShiMode: null });
         }
+
+        // 孙鲁班「谮毁」：回合开始时重置限一次
+        if (currentPlayer.hero.name === '孙鲁班') cangHuiUsedRef.current = false;
 
         // 吴苋「福绵」：准备阶段选择一项；与上回合选择不同则该项数值 +1
         if (currentPlayer.hero.name === '吴苋' && skillsOn(currentPlayer.id)) {
@@ -4594,6 +4598,21 @@ const App: React.FC = () => {
         }
       }
 
+      // 孙鲁班「谮毁」：使用【杀】或黑色普通锦囊仅指定唯一目标时，令另一名角色也成为目标（限一次，AI 近似取"也成为目标"选项）
+      if (source.hero.name === '孙鲁班' && skillsOn(source.id) && !cangHuiUsedRef.current
+          && targets.length === 1 && targets[0].id !== source.id
+          && (card.name === CardName.SHA
+              || (card.type === CardType.SCROLL && (card.suit === Suit.SPADE || card.suit === Suit.CLUB)))) {
+        const extra = playersRef.current.filter(p => !p.isDead && p.id !== source.id && p.id !== targets[0].id);
+        if (extra.length) {
+          const chosen = [...extra].sort((a, b) => b.hand.length - a.hand.length)[0];
+          targets = [...targets, chosen];
+          cangHuiUsedRef.current = true;
+          addLog(`【谮毁】孙鲁班令 ${chosen.hero.name} 选择成为【${card.name}】的目标`, 'skill');
+          showSkillBanner('孙鲁班', '谮毁');
+        }
+      }
+
       // 蔡夫人「窃听」记录：本回合是否用牌指定过其他角色（含蚕食追加目标）
       if (source.id >= 0 && targets.some(t => t.id !== source.id)) {
         turnUsedOnOthersRef.current[source.id] = true;
@@ -6367,6 +6386,30 @@ const App: React.FC = () => {
             addLog(`【竭缘】灵雎弃置红色【${red.name}】，此伤害 -1`, 'skill');
             showSkillBanner('灵雎', '竭缘');
           }
+        }
+      }
+
+      // 孙鲁班「骄矜」：受到男性角色造成的伤害时，可弃置一张装备牌令此伤害-1
+      const jjVictim = getPlayer(victimId);
+      if (jjVictim && jjVictim.hero.name === '孙鲁班' && sourceId >= 0 && sourceId !== victimId
+          && skillsOn(victimId) && finalAmount > 0) {
+        const srcP = getPlayer(sourceId);
+        const equipCards = Object.values(jjVictim.equipment ?? {}).filter((c): c is Card => !!c);
+        if (srcP && srcP.hero.gender === 'male' && equipCards.length > 0
+            && (jjVictim.hp - finalAmount <= 1 || finalAmount >= 2)) {
+          const cost = equipCards[0];
+          const slot = EQUIP_META[cost.name]?.slot;
+          const eq = { ...(jjVictim.equipment ?? {}) };
+          if (slot) delete eq[slot];
+          updatePlayer(victimId, { equipment: eq });
+          setDiscardPile(prev => {
+            const next = [...prev, cost];
+            discardPileRef.current = next;
+            return next;
+          });
+          finalAmount = Math.max(0, finalAmount - 1);
+          addLog(`【骄矜】孙鲁班弃置【${cost.name}】，此伤害 -1`, 'skill');
+          showSkillBanner('孙鲁班', '骄矜');
         }
       }
 
