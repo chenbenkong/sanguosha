@@ -826,6 +826,49 @@ const App: React.FC = () => {
     }
   };
 
+  // ══ 通用机制：目标合法性双向钩子 ══
+  // 技能可注册规则，对「己方使用伤害牌」与「对方伤害牌指向己方」两个方向同时过滤；
+  // 人类点击校验、AI 选目标、结算入口三处共用同一判定
+  type TargetLegalityRule = (source: Player, target: Player, card: Card) => string | null;
+  const targetLegalityRulesRef = useRef<TargetLegalityRule[]>([]);
+  const getTargetLegalityVeto = (source: Player, target: Player, card: Card): string | null => {
+    for (const rule of targetLegalityRulesRef.current) {
+      const reason = rule(source, target, card);
+      if (reason) return reason;
+    }
+    return null;
+  };
+
+  // ══ 通用机制：他人回合开始时的虚拟牌入口 ══
+  // 技能可注册钩子，在指定角色回合开始时插入一张虚拟牌并按正常时序结算
+  type TurnStartHook = (owner: Player) => Promise<void>;
+  const turnStartHookRef = useRef<TurnStartHook | null>(null);
+  const runTurnStartHooks = async (owner: Player) => {
+    if (turnStartHookRef.current) await turnStartHookRef.current(owner);
+  };
+  const castVirtualCard = async (
+    actorId: number, cardName: CardName, targetIds: number[],
+    opts: { attribute?: 'fire' | 'thunder'; ignoreDistance?: boolean; reason?: string } = {},
+  ) => {
+    const actor = getPlayer(actorId);
+    if (!actor || actor.isDead) return false;
+    const targets = targetIds.map(id => getPlayer(id)).filter((x): x is Player => !!x && !x.isDead);
+    const card: Card = {
+      id: `virtual-${cardName}-${actorId}-${Date.now()}`,
+      name: cardName,
+      type: cardName === CardName.SHA || cardName === CardName.JIU ? CardType.BASIC : CardType.SCROLL,
+      suit: Suit.SPADE,
+      rank: 'K',
+      value: 13,
+      attribute: opts.attribute,
+      description: opts.reason || `视为使用【${cardName}】`,
+      imageColor: 'from-slate-700 to-slate-900',
+    };
+    addLog(`【虚拟牌】${actor.hero.name} 视为使用${opts.ignoreDistance ? '无距离限制的' : ''}【${cardName}】${targets.length ? ` → ${targets.map(t => t.hero.name).join('、')}` : ''}`, 'info');
+    await resolveCardEffect(actor, targets.length ? targets : [actor], card);
+    return true;
+  };
+
   // ── 王元姬「谦冲 / 帷幕 / 明哲」──
   // 装备区牌列表；「谦冲」按全黑/全红派生“帷幕 / 明哲”
   const equipList = (p: Player): Card[] => {
@@ -1907,6 +1950,8 @@ const App: React.FC = () => {
             setGeneralRevealed(id, true, '暗置解除');
           }
         });
+        // 通用：他人回合开始的技能 / 虚拟牌钩子
+        await runTurnStartHooks(currentPlayer);
         hetaishouKillsRef.current = 0; // 「戚乱」本回合击杀数
         ganluUsedRef.current = false;
         setHasUsedGanlu(false);
@@ -4395,6 +4440,14 @@ const App: React.FC = () => {
 
     if (!target || !card || target.isDead) return;
 
+    // 通用目标合法性钩子：伤害牌的目标可能被技能禁止（花鬘「芳踪」等）
+    const vetoReason = getTargetLegalityVeto(me, target, card);
+    if (vetoReason) {
+      addLog(`【${vetoReason}】不能指定 ${target.hero.name} 为目标`, 'warning');
+      setTimeout(() => { clickGuard.current = false; }, 200);
+      return;
+    }
+
     // 距离限制：顺手牵羊 / 兵粮寸断 仅限距离 1（黄月英「奇才」、王元姬「谦冲」选锦囊牌时无距离限制）
     if (card.name === CardName.SHUNSHOU || card.name === CardName.BINGLIANG) {
       const dist = getDistance(me.id, target.id);
@@ -4954,6 +5007,14 @@ const App: React.FC = () => {
             }
           }
         }
+      }
+
+      // 通用目标合法性钩子：被技能禁止的目标在结算入口统一剔除（含转化牌、额外目标）
+      const vetoedTargets = targets.filter(t => getTargetLegalityVeto(source, t, card));
+      if (vetoedTargets.length) {
+        targets = targets.filter(t => !vetoedTargets.includes(t));
+        addLog(`【${getTargetLegalityVeto(source, vetoedTargets[0], card) || '目标限制'}】${vetoedTargets.map(t => t.hero.name).join('、')} 不能成为 ${source.hero.name} 的【${card.name}】目标`, 'skill');
+        if (!targets.length) return;
       }
 
       // 卑弥呼「蚕食」：觉醒后，单体基本牌/普通锦囊可额外指定带“傀”的敌人
@@ -7608,7 +7669,8 @@ const App: React.FC = () => {
       const qiangwuLongShot = !!slash && aiNow.hero.name === '张星彩' && qiangwuPointRef.current !== null
         && rankValue(slash.rank) < qiangwuPointRef.current;
       const target = players
-        .filter(p => !p.isDead && p.id !== aiNow.id && isEnemy(aiNow, p) && (canReach(aiNow, p) || qiangwuLongShot))
+        .filter(p => !p.isDead && p.id !== aiNow.id && isEnemy(aiNow, p) && (canReach(aiNow, p) || qiangwuLongShot)
+          && (!slash || !getTargetLegalityVeto(aiNow, p, slash)))
         .sort((a, b) => a.hp - b.hp)[0];
       if (!slash || !target || !canPlaySlash(aiNow, slash)) break;
       if (zhangbaCost.length === 2) {
