@@ -2811,8 +2811,7 @@ const App: React.FC = () => {
       name: declared,
       type: declared === CardName.SHA || declared === CardName.JIU
         ? CardType.BASIC
-        : declared === CardName.SHUNSHOU || declared === CardName.GUOHE || declared === CardName.JUEDOU
-          || declared === CardName.NANMAN || declared === CardName.WANJIAN
+        : ([CardName.SHUNSHOU, CardName.GUOHE, CardName.JUEDOU, CardName.NANMAN, CardName.WANJIAN] as CardName[]).includes(declared)
           ? CardType.SCROLL
           : shown.type,
       description: `矫诏：将【${shown.name}】当【${declared}】使用`,
@@ -2821,7 +2820,7 @@ const App: React.FC = () => {
       if (!window.jiuBoost) window.jiuBoost = {};
       window.jiuBoost[ownerId] = true;
       addLog('「矫诏」视为使用【酒】，下一张【杀】伤害+1', 'success');
-    } else if (declared === CardName.NANMAN || declared === CardName.WANJIAN) {
+    } else if (([CardName.NANMAN, CardName.WANJIAN] as CardName[]).includes(declared)) {
       const targets = playersRef.current.filter(p => !p.isDead && p.id !== ownerId);
       if (targets.length) await resolveCardEffect(me, targets, virtual);
     } else {
