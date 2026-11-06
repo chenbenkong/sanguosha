@@ -154,6 +154,14 @@ export interface Player {
   hongyiTargetId?: number | null;
   /** 羊徽瑜「劝封」限定技已使用 */
   quanfengUsed?: boolean;
+  /** 通用：武将牌是否明置（暗置为 false/未定义） */
+  generalRevealed?: boolean;
+  /** 通用：武将牌是否已移出游戏（移除后失去武将技能） */
+  generalRemoved?: boolean;
+  /** 通用：临时授予的技能名（可被多个技能查询） */
+  grantedSkills?: string[];
+  /** 通用：临时技能的失效回合（键为技能名，值为全局回合计数） */
+  grantedSkillUntil?: Record<string, number>;
   /** 吴苋「福绵」本回合选项（1 额外摸牌 / 2 额外目标） */
   fumianChoice?: number;
   /** 吴苋「福绵」选项 1 数值（额外摸牌数） */

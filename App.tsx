@@ -323,6 +323,8 @@ const App: React.FC = () => {
   const yanjiaoUsedRef = useRef<boolean>(false); // 张昌蒲「严教」本回合已发动
   const usedTypesRef = useRef<Set<CardType>>(new Set()); // 蔡贞姬「天音」本回合使用过的牌类型
   const hongyiUsedRef = useRef<boolean>(false); // 羊徽瑜「弘仪」本回合已发动
+  const firstUsedCardRef = useRef<Set<string>>(new Set()); // 通用：每名角色每回合的第一张牌
+  const turnOwnerIdRef = useRef<number>(-1); // 当前回合角色（供明置锁定等机制使用）
   const fumianTargetUsedRef = useRef<boolean>(false); // 吴苋「福绵」本回合额外目标已用
   const cangHuiUsedRef = useRef<boolean>(false); // 孙鲁班「谮毁」本回合已发动
   const shenxianTurnRef = useRef<number>(-1); // 张星彩「甚贤」本回合是否已发动
@@ -738,7 +740,80 @@ const App: React.FC = () => {
     const until = skillSealRef.current[id];
     return !!until && until > turnCountRef.current;
   };
-  const skillsOn = (id: number) => !isSkillSealed(id);
+  const skillsOn = (id: number) => !isSkillSealed(id)
+    && !(playersRef.current.find(p => p.id === id)?.generalRemoved);
+
+  // ══ 通用机制：武将牌明置 / 暗置 / 移除，以及临时技能授予 ══
+  // 供「闺秀 / 存嗣」等技能复用：状态可查询、事件进战报、技能授予可到期回归
+  // 明置 / 移除后的武将技响应分发点（后续同类技能在此追加分支）
+  const onGeneralCardRevealed = (id: number) => {
+    const p = getPlayer(id);
+    if (!p || p.isDead) return;
+  };
+
+  const onGeneralCardRemoved = (id: number) => {
+    const p = getPlayer(id);
+    if (!p) return;
+  };
+
+  const setGeneralRevealed = (id: number, revealed: boolean, reason: string, silent = false) => {
+    const p = getPlayer(id);
+    if (!p || p.isDead || p.generalRemoved) return false;
+    if (revealed) {
+      if (p.generalRevealed) return false;
+      // 邹氏「祸水」：其回合内其他角色不能明置武将牌
+      const zoushi = playersRef.current.find(x => !x.isDead && x.hero.name === '邹氏' && zoushiRevealedRef.current.has(x.id));
+      if (zoushi && zoushi.id !== id && turnOwnerIdRef.current === zoushi.id) {
+        if (!silent) addLog(`【明置】${p.hero.name} 受邹氏「祸水」影响，本回合不能明置武将牌`, 'info');
+        return false;
+      }
+    }
+    updatePlayer(id, { generalRevealed: revealed });
+    if (!silent) addLog(`【${revealed ? '明置' : '暗置'}】${p.hero.name} 的武将牌已${revealed ? '明置' : '暗置'}（${reason}）`, 'info');
+    if (revealed) onGeneralCardRevealed(id);
+    return true;
+  };
+
+  const removeGeneralCard = (id: number, reason: string) => {
+    const p = getPlayer(id);
+    if (!p || p.isDead || p.generalRemoved) return false;
+    updatePlayer(id, { generalRemoved: true, generalRevealed: false });
+    addLog(`【移除武将牌】${p.hero.name} 将武将牌移出游戏（${reason}）`, 'info');
+    onGeneralCardRemoved(id);
+    return true;
+  };
+
+  const hasGrantedSkill = (p: Player, skillName: string) =>
+    !p.isDead && (p.grantedSkills ?? []).includes(skillName) && skillsOn(p.id);
+
+  const grantSkill = (id: number, skillName: string, sourceSkill: string, durationTurns?: number) => {
+    const p = getPlayer(id);
+    if (!p || p.isDead) return false;
+    if ((p.grantedSkills ?? []).includes(skillName)) return false;
+    const until = durationTurns ? { ...(p.grantedSkillUntil ?? {}), [skillName]: turnCountRef.current + durationTurns } : (p.grantedSkillUntil ?? {});
+    updatePlayer(id, { grantedSkills: [...(p.grantedSkills ?? []), skillName], grantedSkillUntil: until });
+    addLog(`【${sourceSkill}】${p.hero.name} 获得技能「${skillName}」${durationTurns ? `（持续 ${durationTurns} 回合）` : ''}`, 'skill');
+    return true;
+  };
+
+  const revokeSkill = (id: number, skillName: string, reason: string) => {
+    const p = getPlayer(id);
+    if (!p || !(p.grantedSkills ?? []).includes(skillName)) return false;
+    const until = { ...(p.grantedSkillUntil ?? {}) };
+    delete until[skillName];
+    updatePlayer(id, { grantedSkills: (p.grantedSkills ?? []).filter(s => s !== skillName), grantedSkillUntil: until });
+    addLog(`【技能回归】${p.hero.name} 失去技能「${skillName}」（${reason}）`, 'info');
+    return true;
+  };
+
+  const expireGrantedSkills = () => {
+    for (const p of playersRef.current) {
+      const until = p.grantedSkillUntil;
+      if (!until) continue;
+      const expired = Object.keys(until).filter(k => turnCountRef.current >= until[k]);
+      expired.forEach(k => revokeSkill(p.id, k, '持续时间结束'));
+    }
+  };
 
   // ── 王元姬「谦冲 / 帷幕 / 明哲」──
   // 装备区牌列表；「谦冲」按全黑/全红派生“帷幕 / 明哲”
@@ -1810,6 +1885,17 @@ const App: React.FC = () => {
         luoyiPlayerRef.current = null;
         // 第 1 批女将：回合开始重置（限一次/暗置计数）
         turnCountRef.current += 1;
+        turnOwnerIdRef.current = currentPlayer.id;
+        firstUsedCardRef.current = new Set();
+        expireGrantedSkills();
+        // 通用：暗置封印到期 → 武将牌明置（可触发「闺秀」等明置技）
+        Object.keys(skillSealRef.current).forEach(key => {
+          const id = Number(key);
+          if (turnCountRef.current >= skillSealRef.current[id]) {
+            delete skillSealRef.current[id];
+            setGeneralRevealed(id, true, '暗置解除');
+          }
+        });
         hetaishouKillsRef.current = 0; // 「戚乱」本回合击杀数
         ganluUsedRef.current = false;
         setHasUsedGanlu(false);
@@ -2719,6 +2805,7 @@ const App: React.FC = () => {
         if (currentPlayer.hero.name === '邹氏' && !zoushiRevealedRef.current.has(currentPlayer.id)
             && skillsOn(currentPlayer.id)) {
           zoushiRevealedRef.current.add(currentPlayer.id);
+          setGeneralRevealed(currentPlayer.id, true, '祸水', true);
           addLog('邹氏发动「祸水」，明置武将牌（本回合其他角色不能明置）', 'skill');
           showSkillBanner('邹氏', '祸水');
           await delay(400);
@@ -3841,6 +3928,7 @@ const App: React.FC = () => {
     discardCards(ownerId, [cost]);
     const sealSpan = playersRef.current.filter(p => !p.isDead).length + 1;
     skillSealRef.current[targetId] = turnCountRef.current + sealSpan;
+    setGeneralRevealed(targetId, false, '倾城', true);
     addLog(`邹氏发动「倾城」，弃置黑色【${cost.name}】，暗置 ${target.hero.name} 的武将牌`, 'skill');
     showSkillBanner('邹氏', '倾城');
     qingchengUsedRef.current = true;
@@ -3851,6 +3939,7 @@ const App: React.FC = () => {
       const second = playersRef.current.find(p => !p.isDead && p.id !== ownerId && p.id !== targetId && isEnemy(owner, p));
       if (second) {
         skillSealRef.current[second.id] = turnCountRef.current + sealSpan;
+        setGeneralRevealed(second.id, false, '倾城', true);
         addLog(`「倾城」弃置的是装备牌，再次暗置 ${second.hero.name} 的武将牌`, 'skill');
         await delay(400);
       }
