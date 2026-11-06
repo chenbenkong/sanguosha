@@ -108,6 +108,8 @@ export interface Player {
   isShandian?: boolean; // 闪电挂置状态（判定区）
   // 装备区
   equipment?: Equipment;
+  /** 张琪瑛「法箓」标记（紫微/后土/玉清/勾陈，每种限一枚） */
+  zhangMarks?: string[];
 }
 
 /** 装备区：武器 / 防具 / +1马 / -1马 */

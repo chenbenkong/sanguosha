@@ -780,6 +780,84 @@ const App: React.FC = () => {
       ?? (lord && others.length === 1 ? lord : null);
   };
 
+  // ── 张琪瑛「法箓 / 真仪 / 点化」──
+  const hasZhangMark = (p: Player, mark: string) => (p.zhangMarks ?? []).includes(mark);
+
+  // 「法箓」：牌因弃置进入弃牌堆后，按花色获得标记
+  const grantZhangMarks = (owner: Player, cards: Card[]) => {
+    if (!owner || owner.isDead || owner.hero.name !== '张琪瑛' || !skillsOn(owner.id)) return;
+    const marks = [...(owner.zhangMarks ?? [])];
+    const gained: string[] = [];
+    for (const c of cards) {
+      const mark = c.suit === Suit.SPADE ? '紫微' : c.suit === Suit.CLUB ? '后土'
+        : c.suit === Suit.HEART ? '玉清' : '勾陈';
+      if (!marks.includes(mark)) { marks.push(mark); gained.push(mark); }
+    }
+    if (!gained.length) return;
+    updatePlayer(owner.id, { zhangMarks: marks });
+    addLog(`【法箓】张琪瑛因弃牌获得标记：${gained.join('、')}（当前 ${marks.length} 枚）`, 'skill');
+    showSkillBanner('张琪瑛', '法箓');
+  };
+
+  // 「点化」：观看牌堆顶 X 张（X=标记数），按最优顺序放回
+  const doDianhua = (owner: Player) => {
+    if (!owner || owner.isDead || owner.hero.name !== '张琪瑛' || !skillsOn(owner.id)) return;
+    const x = Math.min((owner.zhangMarks ?? []).length, 5);
+    if (x <= 0) return;
+    const top = deckRef.current.slice(-x).reverse();
+    if (!top.length) return;
+    const score = (c: Card) => {
+      switch (c.name) {
+        case CardName.TAO: return 10;
+        case CardName.WUZHONG: return 9;
+        case CardName.SHAN: return 8;
+        case CardName.SHA: return 7;
+        case CardName.WUXIE: return 6;
+        case CardName.JIU: return 5;
+        default: return c.type === CardType.EQUIPMENT ? 4 : 3;
+      }
+    };
+    const rest = deckRef.current.slice(0, -x);
+    // 牌堆从尾部摸牌：分数高的放末尾，先摸到
+    const next = [...rest, ...[...top].sort((a, b) => score(a) - score(b))];
+    deckRef.current = next;
+    setDeck(next);
+    addLog(`【点化】张琪瑛观看牌堆顶 ${x} 张：${top.map(c => `${c.name}${c.rank}`).join('、')}，并按最优顺序放回`, 'skill');
+    showSkillBanner('张琪瑛', '点化');
+  };
+
+  // 「真仪·勾陈」：受到属性伤害后，从牌堆/弃牌堆获得三种类型牌各一张
+  const gainThreeTypes = (ownerId: number) => {
+    const owner = getPlayer(ownerId);
+    if (!owner || owner.isDead) return;
+    const picked: Card[] = [];
+    for (const type of [CardType.BASIC, CardType.SCROLL, CardType.EQUIPMENT]) {
+      const d = [...deckRef.current];
+      let idx = -1;
+      for (let i = d.length - 1; i >= 0; i--) { if (d[i].type === type) { idx = i; break; } }
+      if (idx >= 0) {
+        const [card] = d.splice(idx, 1);
+        deckRef.current = d;
+        picked.push(card);
+      } else {
+        const dsp = [...discardPileRef.current];
+        let di = -1;
+        for (let i = dsp.length - 1; i >= 0; i--) { if (dsp[i].type === type) { di = i; break; } }
+        if (di >= 0) {
+          const [card] = dsp.splice(di, 1);
+          discardPileRef.current = dsp;
+          picked.push(card);
+        }
+      }
+    }
+    if (!picked.length) return;
+    setDeck([...deckRef.current]);
+    setDiscardPile([...discardPileRef.current]);
+    mutateHand(ownerId, h => [...h, ...picked]);
+    addLog(`【真仪·勾陈】张琪瑛获得 ${picked.map(c => `【${c.name}】`).join('')}`, 'skill');
+    showSkillBanner('张琪瑛', '真仪');
+  };
+
   // --- 摸牌 ---
   const drawCards = useCallback((playerId: number, count: number) => {
     // 使用 ref 获取最新的 deck 和 discardPile 状态
@@ -1088,6 +1166,8 @@ const App: React.FC = () => {
     // Deal 4 cards
     newPlayers.forEach(p => {
       p.hand = shuffledDeck.splice(0, 4);
+      // 张琪瑛「法箓」：游戏开始时获得四种标记
+      if (p.hero.name === '张琪瑛') p.zhangMarks = ['紫微', '后土', '玉清', '勾陈'];
     });
 
     setDeck(shuffledDeck);
@@ -1369,6 +1449,9 @@ const App: React.FC = () => {
       discardPileRef.current = newDiscardPile; // 同步更新 ref
       return newDiscardPile;
     });
+
+    // 张琪瑛「法箓」：因弃置移至弃牌堆后按花色获得标记
+    if (before) grantZhangMarks(before, cardsToDiscard);
 
     // 陆逊「连营」/ 卞夫人「挽危」：失去最后一张手牌后摸一张
     if (lostAllHand && before && !before.isDead && (before.hero.name === '陆逊' || before.hero.name === '卞夫人')) {
@@ -1779,6 +1862,12 @@ const App: React.FC = () => {
           }
         }
 
+        // 张琪瑛「点化」：准备阶段观看牌堆顶
+        if (currentPlayer.hero.name === '张琪瑛') {
+          doDianhua(currentPlayer);
+          await delay(500);
+        }
+
         // 安全防线：体力<=0的角色需要先进行濒死求桃
         const latestCurrent = getPlayer(turnIndex);
         if (latestCurrent && latestCurrent.hp <= 0 && !latestCurrent.isDead) {
@@ -2039,6 +2128,12 @@ const App: React.FC = () => {
           showSkillBanner('何太后', '戚乱');
           drawCards(hetaiDuan.id, drawN);
           await delay(400);
+        }
+
+        // 张琪瑛「点化」：结束阶段观看牌堆顶
+        if (endingPlayer && !endingPlayer.isDead && endingPlayer.hero.name === '张琪瑛') {
+          doDianhua(endingPlayer);
+          await delay(500);
         }
 
         // 结束阶段：若有角色体力<=0且未死亡，进行濒死求桃
@@ -3679,11 +3774,30 @@ const App: React.FC = () => {
     const playerName = getPlayer(playerId)?.hero.name || '';
     // 小乔「红颜」：方块牌视为红桃
     const isXiaoqiao = playerName === '小乔';
-    const finalCard = isXiaoqiao && judgmentCard.suit === Suit.DIAMOND
+    let finalCard = isXiaoqiao && judgmentCard.suit === Suit.DIAMOND
       ? { ...judgmentCard, suit: Suit.HEART }
       : judgmentCard;
-    const rankDisplay = judgmentCard.rank;
-    addLog(`⚖️ ${playerName} 的【${reason}】判定：${judgmentCard.suit} ${rankDisplay}（判定牌：【${judgmentCard.name}】）${isXiaoqiao && finalCard.suit !== judgmentCard.suit ? '，触发「红颜」视为红桃' : ''}`, 'warning');
+    // 张琪瑛「真仪·紫微」：判定牌生效前弃置标记，改为黑桃5/红桃5
+    let zhenyiNote = '';
+    const zqy = playersRef.current.find(p => !p.isDead && p.hero.name === '张琪瑛'
+      && hasZhangMark(p, '紫微') && skillsOn(p.id));
+    if (zqy) {
+      const judged = getPlayer(playerId);
+      const friendly = playerId === zqy.id || (judged ? isAlly(zqy, judged) : false);
+      const wantBlack = reason === '洛神' && playerId === zqy.id;
+      const redBad = reason === '闪电' && finalCard.suit === Suit.SPADE && finalCard.value >= 2 && finalCard.value <= 9;
+      const notSafe = (reason === '乐不思蜀' || reason === '兵粮寸断') && finalCard.suit !== Suit.HEART;
+      const blackWeak = wantBlack && !(finalCard.suit === Suit.SPADE || finalCard.suit === Suit.CLUB);
+      if (friendly && (redBad || notSafe || blackWeak)) {
+        finalCard = { ...finalCard, suit: wantBlack ? Suit.SPADE : Suit.HEART, rank: '5', value: 5 };
+        updatePlayer(zqy.id, { zhangMarks: (zqy.zhangMarks ?? []).filter(m => m !== '紫微') });
+        zhenyiNote = `，触发「真仪·紫微」改为${wantBlack ? '黑桃' : '红桃'}5`;
+        addLog('【真仪·紫微】张琪瑛弃置“紫微”标记，改变判定结果', 'skill');
+        showSkillBanner('张琪瑛', '真仪');
+      }
+    }
+    const rankDisplay = finalCard.rank;
+    addLog(`⚖️ ${playerName} 的【${reason}】判定：${finalCard.suit} ${rankDisplay}（判定牌：【${judgmentCard.name}】）${isXiaoqiao && finalCard.suit !== judgmentCard.suit ? '，触发「红颜」视为红桃' : ''}${zhenyiNote}`, 'warning');
     showJudgmentVisual(finalCard, playerName, reason);
     await delay(1600);
     // 郭嘉「天妒」：判定牌生效后获得之
@@ -4843,6 +4957,30 @@ const App: React.FC = () => {
     addLog(`☠️ ${victim.hero.name} 进入濒死状态，开始求桃！`, 'danger');
 
     try {
+      // 张琪瑛「真仪·后土」：自身濒死时，弃置“后土”并将一张手牌当【桃】使用
+      const zqyVictim = getPlayer(victimId);
+      if (zqyVictim && zqyVictim.hero.name === '张琪瑛' && skillsOn(victimId)
+          && hasZhangMark(zqyVictim, '后土') && zqyVictim.hand.length > 0) {
+        const card = zqyVictim.hand.find(c => c.name !== CardName.TAO) ?? zqyVictim.hand[0];
+        updatePlayer(victimId, { zhangMarks: (zqyVictim.zhangMarks ?? []).filter(m => m !== '后土') });
+        mutateHand(victimId, h => h.filter(c => c.id !== card.id));
+        const newDiscard = [...discardPileRef.current, card];
+        discardPileRef.current = newDiscard;
+        setDiscardPile(newDiscard);
+        addLog(`【真仪·后土】张琪瑛弃置“后土”标记，将【${card.name}】当【桃】使用`, 'skill');
+        showSkillBanner('张琪瑛', '真仪');
+        const gained = recoverHp(victimId, 1);
+        if (gained > 0) {
+          addLog(`${getPlayer(victimId)?.hero.name ?? '张琪瑛'} 因「真仪·后土」回复 1 点体力`, 'success');
+        }
+        await delay(350);
+        if ((getPlayer(victimId)?.hp ?? 0) > 0) {
+          recentlySavedRef.current[victimId] = Date.now();
+          setDyingState(null);
+          return true;
+        }
+      }
+
       // 吴国太「补益」：一名角色进入濒死时，可展示其一张非基本手牌，弃置后回复1点体力
       const buyiOwner = playersRef.current.find(p => !p.isDead && p.hero.name === '吴国太' && skillsOn(p.id));
       if (buyiOwner) {
@@ -5277,6 +5415,21 @@ const App: React.FC = () => {
         addLog(`【凤魄】伤害 +${bonus}`, 'danger');
       }
 
+      // 张琪瑛「真仪·玉清」：造成伤害时弃置标记判定，黑色则伤害+1
+      const zqySrc = getPlayer(sourceId);
+      if (zqySrc && zqySrc.hero.name === '张琪瑛' && sourceId !== victimId
+          && skillsOn(sourceId) && hasZhangMark(zqySrc, '玉清')) {
+        updatePlayer(sourceId, { zhangMarks: (zqySrc.zhangMarks ?? []).filter(m => m !== '玉清') });
+        addLog('【真仪·玉清】张琪瑛弃置“玉清”标记进行判定', 'skill');
+        showSkillBanner('张琪瑛', '真仪');
+        const jc = await performJudgment(sourceId, '真仪');
+        if (jc && (jc.suit === Suit.SPADE || jc.suit === Suit.CLUB)) {
+          finalAmount += 1;
+          addLog('【真仪·玉清】判定为黑色，此伤害 +1', 'danger');
+        }
+        await delay(300);
+      }
+
       // 张春华「绝情」：造成的伤害改为失去体力（不触发防具/伤害后技能）
       if (source?.hero.name === '张春华' && sourceId !== victimId && finalAmount > 0) {
         const target = getPlayer(victimId)!;
@@ -5373,6 +5526,16 @@ const App: React.FC = () => {
       // 立即更新玩家体力
       updatePlayer(victimId, { hp: newHp });
       addLog(`${victim.hero.name} 受到 ${finalAmount} 点${natureLabel}伤害！当前体力: ${newHp}/${victim.maxHp}`, 'danger');
+
+      // 张琪瑛「真仪·勾陈」：受到属性伤害后，获得三种类型牌各一张
+      const zqyVictim = getPlayer(victimId);
+      if (zqyVictim && zqyVictim.hero.name === '张琪瑛' && skillsOn(victimId)
+          && dmgNature !== 'normal' && hasZhangMark(zqyVictim, '勾陈')) {
+        updatePlayer(victimId, { zhangMarks: (zqyVictim.zhangMarks ?? []).filter(m => m !== '勾陈') });
+        addLog('【真仪·勾陈】张琪瑛受到属性伤害，弃置“勾陈”标记', 'skill');
+        gainThreeTypes(victimId);
+        await delay(400);
+      }
 
       // 郭皇后「殚心」：受到伤害后，摸一张牌或升级「矫诏」（最多升级两次）
       if (victim.hero.name === '郭皇后' && skillsOn(victimId)) {
