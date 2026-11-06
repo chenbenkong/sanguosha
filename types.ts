@@ -110,6 +110,12 @@ export interface Player {
   equipment?: Equipment;
   /** 张琪瑛「法箓」标记（紫微/后土/玉清/勾陈，每种限一枚） */
   zhangMarks?: string[];
+  /** 卑弥呼「傀」标记 */
+  hasKui?: boolean;
+  /** 卑弥呼「疽」计数 */
+  juMarks?: number;
+  /** 卑弥呼「拜假」已觉醒（骨疽→蚕食） */
+  baiJiaAwakened?: boolean;
 }
 
 /** 装备区：武器 / 防具 / +1马 / -1马 */

@@ -304,6 +304,7 @@ const App: React.FC = () => {
   const xuejiUsedRef = useRef<boolean>(false); // 关银屏「血祭」出牌阶段限一次
   const [hasUsedXueji, setHasUsedXueji] = useState<boolean>(false);
   const fengpoUsedRef = useRef<boolean>(false); // 马云禄「凤魄」回合内首张【杀】
+  const roundLastTurnRef = useRef<number | null>(null); // 卑弥呼「纵傀」轮次检测
   const fengpoBoostRef = useRef<Record<string, number>>({}); // 凤魄伤害加成（按牌 id）
   const shouxiDeclaredRef = useRef<Set<string>>(new Set()); // 曹节「守玺」已声明牌名（每种限一次）
   const shenxianTurnRef = useRef<number>(-1); // 张星彩「甚贤」本回合是否已发动
@@ -1168,6 +1169,8 @@ const App: React.FC = () => {
       p.hand = shuffledDeck.splice(0, 4);
       // 张琪瑛「法箓」：游戏开始时获得四种标记
       if (p.hero.name === '张琪瑛') p.zhangMarks = ['紫微', '后土', '玉清', '勾陈'];
+      // 卑弥呼：初始化傀/疽/觉醒状态
+      if (p.hero.name === '卑弥呼') { p.hasKui = false; p.juMarks = 0; p.baiJiaAwakened = false; }
     });
 
     setDeck(shuffledDeck);
@@ -1187,6 +1190,7 @@ const App: React.FC = () => {
     xuejiUsedRef.current = false;
     setHasUsedXueji(false);
     fengpoUsedRef.current = false;
+    roundLastTurnRef.current = null;
     shenxianTurnRef.current = -1;
     
     // Lord starts
@@ -1867,6 +1871,52 @@ const App: React.FC = () => {
           doDianhua(currentPlayer);
           await delay(500);
         }
+
+        // 卑弥呼「拜假」觉醒 + 「纵傀」回合开始
+        if (currentPlayer.hero.name === '卑弥呼' && skillsOn(currentPlayer.id)) {
+          const ju = currentPlayer.juMarks ?? 0;
+          if (ju >= 7 && !currentPlayer.baiJiaAwakened) {
+            const np = getPlayer(currentPlayer.id);
+            if (np) {
+              updatePlayer(currentPlayer.id, {
+                baiJiaAwakened: true,
+                maxHp: np.maxHp + 1,
+                hp: Math.min(np.hp + 1, np.maxHp + 1),
+              });
+              playersRef.current.forEach(o => {
+                if (o.id !== currentPlayer.id && !o.isDead && !o.hasKui) updatePlayer(o.id, { hasKui: true });
+              });
+              addLog(`【拜假】卑弥呼觉醒：体力上限+1、回复1点体力，所有其他角色获得“傀”，失去「骨疽」获得「蚕食」`, 'skill');
+              showSkillBanner('卑弥呼', '拜假');
+              await delay(700);
+            }
+          }
+          // 纵傀：优先给敌人
+          const cand = playersRef.current.filter(p => !p.isDead && p.id !== currentPlayer.id && !p.hasKui);
+          if (cand.length) {
+            const pick = [...cand].sort((a, b) =>
+              (isEnemy(currentPlayer, b) ? 1 : 0) - (isEnemy(currentPlayer, a) ? 1 : 0))[0];
+            updatePlayer(pick.id, { hasKui: true });
+            addLog(`【纵傀】卑弥呼令 ${pick.hero.name} 获得“傀”标记`, 'skill');
+            showSkillBanner('卑弥呼', '纵傀');
+            await delay(400);
+          }
+        }
+
+        // 每轮游戏开始时：卑弥呼令体力最少且无傀的其他角色获得傀
+        if (roundLastTurnRef.current !== null && currentPlayer.id < roundLastTurnRef.current) {
+          const bmh = playersRef.current.find(p => !p.isDead && p.hero.name === '卑弥呼' && skillsOn(p.id));
+          if (bmh) {
+            const cand = playersRef.current.filter(p => !p.isDead && p.id !== bmh.id && !p.hasKui);
+            if (cand.length) {
+              const pick = [...cand].sort((a, b) => a.hp - b.hp)[0];
+              updatePlayer(pick.id, { hasKui: true });
+              addLog(`【纵傀·轮次】卑弥呼令体力最少的 ${pick.hero.name} 获得“傀”标记`, 'skill');
+              showSkillBanner('卑弥呼', '纵傀');
+            }
+          }
+        }
+        roundLastTurnRef.current = currentPlayer.id;
 
         // 安全防线：体力<=0的角色需要先进行濒死求桃
         const latestCurrent = getPlayer(turnIndex);
@@ -3835,6 +3885,35 @@ const App: React.FC = () => {
     if (fxFly && targets.length > 0) spawnCardFlight(card, source.id, targets[0].id);
     setIsProcessing(p => p + 1);
     try {
+      // 卑弥呼「蚕食」：觉醒后，单体基本牌/普通锦囊可额外指定带“傀”的敌人
+      const canShiOffense = source.hero.name === '卑弥呼' && source.baiJiaAwakened
+        && targets.length === 1 && targets[0].id !== source.id
+        && (card.name === CardName.SHA || card.name === CardName.JUEDOU || card.name === CardName.HUOGONG);
+      if (canShiOffense) {
+        const extras = playersRef.current.filter(p => !p.isDead && p.hasKui && p.id !== source.id
+          && p.id !== targets[0].id && !isAlly(source, p));
+        if (extras.length) {
+          targets = [...targets, ...extras];
+          extras.forEach(p => updatePlayer(p.id, { hasKui: false }));
+          addLog(`【蚕食】卑弥呼令 ${extras.map(p => p.hero.name).join('、')} 成为额外目标（失去“傀”）`, 'skill');
+          showSkillBanner('卑弥呼', '蚕食');
+        }
+      }
+
+      // 卑弥呼「蚕食」防御：敌方以单体基本牌/普通锦囊指定卑弥呼时，可取消并移除其“傀”
+      const harmful = card.name === CardName.SHA || card.name === CardName.JUEDOU || card.name === CardName.HUOGONG
+        || card.name === CardName.SHUNSHOU || card.name === CardName.GUOHE
+        || card.name === CardName.LESI || card.name === CardName.BINGLIANG;
+      if (targets.length === 1 && targets[0].hero.name === '卑弥呼' && targets[0].baiJiaAwakened
+          && source.id !== targets[0].id && source.hasKui && harmful && !isAlly(source, targets[0])) {
+        updatePlayer(source.id, { hasKui: false });
+        playCard(source.id, card);
+        addLog(`【蚕食】卑弥呼取消 ${source.hero.name} 的【${card.name}】，其失去“傀”标记`, 'skill');
+        showSkillBanner('卑弥呼', '蚕食');
+        await delay(350);
+        return;
+      }
+
       // Log construction
       const targetNames = targets.map(t => t.hero.name).join('、');
       if (targets.length === 1 && targets[0].id === source.id) {
@@ -5526,6 +5605,20 @@ const App: React.FC = () => {
       // 立即更新玩家体力
       updatePlayer(victimId, { hp: newHp });
       addLog(`${victim.hero.name} 受到 ${finalAmount} 点${natureLabel}伤害！当前体力: ${newHp}/${victim.maxHp}`, 'danger');
+
+      // 卑弥呼「骨疽」：拥有“傀”的角色受到伤害后，卑弥呼摸一张并获得一个“疽”
+      const kuiVictim = getPlayer(victimId);
+      if (kuiVictim && kuiVictim.hasKui) {
+        const bmh = playersRef.current.find(p => !p.isDead && p.hero.name === '卑弥呼'
+          && skillsOn(p.id) && !p.baiJiaAwakened);
+        if (bmh) {
+          drawCards(bmh.id, 1);
+          updatePlayer(bmh.id, { juMarks: (bmh.juMarks ?? 0) + 1 });
+          addLog(`【骨疽】${kuiVictim.hero.name} 受到伤害，卑弥呼摸一张牌并获得“疽”（${(bmh.juMarks ?? 0) + 1} 枚）`, 'skill');
+          showSkillBanner('卑弥呼', '骨疽');
+          await delay(250);
+        }
+      }
 
       // 张琪瑛「真仪·勾陈」：受到属性伤害后，获得三种类型牌各一张
       const zqyVictim = getPlayer(victimId);
