@@ -130,6 +130,26 @@ export interface Player {
   fenxinUsed?: boolean;
   /** 蔡夫人「献州」限定技已使用 */
   xianzhouUsed?: boolean;
+  /** 赵襄「梅影」标记数 */
+  meiyanMarks?: number;
+  /** 赵襄「扶汉」限定技已使用 */
+  fuhanUsed?: boolean;
+  /** 辛宪英「忠鉴」本回合已发动次数 */
+  zhongjianCount?: number;
+  /** 辛宪英「忠鉴」本回合发动上限（点数相同改为 2） */
+  zhongjianLimit?: number;
+  /** 手牌上限修正（忠鉴 -1 / 才识 +1，长期累积） */
+  handLimitDelta?: number;
+  /** 辛宪英「才识」本回合用牌限制 */
+  caiShiMode?: 'limitOther' | 'limitSelf' | null;
+  /** 吴苋「福绵」本回合选项（1 额外摸牌 / 2 额外目标） */
+  fumianChoice?: number;
+  /** 吴苋「福绵」选项 1 数值（额外摸牌数） */
+  fumianValue1?: number;
+  /** 吴苋「福绵」选项 2 数值（额外目标数） */
+  fumianValue2?: number;
+  /** 吴苋「怠宴」上回合的目标 */
+  daiyanTargetId?: number;
 }
 
 /** 装备区：武器 / 防具 / +1马 / -1马 */

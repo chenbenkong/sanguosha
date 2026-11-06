@@ -318,6 +318,7 @@ const App: React.FC = () => {
   const yanyuCountRef = useRef<number>(0); // 夏侯氏「燕语」本阶段重铸【杀】数
   const turnUsedOnOthersRef = useRef<Record<number, boolean>>({}); // 蔡夫人「窃听」：本回合是否用牌指定过其他角色
   const lianzhuUsedRef = useRef<boolean>(false); // 董白「连诛」本回合已发动
+  const fumianTargetUsedRef = useRef<boolean>(false); // 吴苋「福绵」本回合额外目标已用
   const shenxianTurnRef = useRef<number>(-1); // 张星彩「甚贤」本回合是否已发动
   const doutuSkipRef = useRef<number | null>(null); // 伏皇后「惴恐」赢：目标跳过出牌阶段
   const doutuDistanceRef = useRef<Record<number, number>>({}); // 「惴恐」没赢：到伏皇后距离视为 1
@@ -667,7 +668,7 @@ const App: React.FC = () => {
       const w = window as unknown as { __r4yuhua?: Record<string, unknown> };
       w.__r4yuhua = { ...(w.__r4yuhua || {}), hero: p.hero.name, hand: p.hand.length, hp: p.hp, nonBasic: nb, sample: p.hand.map(c => c.type) };
     }
-    return Math.max(0, p.hand.length - p.hp - nb);
+    return Math.max(0, p.hand.length - p.hp - nb - (p.handLimitDelta ?? 0));
   };
   // 供 mutateHand 的延时回调使用，避免在 drawCards 声明前引用它
   const drawCardsRef = useRef<((playerId: number, count: number) => Card[]) | null>(null);
@@ -1240,7 +1241,7 @@ const App: React.FC = () => {
     if (debugDev) {
       const devWin = window as unknown as {
         __devState?: () => Array<{ id: number; name: string; hp: number; maxHp: number; identity: string; isHuman: boolean; hand: string[]; equip: string[]; sealed: boolean }>;
-        __devPatch?: (spec: Array<{ id: number; hp?: number; maxHp?: number; hand?: string[]; equip?: string[] }>) => void;
+        __devPatch?: (spec: Array<{ id: number; hp?: number; maxHp?: number; hand?: string[]; equip?: string[]; marks?: number }>) => void;
         __devDamage?: (victimId: number, sourceId: number, amount: number, nature?: 'fire' | 'thunder') => void;
       };
       devWin.__devState = () => playersRef.current.map(p => ({
@@ -1276,6 +1277,7 @@ const App: React.FC = () => {
           const patch: Partial<Player> = {};
           if (typeof s.hp === 'number') patch.hp = s.hp;
           if (typeof s.maxHp === 'number') patch.maxHp = s.maxHp;
+          if (typeof s.marks === 'number') patch.meiyanMarks = s.marks;
           if (s.hand) patch.hand = s.hand.map((nm, i) => mkCard(nm, p, i));
           if (s.equip) {
             const eq: Equipment = {};
@@ -1892,6 +1894,57 @@ const App: React.FC = () => {
         // 董白「连诛」：回合开始时重置限一次
         if (currentPlayer.hero.name === '董白') lianzhuUsedRef.current = false;
 
+        // 辛宪英：回合开始时重置「忠鉴」次数与「才识」用牌限制
+        if (currentPlayer.hero.name === '辛宪英') {
+          updatePlayer(currentPlayer.id, { zhongjianCount: 0, zhongjianLimit: 1, caiShiMode: null });
+        }
+
+        // 吴苋「福绵」：准备阶段选择一项；与上回合选择不同则该项数值 +1
+        if (currentPlayer.hero.name === '吴苋' && skillsOn(currentPlayer.id)) {
+          const red = (c: Card) => c.suit === Suit.HEART || c.suit === Suit.DIAMOND;
+          const hasRedUse = currentPlayer.hand.some(c => red(c)
+            && (c.name === CardName.SHA || c.type === CardType.SCROLL));
+          const pick: 1 | 2 = hasRedUse ? 2 : 1;
+          const prevChoice = currentPlayer.fumianChoice;
+          let v1 = currentPlayer.fumianValue1 ?? 1;
+          let v2 = currentPlayer.fumianValue2 ?? 1;
+          if (prevChoice && pick !== prevChoice) {
+            if (pick === 1) v1 = Math.min(4, v1 + 1);
+            else v2 = Math.min(3, v2 + 1);
+          }
+          updatePlayer(currentPlayer.id, { fumianChoice: pick, fumianValue1: v1, fumianValue2: v2 });
+          fumianTargetUsedRef.current = false;
+          addLog(pick === 1
+            ? `【福绵】吴苋选择摸牌阶段多摸 ${v1} 张牌`
+            : `【福绵】吴苋选择本回合红色基本牌或红色普通锦囊可额外指定 ${v2} 个目标（限一次）`, 'skill');
+          showSkillBanner('吴苋', '福绵');
+          await delay(300);
+        }
+
+        // 赵襄「扶汉」：限定技，回合开始时若拥有「梅影」，移去全部梅影并替换为蜀势力武将
+        if (currentPlayer.hero.name === '赵襄' && skillsOn(currentPlayer.id)
+            && !currentPlayer.fuhanUsed && (currentPlayer.meiyanMarks ?? 0) > 0) {
+          const marks = currentPlayer.meiyanMarks ?? 0;
+          const pool = HEROES.filter(h => h.kingdom === '蜀' && !h.pending && h.name !== '赵襄');
+          const newHero = pool[Math.floor(Math.random() * pool.length)];
+          if (newHero) {
+            // 体力上限 = 本局移去梅影数（至多游戏人数）；若为体力最低者回复 1 点
+            const newMax = Math.max(1, Math.min(marks, playersRef.current.length));
+            const aliveHp = playersRef.current.filter(p => !p.isDead).map(p => p.hp);
+            const isLowest = currentPlayer.hp <= Math.min(...aliveHp);
+            updatePlayer(currentPlayer.id, {
+              hero: newHero,
+              fuhanUsed: true,
+              meiyanMarks: 0,
+              maxHp: newMax,
+              hp: Math.min(currentPlayer.hp + (isLowest ? 1 : 0), newMax),
+            });
+            addLog(`【扶汉】赵襄移去 ${marks} 枚「梅影」并替换为蜀势力武将 ${newHero.name}，体力上限改为 ${newMax}${isLowest ? '，因体力最低回复 1 点' : ''}`, 'skill');
+            showSkillBanner('赵襄', '扶汉');
+            await delay(400);
+          }
+        }
+
         // 曹婴：回合开始时重置「凌人」，并结束上一次「奸雄/行殇」
         if (currentPlayer.hero.name === '曹婴') {
           lingrenUsedRef.current = false;
@@ -2013,8 +2066,28 @@ const App: React.FC = () => {
       
       // DRAW PHASE
       else if (currentPhase === GamePhase.DRAW) {
+        // 辛宪英「才识」：摸牌阶段选择手牌上限+1（本回合不能对其他角色用牌）或回复1点体力（本回合不能对自己用牌）
+        if (currentPlayer.hero.name === '辛宪英' && skillsOn(currentPlayer.id)) {
+          if (currentPlayer.hp < currentPlayer.maxHp && currentPlayer.hp <= 2) {
+            updatePlayer(currentPlayer.id, { caiShiMode: 'limitSelf' });
+            recoverHp(currentPlayer.id, 1);
+            addLog('辛宪英发动「才识」，选择回复 1 点体力（本回合不能对自己使用牌）', 'skill');
+          } else {
+            const nextDelta = (currentPlayer.handLimitDelta ?? 0) + 1;
+            updatePlayer(currentPlayer.id, { caiShiMode: 'limitOther', handLimitDelta: nextDelta });
+            addLog(`辛宪英发动「才识」，手牌上限 +1（累计 +${nextDelta}，本回合不能对其他角色使用牌）`, 'skill');
+          }
+          showSkillBanner('辛宪英', '才识');
+          await delay(350);
+        }
         // 周瑜「英姿」：摸牌阶段额外摸一张
-        const drawCount = currentPlayer.hero.name === '周瑜' ? 3 : 2;
+        const fumianExtra = currentPlayer.hero.name === '吴苋' && currentPlayer.fumianChoice === 1 && skillsOn(currentPlayer.id)
+          ? (currentPlayer.fumianValue1 ?? 1) : 0;
+        const drawCount = (currentPlayer.hero.name === '周瑜' ? 3 : 2) + fumianExtra;
+        if (fumianExtra > 0) {
+          addLog(`【福绵】吴苋摸牌阶段额外摸 ${fumianExtra} 张牌`, 'skill');
+          showSkillBanner('吴苋', '福绵');
+        }
         if (currentPlayer.hero.name === '周瑜') {
           addLog(`${currentPlayer.hero.name} 发动「英姿」，额外摸一张牌`, 'skill');
           showSkillBanner(currentPlayer.hero.name, '英姿');
@@ -2179,6 +2252,80 @@ const App: React.FC = () => {
               showSkillBanner('陆郁生', '润微');
               await delay(450);
             }
+          }
+        }
+
+        // 赵襄「芳魂」：移去 1 个「梅影」，发动「龙胆」将【闪】当【杀】使用，结算后摸一张牌
+        if (currentPlayer.hero.name === '赵襄' && skillsOn(currentPlayer.id)) {
+          let guard = 0;
+          while (guard < 2) {
+            const me = getPlayer(currentPlayer.id);
+            if (!me || (me.meiyanMarks ?? 0) <= 0) break;
+            if (me.hand.some(c => c.name === CardName.SHA)) break;
+            const shan = me.hand.find(c => c.name === CardName.SHAN);
+            if (!shan) break;
+            const foe = playersRef.current
+              .filter(p => !p.isDead && p.id !== me.id && isEnemy(me, p)
+                && getDistance(me.id, p.id) <= getAttackRange(me))
+              .sort((a, b) => a.hp - b.hp)[0];
+            if (!foe) break;
+            mutateHand(me.id, h => h.filter(c => c.id !== shan.id));
+            updatePlayer(me.id, { meiyanMarks: (me.meiyanMarks ?? 0) - 1 });
+            addLog(`【芳魂】赵襄移去 1 个「梅影」，发动「龙胆」将【闪】当【杀】对 ${foe.hero.name} 使用`, 'skill');
+            showSkillBanner('赵襄', '芳魂');
+            const virtualSlash: Card = {
+              ...shan,
+              id: `zhaoxiang-dragon-${shan.id}-${Date.now()}`,
+              name: CardName.SHA,
+              type: CardType.BASIC,
+              description: '闪当杀',
+            };
+            await resolveCardEffect(me, [foe], virtualSlash);
+            drawCards(me.id, 1);
+            addLog('【芳魂】龙胆结算后赵襄摸一张牌', 'skill');
+            guard++;
+            await delay(250);
+          }
+        }
+
+        // 辛宪英「忠鉴」：出牌阶段限一次（点数相同改为限两次），展示比拼颜色/点数
+        if (currentPlayer.hero.name === '辛宪英' && skillsOn(currentPlayer.id)) {
+          let guard = 0;
+          while (guard < 2) {
+            const me = getPlayer(currentPlayer.id);
+            if (!me || (me.zhongjianCount ?? 0) >= (me.zhongjianLimit ?? 1)) break;
+            const target = playersRef.current
+              .filter(p => !p.isDead && p.id !== me.id && isEnemy(me, p) && p.hand.length > p.hp)
+              .sort((a, b) => (b.hand.length - b.hp) - (a.hand.length - a.hp))[0];
+            if (!target) break;
+            const x = target.hand.length - target.hp;
+            const shown = [...target.hand].sort((a, b) => a.value - b.value).slice(0, x);
+            const isRed = (c: Card) => c.suit === Suit.HEART || c.suit === Suit.DIAMOND;
+            // 展示自己一张牌：优先能与对方同点数/同颜色的牌，其次低价值牌
+            const own = [...me.hand].sort((a, b) => {
+              const score = (c: Card) =>
+                (shown.some(s => s.rank === c.rank) ? 4 : 0) + (shown.some(s => isRed(s) === isRed(c)) ? 2 : 0);
+              return score(b) - score(a) || a.value - b.value;
+            })[0];
+            if (!own) break;
+            const colorSame = shown.some(c => isRed(c) === isRed(own));
+            const rankSame = shown.some(c => c.rank === own.rank);
+            // AI 规避：颜色与点数都不同会让手牌上限 -1，宁可不发动
+            if (!colorSame && !rankSame) break;
+            updatePlayer(me.id, {
+              zhongjianCount: (me.zhongjianCount ?? 0) + 1,
+              zhongjianLimit: rankSame ? 2 : (me.zhongjianLimit ?? 1),
+            });
+            addLog(`【忠鉴】辛宪英展示【${own.name}】(${own.suit}${own.rank})，${target.hero.name} 展示 ${shown.map(c => `【${c.name}】(${c.suit}${c.rank})`).join('、')}`, 'skill');
+            showSkillBanner('辛宪英', '忠鉴');
+            if (rankSame) addLog('【忠鉴】双方展示牌点数相同，本回合「忠鉴」改为限两次', 'skill');
+            if (colorSame) {
+              const victimCard = [...shown].sort((a, b) => b.value - a.value)[0];
+              discardCards(target.id, [victimCard]);
+              addLog(`【忠鉴】双方展示牌颜色相同，辛宪英弃置 ${target.hero.name} 的【${victimCard.name}】`, 'info');
+            }
+            await delay(350);
+            guard++;
           }
         }
 
@@ -2524,6 +2671,43 @@ const App: React.FC = () => {
             const cards = viewed.hand.slice(0, x).map(c => `【${c.name}】`).join('、');
             addLog(`【伏间】曹婴观看 ${viewed.hero.name} 的 ${x} 张手牌：${cards}`, 'skill');
             showSkillBanner('曹婴', '伏间');
+          }
+        }
+
+        // 吴苋「怠宴」：结束阶段令一名其他角色从牌堆获得一张红桃基本牌；若其本身上回合已被列为目标，其失去1点体力
+        if (endingPlayer && !endingPlayer.isDead && endingPlayer.hero.name === '吴苋' && skillsOn(endingPlayer.id)) {
+          const others = playersRef.current.filter(p => !p.isDead && p.id !== endingPlayer.id);
+          if (others.length > 0) {
+            const prevId = endingPlayer.daiyanTargetId;
+            const prevTarget = others.find(p => p.id === prevId && isEnemy(endingPlayer, p));
+            const target = prevTarget
+              ?? others.filter(p => isEnemy(endingPlayer, p)).sort((a, b) => b.hp - a.hp)[0]
+              ?? others[0];
+            const heartBasic = deckRef.current.find(c => c.suit === Suit.HEART && c.type === CardType.BASIC);
+            if (heartBasic) {
+              setDeck(prev => {
+                const next = prev.filter(c => c.id !== heartBasic.id);
+                deckRef.current = next;
+                return next;
+              });
+              mutateHand(target.id, h => [...h, heartBasic]);
+              addLog(`【怠宴】吴苋令 ${target.hero.name} 从牌堆获得一张红桃基本牌【${heartBasic.name}】`, 'skill');
+              showSkillBanner('吴苋', '怠宴');
+              if (prevId === target.id) {
+                const targetNow = getPlayer(target.id);
+                if (targetNow && !targetNow.isDead) {
+                  const nextHp = targetNow.hp - 1;
+                  updatePlayer(target.id, { hp: nextHp });
+                  addLog(`【怠宴】${target.hero.name} 上回合已成为「怠宴」目标，失去 1 点体力（${nextHp}/${targetNow.maxHp}）`, 'skill');
+                  if (nextHp <= 0) {
+                    const saved = await askForPeaches(target.id);
+                    if (!saved) await handleDeath(target.id, endingPlayer.id);
+                  }
+                }
+              }
+              updatePlayer(endingPlayer.id, { daiyanTargetId: target.id });
+              await delay(350);
+            }
           }
         }
 
@@ -4392,6 +4576,24 @@ const App: React.FC = () => {
         }
       }
 
+      // 吴苋「福绵」：选项 2 令红色基本牌或红色普通锦囊额外指定敌方目标（每回合限一次）
+      if (source.hero.name === '吴苋' && skillsOn(source.id) && source.fumianChoice === 2
+          && !fumianTargetUsedRef.current
+          && targets.length === 1 && targets[0].id !== source.id
+          && (card.suit === Suit.HEART || card.suit === Suit.DIAMOND)
+          && (card.name === CardName.SHA || card.name === CardName.JUEDOU || card.name === CardName.HUOGONG
+              || card.name === CardName.SHUNSHOU || card.name === CardName.GUOHE || card.name === CardName.JIEDAO)) {
+        const extraTargets = playersRef.current.filter(p => !p.isDead && p.id !== source.id
+          && p.id !== targets[0].id && isEnemy(source, p));
+        if (extraTargets.length) {
+          const add = extraTargets.slice(0, Math.max(1, source.fumianValue2 ?? 1));
+          targets = [...targets, ...add];
+          fumianTargetUsedRef.current = true;
+          addLog(`【福绵】吴苋令【${card.name}】额外指定 ${add.map(p => p.hero.name).join('、')} 为目标`, 'skill');
+          showSkillBanner('吴苋', '福绵');
+        }
+      }
+
       // 蔡夫人「窃听」记录：本回合是否用牌指定过其他角色（含蚕食追加目标）
       if (source.id >= 0 && targets.some(t => t.id !== source.id)) {
         turnUsedOnOthersRef.current[source.id] = true;
@@ -6236,6 +6438,16 @@ const App: React.FC = () => {
       updatePlayer(victimId, { hp: newHp });
       addLog(`${victim.hero.name} 受到 ${finalAmount} 点${natureLabel}伤害！当前体力: ${newHp}/${victim.maxHp}`, 'danger');
 
+      // 赵襄「芳魂」：使用【杀】造成伤害后，获得一个「梅影」标记
+      if (sourceId !== victimId && damageCard?.name === CardName.SHA) {
+        const zx = getPlayer(sourceId);
+        if (zx && zx.hero.name === '赵襄' && skillsOn(sourceId)) {
+          updatePlayer(sourceId, { meiyanMarks: (zx.meiyanMarks ?? 0) + 1 });
+          addLog(`【芳魂】赵襄获得「梅影」标记（${(zx.meiyanMarks ?? 0) + 1} 枚）`, 'skill');
+          showSkillBanner('赵襄', '芳魂');
+        }
+      }
+
       // 卑弥呼「骨疽」：拥有“傀”的角色受到伤害后，卑弥呼摸一张并获得一个“疽”
       const kuiVictim = getPlayer(victimId);
       if (kuiVictim && kuiVictim.hasKui) {
@@ -6634,7 +6846,7 @@ const App: React.FC = () => {
     const taoThreshold = aiDifficultyRef.current === 'hard'
       ? (aiPlayer.hp <= 1 || aiPlayer.maxHp - aiPlayer.hp >= 2)
       : true;
-    if (aiPlayer.hp < aiPlayer.maxHp && taoThreshold) {
+    if (aiPlayer.hp < aiPlayer.maxHp && taoThreshold && aiPlayer.caiShiMode !== 'limitSelf') {
       const peach = aiPlayer.hand.find(c => c.name === CardName.TAO);
       if (peach) {
         await resolveCardEffect(aiPlayer, [aiPlayer], peach);
@@ -6644,9 +6856,17 @@ const App: React.FC = () => {
 
     // 3. Play Wuzhong
     const wuzhong = aiPlayer.hand.find(c => c.name === CardName.WUZHONG);
-    if (wuzhong) {
+    if (wuzhong && aiPlayer.caiShiMode !== 'limitSelf') {
       await resolveCardEffect(aiPlayer, [aiPlayer], wuzhong);
       await delay(1500);
+    }
+
+    // 辛宪英「才识」：本回合不能对其他角色使用牌，只保留装备与自我目标牌后结束出牌
+    if (aiPlayer.hero.name === '辛宪英' && aiPlayer.caiShiMode === 'limitOther') {
+      addLog('辛宪英受「才识」限制，本回合不能对其他角色使用牌', 'info');
+      aiTurnActiveRef.current = false;
+      setPhase(GamePhase.DISCARD);
+      return;
     }
 
     // 4. Play Wanjian Qifa
@@ -6791,7 +7011,7 @@ const App: React.FC = () => {
 
     // 11. Play Jiu (before Slash for boost)
     const jiu = aiPlayer.hand.find(c => c.name === CardName.JIU);
-    if (jiu && targetId !== -1) {
+    if (jiu && targetId !== -1 && aiPlayer.caiShiMode !== 'limitSelf') {
       await resolveCardEffect(aiPlayer, [aiPlayer], jiu);
       await delay(1000);
     }
