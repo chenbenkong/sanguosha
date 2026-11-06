@@ -553,7 +553,6 @@ export const HEROES: Hero[] = [
     skillName: '樵拾 / 燕语',
     skillDesc: '樵拾：其他角色的结束阶段，若其手牌数等于你，你可以与其各摸一张牌。燕语：出牌阶段，你可以重铸【杀】；出牌阶段结束时，若你于此阶段内重铸过两张或更多的【杀】，则你可以令一名男性角色摸两张牌。',
     gender: 'female',
-    pending: true,
   },
   {
     id: 'dongbai',

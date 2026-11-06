@@ -315,6 +315,7 @@ const App: React.FC = () => {
   const runweiGiftRef = useRef<{ targetId: number; ids: string[] } | null>(null); // 润微本阶段给出的牌
   const shuanghuaiUsedRef = useRef<boolean>(false); // 陆郁生「霜怀」每回合限一次
   const lastShuanghuaiTargetRef = useRef<number | null>(null); // 霜怀上一次的目标
+  const yanyuCountRef = useRef<number>(0); // 夏侯氏「燕语」本阶段重铸【杀】数
   const shenxianTurnRef = useRef<number>(-1); // 张星彩「甚贤」本回合是否已发动
   const doutuSkipRef = useRef<number | null>(null); // 伏皇后「惴恐」赢：目标跳过出牌阶段
   const doutuDistanceRef = useRef<Record<number, number>>({}); // 「惴恐」没赢：到伏皇后距离视为 1
@@ -1212,6 +1213,7 @@ const App: React.FC = () => {
     runweiGiftRef.current = null;
     shuanghuaiUsedRef.current = false;
     lastShuanghuaiTargetRef.current = null;
+    yanyuCountRef.current = 0;
     
     // Lord starts
     const lordIndex = newPlayers.findIndex(p => p.identity === Identity.ZHUGONG);
@@ -1576,6 +1578,14 @@ const App: React.FC = () => {
 
     if (killerId !== undefined && killerId !== victimId) {
       const killer = getPlayer(killerId)!;
+      // 灵雎「焚心」：限定技，杀死角色后若自己不为主公，可与死者交换身份牌（AI 仅在击杀主公时使用）
+      if (killer.hero.name === '灵雎' && skillsOn(killerId) && !killer.fenxinUsed
+          && killer.identity !== Identity.ZHUGONG && victim.identity === Identity.ZHUGONG) {
+        updatePlayer(killerId, { fenxinUsed: true, identity: Identity.ZHUGONG });
+        updatePlayer(victimId, { identity: killer.identity });
+        addLog(`【焚心】灵雎与 ${victim.hero.name} 交换身份牌，灵雎成为【主公】，${victim.hero.name} 变为【${killer.identity}】`, 'skill');
+        showSkillBanner('灵雎', '焚心');
+      }
       // 何太后「戚乱」：记录本回合击杀数（结束阶段按 3×击杀数摸牌）
       if (killer.hero.name === '何太后') hetaishouKillsRef.current += 1;
       // 蔡文姬「断肠」：击杀者失去所有手牌
@@ -1867,6 +1877,9 @@ const App: React.FC = () => {
         shuanghuaiUsedRef.current = false;
         if (currentPlayer.hero.name === '陆郁生') runweiUsedRef.current = false;
 
+        // 夏侯氏：回合开始时重置「燕语」重铸计数
+        if (currentPlayer.hero.name === '夏侯氏') yanyuCountRef.current = 0;
+
         // 曹婴：回合开始时重置「凌人」，并结束上一次「奸雄/行殇」
         if (currentPlayer.hero.name === '曹婴') {
           lingrenUsedRef.current = false;
@@ -2157,6 +2170,27 @@ const App: React.FC = () => {
           }
         }
 
+        // 夏侯氏「燕语」（出牌阶段部分）：重铸【杀】（弃一张【杀】后摸一张牌），每阶段至多两张
+        if (currentPlayer.hero.name === '夏侯氏' && skillsOn(currentPlayer.id)) {
+          let guard = 0;
+          while (yanyuCountRef.current < 2 && guard < 2) {
+            const me = getPlayer(currentPlayer.id);
+            if (!me) break;
+            const shas = me.hand.filter(c => c.name === CardName.SHA);
+            // AI 取舍：通常留一张【杀】用于进攻；手牌充足时才把最后一张也重铸换质量
+            const keepOne = me.hand.length >= 5 ? 0 : 1;
+            if (shas.length <= keepOne) break;
+            const card = [...shas].sort((a, b) => a.value - b.value)[0];
+            mutateHand(me.id, h => h.filter(c => c.id !== card.id));
+            addLog(`夏侯氏发动「燕语」，重铸【杀】（弃置【${card.name}】并摸一张牌）`, 'skill');
+            showSkillBanner('夏侯氏', '燕语');
+            drawCards(me.id, 1);
+            yanyuCountRef.current += 1;
+            guard++;
+            await delay(300);
+          }
+        }
+
         // 徐氏「问卦」：其他角色的出牌阶段开始时，可以交给徐氏一张牌，徐氏置于牌堆底，双方各摸一张
         const xushi = playersRef.current.find(p => !p.isDead && p.id !== currentPlayer.id
           && p.hero.name === '徐氏' && skillsOn(p.id));
@@ -2383,6 +2417,37 @@ const App: React.FC = () => {
             }
           }
           runweiGiftRef.current = null;
+        }
+
+        // 夏侯氏「燕语」（结束阶段部分）：本阶段重铸过不少于两张【杀】，令一名男性角色摸两张牌
+        if (endingPlayer && !endingPlayer.isDead && endingPlayer.hero.name === '夏侯氏'
+            && skillsOn(endingPlayer.id) && yanyuCountRef.current >= 2) {
+          const males = playersRef.current
+            .filter(p => !p.isDead && p.hero.gender === 'male' && isAlly(endingPlayer, p))
+            .sort((a, b) => a.hand.length - b.hand.length);
+          const target = males[0];
+          if (target) {
+            addLog(`【燕语】夏侯氏令 ${target.hero.name} 摸两张牌（本阶段重铸 ${yanyuCountRef.current} 张【杀】）`, 'skill');
+            showSkillBanner('夏侯氏', '燕语');
+            drawCards(target.id, 2);
+            await delay(300);
+          } else {
+            addLog('【燕语】场上没有可作为目标的男性角色，效果未结算', 'info');
+          }
+        }
+
+        // 夏侯氏「樵拾」：其他角色的结束阶段，若其手牌数等于夏侯氏的手牌数，令其摸一张牌，然后夏侯氏摸一张牌
+        {
+          const xiahou = playersRef.current.find(p => !p.isDead && p.id !== turnIndex
+            && p.hero.name === '夏侯氏' && skillsOn(p.id));
+          const ender = getPlayer(turnIndex);
+          if (xiahou && ender && !ender.isDead && ender.hand.length === xiahou.hand.length) {
+            addLog(`【樵拾】${ender.hero.name} 与夏侯氏手牌数同为 ${ender.hand.length}，令其摸一张牌，夏侯氏摸一张牌`, 'skill');
+            showSkillBanner('夏侯氏', '樵拾');
+            drawCards(ender.id, 1);
+            drawCards(xiahou.id, 1);
+            await delay(300);
+          }
         }
 
         // 曹节「惠民」（原版）：结束阶段摸 X 张牌（X 为手牌数小于体力值的角色数），
@@ -5831,6 +5896,21 @@ const App: React.FC = () => {
         if (lingrenBoost.bonus > 0) addLog('【凌人】猜测成功，此伤害 +1', 'danger');
       }
 
+      // 灵雎「竭缘」：对其他角色造成伤害时，若其体力值不小于你，可弃一张黑色手牌令此伤害+1
+      const lingjuSrc = getPlayer(sourceId);
+      if (lingjuSrc && lingjuSrc.hero.name === '灵雎' && sourceId !== victimId && skillsOn(sourceId)) {
+        const v = getPlayer(victimId);
+        if (v && v.hp >= lingjuSrc.hp) {
+          const black = lingjuSrc.hand.find(c => c.suit === Suit.SPADE || c.suit === Suit.CLUB);
+          if (black) {
+            mutateHand(sourceId, h => h.filter(c => c.id !== black.id));
+            finalAmount += 1;
+            addLog(`【竭缘】灵雎弃置黑色【${black.name}】，此伤害 +1`, 'danger');
+            showSkillBanner('灵雎', '竭缘');
+          }
+        }
+      }
+
       // 张琪瑛「真仪·玉清」：造成伤害时弃置标记判定，黑色则伤害+1
       const zqySrc = getPlayer(sourceId);
       if (zqySrc && zqySrc.hero.name === '张琪瑛' && sourceId !== victimId
@@ -5873,6 +5953,25 @@ const App: React.FC = () => {
       if (!ignoreArmor && armor === CardName.BAIYIN && finalAmount > 1) {
         finalAmount = 1;
         addLog(`${victim.hero.name} 的【白银狮子】将伤害减为 1 点`, 'skill');
+      }
+
+      // 灵雎「竭缘」：受到其他角色造成的伤害时，若其体力值不小于你，可弃一张红色手牌令此伤害-1
+      const lingjuVictim = getPlayer(victimId);
+      if (lingjuVictim && lingjuVictim.hero.name === '灵雎' && sourceId >= 0
+          && sourceId !== victimId && skillsOn(victimId) && finalAmount > 0) {
+        const s = getPlayer(sourceId);
+        if (s && s.hp >= lingjuVictim.hp) {
+          const red = lingjuVictim.hand.find(c => (c.suit === Suit.HEART || c.suit === Suit.DIAMOND) && c.name !== CardName.TAO)
+            ?? (lingjuVictim.hp <= 2
+              ? lingjuVictim.hand.find(c => c.suit === Suit.HEART || c.suit === Suit.DIAMOND)
+              : undefined);
+          if (red) {
+            mutateHand(victimId, h => h.filter(c => c.id !== red.id));
+            finalAmount = Math.max(0, finalAmount - 1);
+            addLog(`【竭缘】灵雎弃置红色【${red.name}】，此伤害 -1`, 'skill');
+            showSkillBanner('灵雎', '竭缘');
+          }
+        }
       }
 
       // 寒冰剑：造成伤害时，可防止伤害并改为弃置目标两张牌

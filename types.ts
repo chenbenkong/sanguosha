@@ -126,6 +126,8 @@ export interface Player {
   hasXingshang?: boolean;
   /** 鲍三娘「许身」限定技已使用 */
   xushenUsed?: boolean;
+  /** 灵雎「焚心」限定技已使用 */
+  fenxinUsed?: boolean;
 }
 
 /** 装备区：武器 / 防具 / +1马 / -1马 */
