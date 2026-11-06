@@ -1437,39 +1437,39 @@ a:focus-visible {
    座位卡高度 = 原有值 + 26px：对局卡面不再画称号行，腾出的空间全部给立绘
    （见 .seat-card / .seat-info，标题行已删除） */
 [data-density="roomy"] {
-  --sc-w: 256px; --sc-h: 254px;
-  --own-w: 400px; --own-h: 264px;
-  --hand-min: 210px;
-  --felt-w: min(760px, 46vw); --felt-h: min(300px, 30vh);
+  --sc-w: 196px; --sc-h: 204px;
+  --own-w: 292px; --own-h: 196px;
+  --hand-min: 190px;
+  --felt-w: min(820px, 52vw); --felt-h: min(330px, 32vh);
 }
 [data-density="roomy"][data-size-tier="xl"] {
-  --sc-w: 272px; --sc-h: 262px;
-  --own-w: 416px; --own-h: 272px;
-  --hand-min: 222px;
+  --sc-w: 208px; --sc-h: 212px;
+  --own-w: 304px; --own-h: 202px;
+  --hand-min: 198px;
 }
 [data-density="normal"] {
-  --sc-w: 240px; --sc-h: 242px;
-  --own-w: 372px; --own-h: 252px;
-  --hand-min: 198px;
-  --felt-w: min(680px, 44vw); --felt-h: min(270px, 28vh);
+  --sc-w: 164px; --sc-h: 196px;
+  --own-w: 264px; --own-h: 180px;
+  --hand-min: 180px;
+  --felt-w: min(760px, 54vw); --felt-h: min(320px, 32vh);
 }
 [data-density="compact"] {
-  --sc-w: 210px; --sc-h: 196px;
-  --own-w: 340px; --own-h: 212px;
+  --sc-w: 156px; --sc-h: 180px;
+  --own-w: 240px; --own-h: 164px;
   --hand-min: 186px;
-  --felt-w: min(600px, 42vw); --felt-h: min(240px, 26vh);
+  --felt-w: min(660px, 50vw); --felt-h: min(270px, 30vh);
 }
 [data-density="tight"] {
-  --sc-w: 190px; --sc-h: 180px;
-  --own-w: 320px; --own-h: 196px;
+  --sc-w: 144px; --sc-h: 164px;
+  --own-w: 216px; --own-h: 150px;
   --hand-min: 176px;
-  --felt-w: min(540px, 40vw); --felt-h: min(210px, 24vh);
+  --felt-w: min(580px, 46vw); --felt-h: min(230px, 28vh);
 }
 [data-density="ultra"] {
-  --sc-w: 178px; --sc-h: 168px;
-  --own-w: 300px; --own-h: 184px;
+  --sc-w: 136px; --sc-h: 152px;
+  --own-w: 200px; --own-h: 138px;
   --hand-min: 166px;
-  --felt-w: min(480px, 38vw); --felt-h: min(180px, 22vh);
+  --felt-w: min(520px, 42vw); --felt-h: min(200px, 24vh);
 }
 
 /* 桌面座位：全部敌人顶部一行平铺；左右两侧留给战报与出牌顺序，中央卡池不被遮挡 */
@@ -1493,23 +1493,27 @@ a:focus-visible {
     height: calc(100% - var(--sc-h) - 68px) !important;
   }
 
-  /* 阶段条贴右下，不与卡池争中央 */
+  /* 右侧竖列整体让给「出牌顺序条 + 抬高的主视角卡」：
+     顺序条在右上半段（可折叠），主视角卡在右下半段，二者上下错开不重叠。
+     阶段条仍在左侧底部，与战况栏并列。 */
   .phase-panel {
-    left: auto !important;
-    right: 8px !important;
+    left: 56px !important;
+    right: auto !important;
     top: auto !important;
     bottom: 8px !important;
     transform: none !important;
+    z-index: 20 !important;
   }
 
-  /* 出牌顺序条：右侧竖排 */
+  /* 出牌顺序条：右侧竖排（官方布局偏好），底部停在主视角卡上方 */
   [data-region="turn-rail"] {
     position: absolute;
-    right: 8px;
+    right: 10px;
+    left: auto;
     top: calc(44px + var(--sc-h) + 12px);
-    bottom: 90px;
-    width: 184px;
-    z-index: 31;
+    bottom: calc(var(--own-h) + 16px);
+    width: 168px;
+    z-index: 20;
     gap: 3px;
     padding: 4px;
     overflow-y: auto;
@@ -1518,8 +1522,8 @@ a:focus-visible {
   [data-region="turn-rail"]::-webkit-scrollbar { width: 4px; }
   [data-region="turn-rail"]::-webkit-scrollbar-thumb { background: rgba(200, 164, 92, 0.35); border-radius: 2px; }
 
-  /* 卡池是视觉中心：桌面整体放大 12%，布局盒不变，仍与座位/阶段条错开 */
-  [data-region="center-decks"] { transform: scale(1.12); }
+  /* 卡池保持桌面视觉中心，但按官方比例收敛：整体 0.94，不再抢座位/手牌的视觉重量 */
+  [data-region="center-decks"] { transform: scale(0.94); }
 }
 
 /* 矮屏（1366×620 / 1280×600 等）：座位行收窄、卡池略缩，避免纵向裁切 */
@@ -1914,15 +1918,17 @@ a:focus-visible {
     align-items: end;
   }
   .player-info-row { display: contents !important; }
+  /* 主视角卡不再和手牌同排：绝对定位抬到手牌区上方，卡底与手牌区固定留 16px。
+     抬高只发生在底部栏右侧，不改变底部栏/场地高度，中央卡池与顶部座位不受影响 */
   .own-seat {
-    grid-column: 2;
-    grid-row: 1 / span 2;
-    justify-self: end;
-    align-self: end;
+    position: absolute !important;
+    right: 12px;
+    bottom: calc(8px + var(--hand-min) + 16px);
+    z-index: 25;
+    display: block;
     width: var(--own-w);
     height: var(--own-h);
     padding: 0;
-    display: block;
     border: 2px solid var(--k-line);
     border-radius: 12px;
     /* 与座位卡同一套卡面（.seat-card + .kingdom-frame），只按 --own-w/--own-h 略大一号 */
@@ -1938,8 +1944,9 @@ a:focus-visible {
     align-self: end;
     z-index: 40;
   }
+  /* 手牌区跨满整行，内层 mx-auto 让牌少时按视口中线居中（不再被主视角卡的列宽挤偏） */
   [data-region="hand"] {
-    grid-column: 1;
+    grid-column: 1 / -1;
     grid-row: 2;
     min-height: var(--hand-min);
   }
@@ -2106,10 +2113,11 @@ a:focus-visible {
   [data-region="seats"] .seat-judge span { height: 17px; line-height: 15px; padding: 0 2px; font-size: 13px; }
   [data-region="seats"] .seat-dead span { font-size: 16px; }
 
-  /* 手机主视角卡：与座位卡同款卡面，宽度占满整行，立绘可见高与座位卡对齐 */
+  /* 手机主视角卡：与座位卡同款卡面，不再占满整行（宽度收窄、贴右、抬高到手牌上方） */
   .own-seat {
-    width: 100%;
-    height: 156px;
+    width: calc(100% - 64px);
+    height: 132px;
+    margin-left: auto;
     padding: 0;
     border: 2px solid var(--k-line);
     border-radius: 9px;
@@ -2216,9 +2224,9 @@ a:focus-visible {
 }
 
 
-/* 矮手机（<700px 高）：主视角卡收 20px，手牌仍完整落在首屏内 */
+/* 矮手机（<700px 高）：主视角卡再收一档，手牌仍完整落在首屏内 */
 @media (max-width: 767px) and (max-height: 699px) {
-  .own-seat { height: 136px; }
+  .own-seat { height: 116px; }
   .own-seat .seat-info { padding: 3px 6px 4px; }
 }
 

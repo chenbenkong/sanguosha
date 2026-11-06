@@ -7307,15 +7307,14 @@ const App: React.FC = () => {
           {enemies.map((p, index) => {
             // 顶部一行平铺全部敌人，左右两侧留给战报与出牌顺序条，中央卡池不被任何座位遮挡
             const totalEnemies = enemies.length;
-            const baseW = layoutDensity === 'roomy' ? (sizeTier === 'xl' ? 272 : 256)
-              : layoutDensity === 'normal' ? 240
-              : layoutDensity === 'compact' ? 210
-              : layoutDensity === 'tight' ? 190 : 178;
-            // 座位不再缩卡：保持基准宽度，用「加大中心间距 + 用满横向空间」把座位拉开。
-            // 中心间距目标 = 原基准间距 × 1.32（+32%），若视口放不下再退让（7 人局最多允许 16px 横向压叠）
+            const baseW = layoutDensity === 'roomy' ? (sizeTier === 'xl' ? 208 : 196)
+              : layoutDensity === 'normal' ? 164
+              : layoutDensity === 'compact' ? 156
+              : layoutDensity === 'tight' ? 144 : 136;
+            // 座位保持基准宽度（不缩卡），中心间距 =（卡宽+12）× 1.17；视口放不下时退让（7 人局允许轻微压叠）
             const seatW = baseW;
             const inner = Math.max(320, viewport.w - 32);
-            const wantedPitch = Math.round((seatW + 12) * 1.32);
+            const wantedPitch = Math.round((seatW + 12) * 1.17);
             const fitPitch = totalEnemies > 1 ? Math.floor((inner - seatW) / (totalEnemies - 1)) : 0;
             const seatPitch = totalEnemies > 1 ? Math.min(wantedPitch, Math.max(1, fitPitch)) : 0;
             // 6 个对手（7 人局）在 1440 宽下必然贴边，用 26px 上下错位拉开视觉
