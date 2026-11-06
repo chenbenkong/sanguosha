@@ -484,7 +484,6 @@ export const HEROES: Hero[] = [
     skillName: '影箭 / 释衅',
     skillDesc: '影箭：准备阶段，你可以视为使用一张无距离限制的【杀】。释衅：锁定技，你不会受到火焰伤害。',
     gender: 'female',
-    pending: true,
   },
   {
     id: 'lingju',
@@ -508,7 +507,6 @@ export const HEROES: Hero[] = [
     skillName: '鸩毒 / 戚乱',
     skillDesc: '鸩毒：其他角色的出牌阶段开始时，你可以弃置一张手牌。若如此做，该角色视为使用一张【酒】，然后你对其造成1点伤害。戚乱：一名角色的回合结束时，你每于此回合内杀死过一名其他角色，你便摸三张牌。',
     gender: 'female',
-    pending: true,
   },
   {
     id: 'sunluyu',
@@ -532,7 +530,6 @@ export const HEROES: Hero[] = [
     skillName: '甘露 / 补益',
     skillDesc: '甘露：出牌阶段限一次，你可以选择两名装备区里的牌数之差不大于你已损失体力值数的角色，交换他们装备区里的牌。补益：当一名角色进入濒死状态时，你可以展示其一张手牌，然后若此牌不为基本牌，则该角色弃置此牌，然后回复1点体力。',
     gender: 'female',
-    pending: true,
   },
   {
     id: 'caifuren',
@@ -592,7 +589,6 @@ export const HEROES: Hero[] = [
     skillName: '矫诏 / 殚心',
     skillDesc: '矫诏：1级：出牌阶段限一次，你可以展示一张手牌，然后令你距离最近的角色声明一种基本牌。本回合你可将此手牌当声明的牌使用（不能对自己使用）。2级：出牌阶段限一次，你可以展示一张手牌，然后令你距离最近的角色声明一种基本牌或普通锦囊牌。本回合你可将此手牌当声明的牌使用（不能对自己使用）。3级：出牌阶段限一次，你可以展示一张手牌，然后声明一种基本牌或普通锦囊牌。本回合你可以将一张手牌当任意一种基本牌或普通锦囊牌使用（不能对自己使用）。殚心：当你受到伤害后，你可以摸一张牌，或升级“矫诏”（可被升级两次）。',
     gender: 'female',
-    pending: true,
   },
   {
     id: 'xinxianying',
@@ -712,7 +708,6 @@ export const HEROES: Hero[] = [
     skillName: '淑慎 / 神智',
     skillDesc: '淑慎：当你回复1点体力后，你可以令一名其他角色摸一张牌。神智：准备阶段，你可以弃置所有手牌，若你以此法弃置的手牌数不小于你的体力值，你回复1点体力。',
     gender: 'female',
-    pending: true,
   },
   {
     id: 'zoushi',
@@ -724,7 +719,6 @@ export const HEROES: Hero[] = [
     skillName: '祸水 / 倾城',
     skillDesc: '祸水：出牌阶段，你可以明置此武将牌；你的回合内，其他角色不能明置其武将牌。倾城：出牌阶段，你可以弃置一张黑色牌并选择一名武将牌均明置的其他角色，然后你暗置其一张武将牌。然后若你以此法弃置的牌是装备牌，则你可以再选择另一名武将牌均明置的其他角色，暗置其一张武将牌。',
     gender: 'female',
-    pending: true,
   },
   {
     id: 'mifuren',

@@ -422,6 +422,14 @@
   transform: none;
 }
 
+/* 邹氏「倾城」暗置：人类玩家技能整体灰化且不可点击 */
+body[data-human-sealed="true"] .skill-btn {
+  opacity: 0.42;
+  filter: grayscale(0.7);
+  pointer-events: none;
+  cursor: not-allowed;
+}
+
 /* ===== 命中 / 治疗的全屏演出 =====
    官方结算时会有一次明显的画面反馈；这里用一次性边缘光做打击感，不阻塞操作 */
 @keyframes hitFlash {

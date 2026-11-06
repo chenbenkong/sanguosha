@@ -127,6 +127,13 @@ export const HERO_PROFILES: Record<string, HeroProfile> = {
   曹节: { pack: 'SP 武将', roles: ['辅助'], difficulty: 3, tip: '【惠民】按缺牌人数摸牌再分发，队友越缺牌，整体收益越高。' },
   伏皇后: { pack: 'SP 武将', roles: ['防御', '控制'], difficulty: 3, tip: '【求援】把【杀】转给对手，逼其交【闪】或一起成为目标。' },
   马云禄: { pack: 'SP 武将', roles: ['爆发'], difficulty: 1, tip: '【马术】恒定减距离，4 点体力正面压制，优先贴脸输出。' },
+  // 第 1 批实装女将
+  孙茹: { pack: '新将·第1批', roles: ['爆发', '防御'], difficulty: 2, tip: '【影箭】每回合准备阶段白嫖一张无距离【杀】，优先打残血；火攻/火杀对你无效。' },
+  何太后: { pack: '新将·第1批', roles: ['控制'], difficulty: 3, tip: '【鸩毒】在敌人出牌阶段前弃牌压血线，优先针对手牌少的敌人；【戚乱】靠击杀滚雪球。' },
+  吴国太: { pack: '新将·第1批', roles: ['辅助', '控制'], difficulty: 3, tip: '【甘露】把队友的装备换给缺装备的人，注意装备差不超过自己已损体力；【补益】留非基本牌救濒死。' },
+  甘夫人: { pack: '新将·第1批', roles: ['辅助', '续航'], difficulty: 2, tip: '【淑慎】回血时让最缺牌的队友补牌；【神智】手牌多时弃光换 1 点体力。' },
+  邹氏: { pack: '新将·第1批', roles: ['控制'], difficulty: 3, tip: '先用【祸水】明置，再用【倾城】弃黑牌暗置敌方技能，专封对方核心。' },
+  郭皇后: { pack: '新将·第1批', roles: ['爆发', '控制'], difficulty: 3, tip: '【矫诏】把废手牌声明成关键牌；【殚心】受伤后优先升级矫诏到 Lv3。' },
 };
 
 export interface HeroSkillView {

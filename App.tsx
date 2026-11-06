@@ -1,5 +1,5 @@
 ﻿import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { Hero, Player, Card, GamePhase, CardName, LogEntry, Identity, Suit, CardType } from './types';
+import { Hero, Player, Card, GamePhase, CardName, LogEntry, Identity, Suit, CardType, Equipment } from './types';
 import { HEROES, INITIAL_DECK, EQUIP_META } from './constants';
 import { playSfx, SFX_FOR_NAME } from './src/audio/sfx';
 import { playCardVoice, playSkillVoice, playDeathVoice, playEnterVoice, hasCardVoice } from './src/audio/voice';
@@ -51,6 +51,9 @@ const FX_LABEL: Record<FxLevel, string> = {
 };
 const FX_TAG: Record<FxLevel, string> = { classic: '典', pure: '净', subtle: '克', full: '全' };
 const FX_ORDER: FxLevel[] = ['classic', 'pure', 'subtle', 'full'];
+
+// 仅本地开发构建：定向测试探针开关（生产构建为 false，相关代码被裁剪）
+const DEV_BUILD = (import.meta as unknown as { env?: { DEV?: boolean } }).env?.DEV === true;
 
 const App: React.FC = () => {
   // --- Theme ---
@@ -334,6 +337,40 @@ const App: React.FC = () => {
   const [anxuTargets, setAnxuTargets] = useState<number[]>([]);
   // 许褚「裸衣」：本回合【杀】/【决斗】伤害+1
   const luoyiPlayerRef = useRef<number | null>(null);
+
+  // ── 第 1 批女将技能状态（孙茹/何太后/吴国太/甘夫人/邹氏/郭皇后）──
+  // 吴国太「甘露」：出牌阶段限一次，交换两名角色装备区
+  const [isGanluMode, setIsGanluMode] = useState<boolean>(false);
+  const [ganluTargets, setGanluTargets] = useState<number[]>([]);
+  const [hasUsedGanlu, setHasUsedGanlu] = useState<boolean>(false);
+  const ganluUsedRef = useRef<boolean>(false);
+  // 邹氏「倾城」：弃置黑色牌，暗置一名角色的武将牌
+  const [isQingchengMode, setIsQingchengMode] = useState<boolean>(false);
+  const [hasUsedQingcheng, setHasUsedQingcheng] = useState<boolean>(false);
+  const qingchengUsedRef = useRef<boolean>(false);
+  const zoushiRevealedRef = useRef<Set<number>>(new Set()); // 「祸水」已明置
+  const skillSealRef = useRef<Record<number, number>>({}); // 被「倾城」暗置：解封回合计数
+  const turnCountRef = useRef<number>(0); // 全局回合计数（用于暗置解封）
+  // 郭皇后「矫诏」/「殚心」
+  const [hasUsedJiaozhao, setHasUsedJiaozhao] = useState<boolean>(false);
+  const [guohuanghouLevel, setGuohuanghouLevel] = useState<number>(1);
+  const guohuanghouLevelRef = useRef<Record<number, number>>({});
+  const jiaozhaoUsedRef = useRef<boolean>(false);
+  // 何太后「戚乱」：本回合内何太后击杀数
+  const hetaishouKillsRef = useRef<number>(0);
+
+  // 被「倾城」暗置时，人类玩家的技能按钮整体禁用（视觉由 theme.css 的 body[data-human-sealed] 控制）
+  useEffect(() => {
+    const human = playersRef.current.find(p => p.isHuman);
+    document.body.dataset.humanSealed = human && isSkillSealed(human.id) ? 'true' : 'false';
+    return () => { document.body.dataset.humanSealed = 'false'; };
+  }, [players]);
+
+  // 仅本地开发：向定向测试脚本暴露当前回合与阶段（生产构建中整段移除）
+  useEffect(() => {
+    if (!DEV_BUILD) return;
+    (window as unknown as { __devTurn?: { turn: number; phase: string } }).__devTurn = { turn: turnIndex, phase };
+  }, [turnIndex, phase]);
 
   // 战绩统计（localStorage 持久化）
   const [stats, setStats] = useState<{ games: number; wins: number; losses: number }>(() => {
@@ -671,6 +708,21 @@ const App: React.FC = () => {
     return false;
   };
 
+  // 邹氏「倾城」：被暗置的角色在解封回合前，其技能不发动（主动技入口与事件触发技均需门控）
+  const isSkillSealed = (id: number) => {
+    const until = skillSealRef.current[id];
+    return !!until && until > turnCountRef.current;
+  };
+  const skillsOn = (id: number) => !isSkillSealed(id);
+
+  // 相邻存活角色（按座位顺序），“距离最近”的近似：优先下家，其次上家
+  const nearestOtherPlayer = (id: number) => {
+    const live = playersRef.current.filter(p => !p.isDead);
+    const idx = live.findIndex(p => p.id === id);
+    if (idx < 0 || live.length <= 1) return null;
+    return live[(idx + 1) % live.length];
+  };
+
   // --- 身份推理 ---
   // AI 依据公开信息（阵亡亮明、攻击主公、救援主公）推测他人身份
   const identityGuessRef = useRef<Record<number, Identity>>({});
@@ -781,6 +833,29 @@ const App: React.FC = () => {
     addLog(`${p.hero.name} 发动「枭姬」，失去装备后摸了两张牌`, 'skill');
   }, [drawCards]);
 
+  // 甘夫人「淑慎」：甘夫人回复体力后，可令一名友方角色摸等量牌
+  const recoverHp = (playerId: number, amount: number) => {
+    const p = getPlayer(playerId);
+    if (!p || p.isDead || amount <= 0) return 0;
+    const next = Math.min(p.maxHp, p.hp + amount);
+    const gained = next - p.hp;
+    if (gained <= 0) return 0;
+    updatePlayer(playerId, { hp: next });
+    const healed = getPlayer(playerId);
+    if (healed && healed.hero.name === '甘夫人' && skillsOn(healed.id)) {
+      const allies = playersRef.current
+        .filter(a => !a.isDead && a.id !== healed.id && isAlly(healed, a))
+        .sort((a, b) => a.hand.length - b.hand.length);
+      const pick = allies[0];
+      if (pick) {
+        drawCards(pick.id, gained);
+        addLog(`甘夫人发动「淑慎」，令 ${pick.hero.name} 摸 ${gained} 张牌`, 'skill');
+        showSkillBanner('甘夫人', '淑慎');
+      }
+    }
+    return gained;
+  };
+
   // --- 距离与攻击范围 ---
   // 座位距离：环形相邻为 1；-1 马减少自己到他人的距离，+1 马增加他人到自己的距离
   const getDistance = useCallback((fromId: number, toId: number) => {
@@ -839,7 +914,7 @@ const App: React.FC = () => {
     const p = getPlayer(playerId);
     if (!p || p.isDead) return;
     if (p.hp < p.maxHp) {
-      updatePlayer(playerId, { hp: p.hp + 1 });
+      recoverHp(playerId, 1);
       addLog(`【白银狮子】离场，${p.hero.name} 回复 1 点体力（${p.hp + 1}/${p.maxHp}）`, 'success');
     }
   }, [getPlayer, updatePlayer]);
@@ -1048,6 +1123,69 @@ const App: React.FC = () => {
       setTimeout(() => { playEnterVoice(hero.id); }, 450);
     }
 
+    // 仅本地开发：定向测试探针，与 ?ai= 同一个调试入口；生产构建中整段被移除。
+    // __devState 读取当前对局信息；__devPatch 按 id 覆盖体力/手牌/装备，用于构造技能触发场景。
+    if (debugDev) {
+      const devWin = window as unknown as {
+        __devState?: () => Array<{ id: number; name: string; hp: number; maxHp: number; identity: string; isHuman: boolean; hand: string[]; equip: string[]; sealed: boolean }>;
+        __devPatch?: (spec: Array<{ id: number; hp?: number; maxHp?: number; hand?: string[]; equip?: string[] }>) => void;
+        __devDamage?: (victimId: number, sourceId: number, amount: number, nature?: 'fire' | 'thunder') => void;
+      };
+      devWin.__devState = () => playersRef.current.map(p => ({
+        id: p.id,
+        name: p.hero.name,
+        hp: p.hp,
+        maxHp: p.maxHp,
+        identity: p.identity,
+        isHuman: p.isHuman,
+        hand: p.hand.map(c => c.name),
+        equip: Object.values(p.equipment ?? {}).filter((c): c is Card => !!c).map(c => c.name),
+        sealed: isSkillSealed(p.id),
+      }));
+      devWin.__devPatch = (spec) => {
+        const pool = [...deckRef.current];
+        const mkCard = (nm: string, owner: Player, i: number): Card => {
+          let name = nm as CardName;
+          let suit: Suit = Suit.HEART;
+          let attribute: 'fire' | 'thunder' | undefined;
+          if (nm.startsWith('火')) { name = nm.slice(1) as CardName; attribute = 'fire'; }
+          else if (nm.startsWith('黑')) { name = nm.slice(1) as CardName; suit = Suit.SPADE; }
+          const idx = pool.findIndex(c => c.name === name);
+          if (idx >= 0) {
+            const found = pool.splice(idx, 1)[0];
+            return { ...found, suit, attribute: attribute ?? found.attribute };
+          }
+          const base = owner.hand[0] ?? pool[0];
+          return { ...base, id: `dev-${owner.id}-${i}-${Date.now()}`, name, suit, attribute, description: `开发态构造：${nm}` };
+        };
+        const next = playersRef.current.map(p => {
+          const s = spec.find(x => x.id === p.id);
+          if (!s) return p;
+          const patch: Partial<Player> = {};
+          if (typeof s.hp === 'number') patch.hp = s.hp;
+          if (typeof s.maxHp === 'number') patch.maxHp = s.maxHp;
+          if (s.hand) patch.hand = s.hand.map((nm, i) => mkCard(nm, p, i));
+          if (s.equip) {
+            const eq: Equipment = {};
+            s.equip.forEach((nm, i) => {
+              const card = mkCard(nm, p, 100 + i);
+              const meta = EQUIP_META[card.name];
+              if (meta) eq[meta.slot] = card;
+            });
+            patch.equipment = eq;
+          }
+          return { ...p, ...patch };
+        });
+        playersRef.current = next;
+        deckRef.current = pool;
+        setDeck(pool);
+        setPlayers(next);
+      };
+      devWin.__devDamage = (victimId, sourceId, amount, nature) => {
+        void takeDamage(victimId, sourceId, amount, undefined, nature);
+      };
+    }
+
     // 开局即落一次存档：中途刷新也能从本回合开头恢复
     const snap: GameSave = {
       v: SAVE_VERSION,
@@ -1128,6 +1266,22 @@ const App: React.FC = () => {
     setHasUsedAnxu(false);
     setAnxuTargets([]);
     luoyiPlayerRef.current = null;
+    // 第 1 批女将：新局重置
+    setIsGanluMode(false);
+    setGanluTargets([]);
+    setHasUsedGanlu(false);
+    ganluUsedRef.current = false;
+    setIsQingchengMode(false);
+    setHasUsedQingcheng(false);
+    qingchengUsedRef.current = false;
+    setHasUsedJiaozhao(false);
+    jiaozhaoUsedRef.current = false;
+    setGuohuanghouLevel(1);
+    guohuanghouLevelRef.current = {};
+    zoushiRevealedRef.current = new Set();
+    skillSealRef.current = {};
+    turnCountRef.current = 0;
+    hetaishouKillsRef.current = 0;
     setIsJiedaoMode(false);
     setJiedaoWeaponTarget(null);
     setJiedaoVictimTarget(null);
@@ -1306,6 +1460,8 @@ const App: React.FC = () => {
 
     if (killerId !== undefined && killerId !== victimId) {
       const killer = getPlayer(killerId)!;
+      // 何太后「戚乱」：记录本回合击杀数（结束阶段按 3×击杀数摸牌）
+      if (killer.hero.name === '何太后') hetaishouKillsRef.current += 1;
       // 蔡文姬「断肠」：击杀者失去所有手牌
       if (victim.hero.name === '蔡文姬' && killer.hand.length > 0) {
         addLog(`${victim.hero.name} 的「断肠」发动，${killer.hero.name} 失去所有手牌！`, 'skill');
@@ -1463,6 +1619,18 @@ const App: React.FC = () => {
         setIsAnxuMode(false);
         setAnxuTargets([]);
         luoyiPlayerRef.current = null;
+        // 第 1 批女将：回合开始重置（限一次/暗置计数）
+        turnCountRef.current += 1;
+        hetaishouKillsRef.current = 0; // 「戚乱」本回合击杀数
+        ganluUsedRef.current = false;
+        setHasUsedGanlu(false);
+        setIsGanluMode(false);
+        setGanluTargets([]);
+        qingchengUsedRef.current = false;
+        setHasUsedQingcheng(false);
+        setIsQingchengMode(false);
+        jiaozhaoUsedRef.current = false;
+        setHasUsedJiaozhao(false);
         addLog(`>>> ${currentPlayer.hero.name} (${currentPlayer.isHuman ? '你' : 'AI'}) 回合开始 <<<`, 'info');
 
         // 伏皇后「惴恐」：其他角色的回合开始时，若她已受伤，可与其拼点。
@@ -1573,6 +1741,44 @@ const App: React.FC = () => {
           await delay(600);
         }
 
+        // 甘夫人「神智」：准备阶段弃置所有手牌，弃置数不小于体力值则回复1点
+        if (currentPlayer.hero.name === '甘夫人' && skillsOn(currentPlayer.id)
+            && currentPlayer.hand.length >= currentPlayer.hp && currentPlayer.hp < currentPlayer.maxHp
+            && currentPlayer.hand.length > 0) {
+          const discarded = [...currentPlayer.hand];
+          discardCards(currentPlayer.id, discarded);
+          addLog(`甘夫人发动「神智」，弃置 ${discarded.length} 张手牌`, 'skill');
+          showSkillBanner('甘夫人', '神智');
+          await delay(400);
+          const healed = recoverHp(currentPlayer.id, 1);
+          if (healed > 0) addLog(`甘夫人回复 1 点体力（${getPlayer(currentPlayer.id)?.hp}/${currentPlayer.maxHp}）`, 'success');
+          await delay(400);
+        }
+
+        // 孙茹「影箭」：准备阶段，视为使用一张无距离限制的【杀】
+        if (currentPlayer.hero.name === '孙茹' && skillsOn(currentPlayer.id)) {
+          const foes = playersRef.current.filter(p => !p.isDead && p.id !== currentPlayer.id && isEnemy(currentPlayer, p));
+          if (foes.length > 0) {
+            const foe = [...foes].sort((a, b) => a.hp - b.hp)[0];
+            addLog(`孙茹发动「影箭」，视为对 ${foe.hero.name} 使用一张无距离限制的【杀】`, 'skill');
+            showSkillBanner('孙茹', '影箭');
+            await delay(500);
+            const virtualSlash: Card = {
+              id: `yingjian-${currentPlayer.id}-${Date.now()}`,
+              name: CardName.SHA,
+              type: CardType.BASIC,
+              suit: Suit.SPADE,
+              rank: 'K',
+              value: 13,
+              description: '影箭：视为使用一张无距离限制的【杀】',
+              imageColor: 'from-slate-700 to-slate-900',
+            };
+            const me = getPlayer(currentPlayer.id);
+            const foeNow = getPlayer(foe.id);
+            if (me && foeNow) await resolveCardEffect(me, [foeNow], virtualSlash);
+          }
+        }
+
         // 安全防线：体力<=0的角色需要先进行濒死求桃
         const latestCurrent = getPlayer(turnIndex);
         if (latestCurrent && latestCurrent.hp <= 0 && !latestCurrent.isDead) {
@@ -1650,6 +1856,33 @@ const App: React.FC = () => {
 
       // ACTION PHASE
       else if (currentPhase === GamePhase.ACTION) {
+        // 何太后「鸩毒」：其他角色出牌阶段开始时，弃一张手牌令其视为使用【酒】，然后对其造成1点伤害
+        const hetai = playersRef.current.find(p => !p.isDead && p.hero.name === '何太后'
+          && p.id !== currentPlayer.id && skillsOn(p.id));
+        if (hetai && hetai.hand.length > 0 && isEnemy(hetai, currentPlayer)) {
+          const cheap = [...hetai.hand].sort((a, b) => {
+            const ai = a.type === CardType.BASIC ? 0 : 1;
+            const bi = b.type === CardType.BASIC ? 0 : 1;
+            return ai - bi || a.value - b.value;
+          })[0];
+          discardCards(hetai.id, [cheap]);
+          addLog(`何太后发动「鸩毒」，弃置【${cheap.name}】，令 ${currentPlayer.hero.name} 视为使用【酒】`, 'skill');
+          showSkillBanner('何太后', '鸩毒');
+          if (!window.jiuBoost) window.jiuBoost = {};
+          window.jiuBoost[currentPlayer.id] = true;
+          await delay(400);
+          await takeDamage(currentPlayer.id, hetai.id, 1);
+        }
+
+        // 邹氏「祸水」：出牌阶段明置武将牌（本回合其他角色不能明置）
+        if (currentPlayer.hero.name === '邹氏' && !zoushiRevealedRef.current.has(currentPlayer.id)
+            && skillsOn(currentPlayer.id)) {
+          zoushiRevealedRef.current.add(currentPlayer.id);
+          addLog('邹氏发动「祸水」，明置武将牌（本回合其他角色不能明置）', 'skill');
+          showSkillBanner('邹氏', '祸水');
+          await delay(400);
+        }
+
         // 伏皇后「惴恐」获胜：本回合跳过出牌阶段
         if (doutuSkipRef.current === currentPlayer.id) {
           doutuSkipRef.current = null;
@@ -1796,6 +2029,16 @@ const App: React.FC = () => {
               await delay(250);
             }
           }
+        }
+
+        // 何太后「戚乱」：结束阶段，本回合每杀死一名其他角色，摸三张牌
+        const hetaiDuan = playersRef.current.find(p => !p.isDead && p.hero.name === '何太后' && skillsOn(p.id));
+        if (hetaiDuan && hetaishouKillsRef.current > 0) {
+          const drawN = hetaishouKillsRef.current * 3;
+          addLog(`何太后发动「戚乱」，本回合击杀 ${hetaishouKillsRef.current} 人，摸 ${drawN} 张牌`, 'skill');
+          showSkillBanner('何太后', '戚乱');
+          drawCards(hetaiDuan.id, drawN);
+          await delay(400);
         }
 
         // 结束阶段：若有角色体力<=0且未死亡，进行濒死求桃
@@ -2476,8 +2719,172 @@ const App: React.FC = () => {
     }
   }, [selectedCardIds, phase, isZhihengMode, isRendeMode, isZhangbaMode]);
 
+  // 吴国太「甘露」：交换两名角色的装备区（装备数之差不超过吴国太已损体力）
+  const resolveGanlu = async (ownerId: number, aId: number, bId: number) => {
+    const owner = getPlayer(ownerId);
+    const a = getPlayer(aId);
+    const b = getPlayer(bId);
+    if (!owner || !a || !b || a.isDead || b.isDead || aId === bId) return false;
+    const countEq = (p: Player) => Object.values(p.equipment ?? {}).filter(Boolean).length;
+    const lost = owner.maxHp - owner.hp;
+    if (Math.abs(countEq(a) - countEq(b)) > lost) {
+      addLog(`「甘露」：${a.hero.name} 与 ${b.hero.name} 装备数差超过已损体力（${lost}），无法交换`, 'info');
+      return false;
+    }
+    const ea = a.equipment ?? {};
+    const eb = b.equipment ?? {};
+    updatePlayer(aId, { equipment: { ...eb } });
+    updatePlayer(bId, { equipment: { ...ea } });
+    addLog(`吴国太发动「甘露」，交换 ${a.hero.name} 与 ${b.hero.name} 的装备区`, 'skill');
+    showSkillBanner('吴国太', '甘露');
+    ganluUsedRef.current = true;
+    setHasUsedGanlu(true);
+    setIsGanluMode(false);
+    setGanluTargets([]);
+    await delay(500);
+    return true;
+  };
+
+  // 邹氏「倾城」：弃置一张黑色手牌，暗置一名角色的武将牌（弃装备牌可再暗置一人）
+  const resolveQingcheng = async (ownerId: number, targetId: number) => {
+    const owner = getPlayer(ownerId);
+    const target = getPlayer(targetId);
+    if (!owner || !target || target.isDead || targetId === ownerId) return false;
+    const blackCards = owner.hand.filter(c => c.suit === Suit.SPADE || c.suit === Suit.CLUB);
+    if (blackCards.length === 0) {
+      addLog('「倾城」需要弃置一张黑色手牌，当前没有合法牌', 'info');
+      return false;
+    }
+    const cost = [...blackCards].sort((a, b) => {
+      const ai = a.type === CardType.EQUIPMENT ? 0 : 1;
+      const bi = b.type === CardType.EQUIPMENT ? 0 : 1;
+      return ai - bi || a.value - b.value;
+    })[0];
+    discardCards(ownerId, [cost]);
+    const sealSpan = playersRef.current.filter(p => !p.isDead).length + 1;
+    skillSealRef.current[targetId] = turnCountRef.current + sealSpan;
+    addLog(`邹氏发动「倾城」，弃置黑色【${cost.name}】，暗置 ${target.hero.name} 的武将牌`, 'skill');
+    showSkillBanner('邹氏', '倾城');
+    qingchengUsedRef.current = true;
+    setHasUsedQingcheng(true);
+    setIsQingchengMode(false);
+    await delay(500);
+    if (cost.type === CardType.EQUIPMENT) {
+      const second = playersRef.current.find(p => !p.isDead && p.id !== ownerId && p.id !== targetId && isEnemy(owner, p));
+      if (second) {
+        skillSealRef.current[second.id] = turnCountRef.current + sealSpan;
+        addLog(`「倾城」弃置的是装备牌，再次暗置 ${second.hero.name} 的武将牌`, 'skill');
+        await delay(400);
+      }
+    }
+    return true;
+  };
+
+  // 郭皇后「矫诏」：展示一张手牌，声称为指定牌使用（Lv1 基本牌；Lv2 可含普通锦囊；Lv3 不受限）
+  const resolveJiaozhao = async (ownerId: number) => {
+    const owner = getPlayer(ownerId);
+    if (!owner || jiaozhaoUsedRef.current || owner.hand.length === 0) return false;
+    const level = guohuanghouLevelRef.current[ownerId] ?? 1;
+    const shown = [...owner.hand].sort((a, b) => {
+      const ai = a.type === CardType.BASIC ? 1 : 0;
+      const bi = b.type === CardType.BASIC ? 1 : 0;
+      return ai - bi || a.value - b.value;
+    })[0];
+    const foes = playersRef.current.filter(p => !p.isDead && p.id !== ownerId && isEnemy(owner, p));
+    const foesWithCards = foes.filter(p => p.hand.length > 0 || Object.values(p.equipment ?? {}).some(Boolean));
+    let declared: CardName = CardName.SHA;
+    if (level >= 2 && foesWithCards.length > 0) declared = CardName.GUOHE;
+    else if (level >= 2 && foes.length >= 2) declared = CardName.NANMAN;
+    else if (owner.hp <= 1 && level >= 3) declared = CardName.JIU;
+    discardCards(ownerId, [shown]);
+    addLog(`郭皇后发动「矫诏」(Lv${level})，展示【${shown.name}】并声称为【${declared}】`, 'skill');
+    showSkillBanner('郭皇后', '矫诏');
+    jiaozhaoUsedRef.current = true;
+    setHasUsedJiaozhao(true);
+    setGuohuanghouLevel(level);
+    await delay(450);
+    const me = getPlayer(ownerId);
+    if (!me) return false;
+    const virtual: Card = {
+      ...shown,
+      id: `jiaozhao-${ownerId}-${Date.now()}`,
+      name: declared,
+      type: declared === CardName.SHA || declared === CardName.JIU
+        ? CardType.BASIC
+        : declared === CardName.SHUNSHOU || declared === CardName.GUOHE || declared === CardName.JUEDOU
+          || declared === CardName.NANMAN || declared === CardName.WANJIAN
+          ? CardType.SCROLL
+          : shown.type,
+      description: `矫诏：将【${shown.name}】当【${declared}】使用`,
+    };
+    if (declared === CardName.JIU) {
+      if (!window.jiuBoost) window.jiuBoost = {};
+      window.jiuBoost[ownerId] = true;
+      addLog('「矫诏」视为使用【酒】，下一张【杀】伤害+1', 'success');
+    } else if (declared === CardName.NANMAN || declared === CardName.WANJIAN) {
+      const targets = playersRef.current.filter(p => !p.isDead && p.id !== ownerId);
+      if (targets.length) await resolveCardEffect(me, targets, virtual);
+    } else {
+      const foe = [...foes].sort((a, b) => a.hp - b.hp)[0];
+      if (foe) await resolveCardEffect(me, [getPlayer(foe.id)!], virtual);
+      else addLog(`「矫诏」没有合法的【${declared}】目标`, 'info');
+    }
+    return true;
+  };
+
   const handleTargetClick = async (targetId: number) => {
     if (dyingState || isProcessing) return;
+
+    // 吴国太「甘露」：依次点选两名角色，选满后交换装备区
+    if (isGanluMode) {
+      const meG = players.find(p => p.isHuman) || players[0];
+      if (hasUsedGanlu || ganluUsedRef.current) {
+        setIsGanluMode(false);
+        setGanluTargets([]);
+        setIsSelectingTarget(false);
+        setTimeout(() => { clickGuard.current = false; }, 200);
+        return;
+      }
+      const target = players.find(p => p.id === targetId);
+      if (!target || target.isDead) {
+        setTimeout(() => { clickGuard.current = false; }, 200);
+        return;
+      }
+      const next = ganluTargets.includes(targetId) ? ganluTargets : [...ganluTargets, targetId];
+      setGanluTargets(next);
+      addLog(`「甘露」已选择：${next.map(id => players.find(p => p.id === id)?.hero.name || '').join('、')}`, 'info');
+      if (next.length >= 2) {
+        setIsProcessing(p => p + 1);
+        try {
+          await resolveGanlu(meG.id, next[0], next[1]);
+        } finally {
+          setIsProcessing(p => Math.max(0, p - 1));
+          setIsSelectingTarget(false);
+          setSelectedCardIds([]);
+          setActiveSelectedId(null);
+          setTimeout(() => { clickGuard.current = false; }, 200);
+        }
+      } else {
+        setTimeout(() => { clickGuard.current = false; }, 200);
+      }
+      return;
+    }
+
+    // 邹氏「倾城」：点选一名角色，弃黑牌暗置其武将牌
+    if (isQingchengMode) {
+      const meQ = players.find(p => p.isHuman) || players[0];
+      setIsProcessing(p => p + 1);
+      try {
+        await resolveQingcheng(meQ.id, targetId);
+      } finally {
+        setIsProcessing(p => Math.max(0, p - 1));
+        setIsSelectingTarget(false);
+        setSelectedCardIds([]);
+        setActiveSelectedId(null);
+        setTimeout(() => { clickGuard.current = false; }, 200);
+      }
+      return;
+    }
 
     // 丈八蛇矛：两张手牌当【杀】已选定，正在点目标
     if (zhangbaPending) {
@@ -2598,7 +3005,7 @@ const App: React.FC = () => {
         return;
       }
       discardCards(meH.id, [cost]);
-      updatePlayer(target.id, { hp: Math.min(target.maxHp, target.hp + 1) });
+      recoverHp(target.id, 1);
       setHasUsedQingnang(true);
       setIsQingnangMode(false);
       setQingnangCardId(null);
@@ -2695,10 +3102,8 @@ const App: React.FC = () => {
       }
       const cardsToDiscard = meJ.hand.slice(0, 2);
       discardCards(meJ.id, cardsToDiscard);
-      const myHp = Math.min(meJ.maxHp, meJ.hp + 1);
-      const tgHp = Math.min(target.maxHp, target.hp + 1);
-      updatePlayer(meJ.id, { hp: myHp });
-      updatePlayer(target.id, { hp: tgHp });
+      recoverHp(meJ.id, 1);
+      recoverHp(target.id, 1);
       addLog(`${meJ.hero.name} 发动「结姻」，弃置两张牌，与 ${target.hero.name} 各回复 1 点体力`, 'skill');
       showSkillBanner(meJ.hero.name, '结姻');
       setHasUsedJieyin(true);
@@ -3631,7 +4036,7 @@ const App: React.FC = () => {
         setTimeout(() => setHealAnimTarget(null), 600);
         setTimeout(() => setHealNumber(null), 1000);
 
-        updatePlayer(target.id, { hp: newHp });
+        recoverHp(target.id, healPoints);
         // 身份推理：给主公回血者视为忠臣
         if (target.identity === Identity.ZHUGONG && source.id !== target.id) {
           identityGuessRef.current[source.id] = Identity.ZHONGCHEN;
@@ -3861,7 +4266,7 @@ const App: React.FC = () => {
           setHealNumber({ targetId: target.id, amount: 1, id: Date.now().toString() });
           setTimeout(() => setHealAnimTarget(null), 600);
           setTimeout(() => setHealNumber(null), 1000);
-          updatePlayer(target.id, { hp: newHp });
+          recoverHp(target.id, 1);
           if (source.id === target.id) {
             addLog(`${source.hero.name} 使用【酒】自救，当前体力: ${newHp}/${target.maxHp}`, 'success');
           } else {
@@ -3981,7 +4386,7 @@ const App: React.FC = () => {
             setTimeout(() => setHealAnimTarget(null), 600);
             setTimeout(() => setHealNumber(null), 1000);
             
-            updatePlayer(player.id, { hp: newHp });
+            recoverHp(player.id, 1);
             addLog(`${player.hero.name} 回复了 ${healAmount} 点体力，当前体力: ${newHp}/${player.maxHp}`, 'success');
             await delay(500);
           } else {
@@ -4439,6 +4844,28 @@ const App: React.FC = () => {
     addLog(`☠️ ${victim.hero.name} 进入濒死状态，开始求桃！`, 'danger');
 
     try {
+      // 吴国太「补益」：一名角色进入濒死时，可展示其一张非基本手牌，弃置后回复1点体力
+      const buyiOwner = playersRef.current.find(p => !p.isDead && p.hero.name === '吴国太' && skillsOn(p.id));
+      if (buyiOwner) {
+        const curVictim = getPlayer(victimId);
+        const nonBasic = curVictim?.hand.find(c => c.type !== CardType.BASIC);
+        if (curVictim && curVictim.hp <= 0 && nonBasic) {
+          discardCards(victimId, [nonBasic]);
+          addLog(`吴国太发动「补益」，展示并弃置 ${curVictim.hero.name} 的【${nonBasic.name}】`, 'skill');
+          showSkillBanner('吴国太', '补益');
+          const gained = recoverHp(victimId, 1);
+          if (gained > 0) {
+            addLog(`${curVictim.hero.name} 因「补益」回复 1 点体力（${getPlayer(victimId)?.hp}/${curVictim.maxHp}）`, 'success');
+          }
+          await delay(300);
+          if ((getPlayer(victimId)?.hp ?? 0) > 0) {
+            recentlySavedRef.current[victimId] = Date.now();
+            setDyingState(null);
+            return true;
+          }
+        }
+      }
+
       // 原版三国杀规则：按顺序从濒死者开始询问是否出桃
       // 顺序：濒死者 -> 下家 -> 下下家... -> 上家
       const allPlayers = playersRef.current.filter(p => !p.isDead);
@@ -4704,7 +5131,7 @@ const App: React.FC = () => {
     const victim = getPlayer(victimId);
     const attacker = getPlayer(sourceId);
     if (jc.suit === Suit.HEART && victim && !victim.isDead) {
-      updatePlayer(victim.id, { hp: Math.min(victim.maxHp, victim.hp + 1) });
+      recoverHp(victim.id, 1);
       addLog(`「悲歌」判定为红桃，${victim.hero.name} 回复1点体力`, 'success');
     } else if (jc.suit === Suit.DIAMOND && victim && !victim.isDead) {
       drawCards(victim.id, 2);
@@ -4814,6 +5241,15 @@ const App: React.FC = () => {
       const dmgNature: 'normal' | 'fire' | 'thunder' = nature ?? damageCard?.attribute ?? 'normal';
       const natureLabel = dmgNature === 'fire' ? '火焰' : dmgNature === 'thunder' ? '雷电' : '';
       const source = getPlayer(sourceId);
+
+      // 孙茹「释衅」：锁定技，不会受到火焰伤害（含传导/闪电外的火属性伤害）
+      const sunru = getPlayer(victimId);
+      if (sunru && sunru.hero.name === '孙茹' && skillsOn(victimId) && dmgNature === 'fire') {
+        addLog(`${sunru.hero.name} 的「释衅」发动，免疫火焰伤害`, 'skill');
+        showSkillBanner('孙茹', '释衅');
+        await delay(350);
+        return;
+      }
       // 青釭剑：使用【杀】时无视目标防具
       const ignoreArmor = damageCard?.name === CardName.SHA
         && source?.equipment?.weapon?.name === CardName.QINGGANG;
@@ -4885,7 +5321,7 @@ const App: React.FC = () => {
       }
 
       // 小乔「天香」：弃一张红桃手牌，将伤害转移给伤害来源
-      if (victim.hero.name === '小乔' && sourceId !== victimId) {
+      if (victim.hero.name === '小乔' && sourceId !== victimId && skillsOn(victimId)) {
         const heartCard = victim.hand.find(c => c.suit === Suit.HEART || c.suit === Suit.DIAMOND);
         if (heartCard) {
           discardCards(victimId, [heartCard]);
@@ -4939,21 +5375,35 @@ const App: React.FC = () => {
       updatePlayer(victimId, { hp: newHp });
       addLog(`${victim.hero.name} 受到 ${finalAmount} 点${natureLabel}伤害！当前体力: ${newHp}/${victim.maxHp}`, 'danger');
 
+      // 郭皇后「殚心」：受到伤害后，摸一张牌或升级「矫诏」（最多升级两次）
+      if (victim.hero.name === '郭皇后' && skillsOn(victimId)) {
+        const curLevel = guohuanghouLevelRef.current[victimId] ?? 1;
+        if (curLevel < 3) {
+          guohuanghouLevelRef.current[victimId] = curLevel + 1;
+          if (victimId === 0) setGuohuanghouLevel(curLevel + 1);
+          addLog(`郭皇后发动「殚心」，「矫诏」提升至 Lv${curLevel + 1}`, 'skill');
+        } else {
+          drawCards(victimId, 1);
+          addLog('郭皇后发动「殚心」，摸一张牌', 'skill');
+        }
+        showSkillBanner('郭皇后', '殚心');
+      }
+
       // 关银屏「虎啸」：锁定技，造成伤害后摸一张牌（原版无次数限制）
-      if (sourceId >= 0 && sourceId !== victimId && source?.hero.name === '关银屏') {
+      if (sourceId >= 0 && sourceId !== victimId && source?.hero.name === '关银屏' && skillsOn(sourceId)) {
         addLog(`${source.hero.name} 发动「虎啸」，摸一张牌`, 'skill');
         showSkillBanner(source.hero.name, '虎啸');
         drawCards(sourceId, 1);
       }
 
       // 郭嘉「遗计」：受到伤害后摸两张牌
-      if (victim.hero.name === '郭嘉') {
+      if (victim.hero.name === '郭嘉' && skillsOn(victimId)) {
         drawCards(victimId, 2);
         addLog(`${victim.hero.name} 发动「遗计」，摸两张牌`, 'skill');
         showSkillBanner(victim.hero.name, '遗计');
       }
       // 司马懿「反馈」：受到伤害后获得伤害来源一张手牌
-      if (victim.hero.name === '司马懿' && sourceId !== victimId) {
+      if (victim.hero.name === '司马懿' && sourceId !== victimId && skillsOn(victimId)) {
         const attacker = getPlayer(sourceId);
         if (attacker && attacker.hand.length > 0) {
           const gained = attacker.hand[Math.floor(Math.random() * attacker.hand.length)];
@@ -5095,6 +5545,8 @@ const App: React.FC = () => {
   
   const cpuAI = async (aiPlayer: Player) => {
     aiTurnActiveRef.current = true;
+    // 邹氏「倾城」：被暗置的角色技能不发动
+    const aiSkillsOn = skillsOn(aiPlayer.id);
     // 出牌前先「思考」：头像暖光 + 随机 300~800ms，AI 不再瞬发
     await aiThink(aiPlayer.id);
 
@@ -5102,7 +5554,7 @@ const App: React.FC = () => {
     let targetId = -1;
 
     // 0. 黄盖「苦肉」：手牌少且体力充足时卖血摸牌
-    if (aiPlayer.hero.name === '黄盖' && aiPlayer.hp > 2 && aiPlayer.hand.length <= 3) {
+    if (aiSkillsOn && aiPlayer.hero.name === '黄盖' && aiPlayer.hp > 2 && aiPlayer.hand.length <= 3) {
       await resolveKurou(aiPlayer.id);
       const refreshed = getPlayer(aiPlayer.id);
       if (refreshed) aiPlayer = refreshed;
@@ -5110,7 +5562,7 @@ const App: React.FC = () => {
     }
 
     // 0. 关银屏「血祭」：已受伤且范围内有敌人时发动
-    if (aiPlayer.hero.name === '关银屏' && !xuejiUsedRef.current && aiPlayer.maxHp > aiPlayer.hp) {
+    if (aiSkillsOn && aiPlayer.hero.name === '关银屏' && !xuejiUsedRef.current && aiPlayer.maxHp > aiPlayer.hp) {
       await resolveXueji(aiPlayer.id);
       const refreshed = getPlayer(aiPlayer.id);
       if (refreshed) aiPlayer = refreshed;
@@ -5134,7 +5586,7 @@ const App: React.FC = () => {
     }
 
     // 1. Sun Quan's Zhiheng Skill: AI automatically uses it when appropriate
-    if (aiPlayer.hero.name === '孙权') {
+    if (aiSkillsOn && aiPlayer.hero.name === '孙权') {
       // Simple AI strategy: Use Zhiheng when hand has more than 3 cards and has at least 1 useless card
       // Define useless cards: Shan (if more than 2 in hand), Sha (if more than 2 in hand)
       const shaCount = aiPlayer.hand.filter(c => c.name === CardName.SHA).length;
@@ -5167,13 +5619,13 @@ const App: React.FC = () => {
     }
 
     // 孙尚香「结姻」：自身受伤且存在已受伤男性时，弃两张牌双方回血
-    if (aiPlayer.hero.name === '孙尚香' && aiPlayer.hand.length >= 2 && aiPlayer.hp < aiPlayer.maxHp) {
+    if (aiSkillsOn && aiPlayer.hero.name === '孙尚香' && aiPlayer.hand.length >= 2 && aiPlayer.hp < aiPlayer.maxHp) {
       const male = players.find(p => !p.isDead && p.id !== aiPlayer.id && p.hero.gender === 'male' && p.hp < p.maxHp);
       if (male) {
         const cost = aiPlayer.hand.slice(0, 2);
         discardCards(aiPlayer.id, cost);
-        updatePlayer(aiPlayer.id, { hp: aiPlayer.hp + 1 });
-        updatePlayer(male.id, { hp: Math.min(male.maxHp, male.hp + 1) });
+        recoverHp(aiPlayer.id, 1);
+        recoverHp(male.id, 1);
         addLog(`${aiPlayer.hero.name} 发动「结姻」，弃置两张牌，与 ${male.hero.name} 各回复 1 点体力`, 'skill');
         showSkillBanner(aiPlayer.hero.name, '结姻');
         await delay(1200);
@@ -5181,14 +5633,14 @@ const App: React.FC = () => {
     }
 
     // 华佗「青囊」：弃一张非关键手牌，为受伤的己方回复1点体力
-    if (aiPlayer.hero.name === '华佗' && !hasUsedQingnang && aiPlayer.hand.length >= 2) {
+    if (aiSkillsOn && aiPlayer.hero.name === '华佗' && !hasUsedQingnang && aiPlayer.hand.length >= 2) {
       const wounded = playersRef.current
         .filter(p => !p.isDead && p.hp < p.maxHp && (p.id === aiPlayer.id || isAlly(aiPlayer, p)))
         .sort((a, b) => (a.maxHp - a.hp) - (b.maxHp - b.hp))[0];
       const cost = aiPlayer.hand.find(c => c.name !== CardName.TAO && c.name !== CardName.SHAN);
       if (wounded && cost) {
         discardCards(aiPlayer.id, [cost]);
-        updatePlayer(wounded.id, { hp: Math.min(wounded.maxHp, wounded.hp + 1) });
+        recoverHp(wounded.id, 1);
         setHasUsedQingnang(true);
         addLog(`${aiPlayer.hero.name} 发动「青囊」，弃置【${cost.name}】，令 ${wounded.hero.name} 回复1点体力`, 'skill');
         showSkillBanner(aiPlayer.hero.name, '青囊');
@@ -5199,7 +5651,7 @@ const App: React.FC = () => {
     }
 
     // 周瑜「反间」：对敌方使用一次
-    if (aiPlayer.hero.name === '周瑜' && !hasUsedFanjian && aiPlayer.hand.length >= 1) {
+    if (aiSkillsOn && aiPlayer.hero.name === '周瑜' && !hasUsedFanjian && aiPlayer.hand.length >= 1) {
       const target = pickAITarget(aiPlayer);
       if (target && !target.isDead && target.id !== aiPlayer.id) {
         const live = getPlayer(aiPlayer.id)!;
@@ -5222,7 +5674,7 @@ const App: React.FC = () => {
     }
 
     // 大乔「国色」：方块牌当【乐不思蜀】压制敌人
-    if (aiPlayer.hero.name === '大乔') {
+    if (aiSkillsOn && aiPlayer.hero.name === '大乔') {
       const diamond = aiPlayer.hand.find(c => c.suit === Suit.DIAMOND && c.name !== CardName.TAO && c.name !== CardName.SHAN);
       const target = pickAITarget(aiPlayer);
       if (diamond && target && !target.isDead && !getTargetProtection(target, CardName.LESI)) {
@@ -5237,7 +5689,7 @@ const App: React.FC = () => {
     }
 
     // 步练师「安恤」：把手牌从多的一方转给少的一方
-    if (aiPlayer.hero.name === '步练师' && !hasUsedAnxu) {
+    if (aiSkillsOn && aiPlayer.hero.name === '步练师' && !hasUsedAnxu) {
       const others = playersRef.current.filter(p => !p.isDead && p.id !== aiPlayer.id);
       const allies = others.filter(p => isAlly(aiPlayer, p)).sort((a, b) => a.hand.length - b.hand.length);
       const enemies = others.filter(p => isEnemy(aiPlayer, p)).sort((a, b) => b.hand.length - a.hand.length);
@@ -5312,8 +5764,42 @@ const App: React.FC = () => {
       await delay(1500);
     }
 
+    // 吴国太「甘露」：把装备从装备多的一方换给己方装备少者
+    if (aiSkillsOn && aiPlayer.hero.name === '吴国太' && !ganluUsedRef.current) {
+      const countEq = (p: Player) => Object.values(p.equipment ?? {}).filter(Boolean).length;
+      const others = playersRef.current.filter(p => !p.isDead);
+      const allies = others.filter(p => p.id !== aiPlayer.id && isAlly(aiPlayer, p)).sort((a, b) => countEq(a) - countEq(b));
+      const donors = others.filter(p => countEq(p) > 0).sort((a, b) => countEq(b) - countEq(a));
+      const lost = aiPlayer.maxHp - aiPlayer.hp;
+      const beneficiary = allies[0];
+      const donor = donors[0];
+      if (beneficiary && donor && donor.id !== beneficiary.id && Math.abs(countEq(beneficiary) - countEq(donor)) <= lost) {
+        await resolveGanlu(aiPlayer.id, beneficiary.id, donor.id);
+        await delay(500);
+      }
+    }
+
+    // 邹氏「倾城」：弃黑色牌暗置敌方武将牌
+    if (aiSkillsOn && aiPlayer.hero.name === '邹氏' && !qingchengUsedRef.current
+        && zoushiRevealedRef.current.has(aiPlayer.id)) {
+      const blackCard = aiPlayer.hand.find(c => c.suit === Suit.SPADE || c.suit === Suit.CLUB);
+      const enemy = pickAITarget(aiPlayer);
+      if (blackCard && enemy) {
+        await resolveQingcheng(aiPlayer.id, enemy.id);
+        await delay(500);
+      }
+    }
+
+    // 郭皇后「矫诏」：展示手牌声称为牌使用
+    if (aiSkillsOn && aiPlayer.hero.name === '郭皇后' && !jiaozhaoUsedRef.current && aiPlayer.hand.length > 0) {
+      await resolveJiaozhao(aiPlayer.id);
+      const refreshed = getPlayer(aiPlayer.id);
+      if (refreshed) aiPlayer = refreshed;
+      await delay(500);
+    }
+
     // 6.5 甘宁「奇袭」：黑色牌当【过河拆桥】
-    if (aiPlayer.hero.name === '甘宁' && targetId !== -1) {
+    if (aiSkillsOn && aiPlayer.hero.name === '甘宁' && targetId !== -1) {
       const target = getPlayer(targetId);
       const targetHasCards = target && !target.isDead && (target.hand.length > 0 ||
         !!(target.equipment?.weapon || target.equipment?.armor || target.equipment?.horsePlus || target.equipment?.horseMinus));
@@ -8565,6 +9051,77 @@ const App: React.FC = () => {
                            className="btn-ink px-4 py-2 rounded-lg font-ancient text-base"
                          >
                            取消安恤
+                         </button>
+                       )}
+
+                       {/* 吴国太「甘露」 */}
+                       {players[0].hero.name === '吴国太' && !isGanluMode && !hasUsedGanlu
+                         && players.filter(p => !p.isDead).length >= 2 && (
+                         <button
+                           onClick={() => {
+                             setIsGanluMode(true);
+                             setGanluTargets([]);
+                             setIsSelectingTarget(true);
+                             setSelectedCardIds([]);
+                             setActiveSelectedId(null);
+                             addLog('「甘露」：请依次选择两名角色（装备数差不超过已损体力）', 'info');
+                           }}
+                           className="skill-btn text-base"
+                         >
+                           甘露
+                         </button>
+                       )}
+                       {isGanluMode && (
+                         <button
+                           onClick={() => {
+                             setIsGanluMode(false);
+                             setGanluTargets([]);
+                             setIsSelectingTarget(false);
+                             addLog('取消了「甘露」', 'info');
+                           }}
+                           className="btn-ink px-4 py-2 rounded-lg font-ancient text-base"
+                         >
+                           取消甘露
+                         </button>
+                       )}
+
+                       {/* 邹氏「倾城」 */}
+                       {players[0].hero.name === '邹氏' && !isQingchengMode && !hasUsedQingcheng
+                         && players[0].hand.some(c => c.suit === Suit.SPADE || c.suit === Suit.CLUB) && (
+                         <button
+                           onClick={() => {
+                             setIsQingchengMode(true);
+                             setIsSelectingTarget(true);
+                             setSelectedCardIds([]);
+                             setActiveSelectedId(null);
+                             addLog('「倾城」：请选择一名角色（弃置黑色手牌暗置其武将牌）', 'info');
+                           }}
+                           className="skill-btn text-base"
+                         >
+                           倾城
+                         </button>
+                       )}
+                       {isQingchengMode && (
+                         <button
+                           onClick={() => {
+                             setIsQingchengMode(false);
+                             setIsSelectingTarget(false);
+                             addLog('取消了「倾城」', 'info');
+                           }}
+                           className="btn-ink px-4 py-2 rounded-lg font-ancient text-base"
+                         >
+                           取消倾城
+                         </button>
+                       )}
+
+                       {/* 郭皇后「矫诏」 */}
+                       {players[0].hero.name === '郭皇后' && !hasUsedJiaozhao && players[0].hand.length > 0 && (
+                         <button
+                           disabled={!!isProcessing || !!dyingState}
+                           onClick={() => { void resolveJiaozhao(players[0].id); }}
+                           className="skill-btn text-base"
+                         >
+                           矫诏 Lv{guohuanghouLevel}
                          </button>
                        )}
 

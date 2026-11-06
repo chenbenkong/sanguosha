@@ -28,6 +28,10 @@ const SKILL_SLUG: Record<string, string> = {
   '连营': 'lianying', '青囊': 'qingnang', '急救': 'jijiu', '护驾': 'hujia',
   '激将': 'jijiang', '救援': 'jiuyuan', '虎啸': 'huxiao', '枪舞': 'qiangwu',
   '挽危': 'wanwei', '祈禳': 'qirang', '惠民': 'huimin', '求援': 'qiuyuan',
+  // 第 1 批 6 名女将（TTS 合成）
+  '影箭': 'yingjian', '释衅': 'shixin', '鸩毒': 'zhendu', '戚乱': 'qiluan',
+  '甘露': 'ganlu', '补益': 'buyi', '淑慎': 'shushen', '神智': 'shenzhi',
+  '祸水': 'huoshui', '倾城': 'qingcheng', '矫诏': 'jiaozhao', '殚心': 'danxin',
 };
 
 const cache = new Map<string, HTMLAudioElement>();
@@ -65,7 +69,7 @@ export function playSkillVoice(skillName: string): boolean {
 
 // 仅这些武将有本地阵亡语音（与 public/audio/die 下的实际文件一致）。
 // 未收录的武将直接返回 false，由调用方回退合成音效，避免产生 404 与控制台报错。
-// 全部 39 名武将都有阵亡语音：前 24 名为 noname 公开素材，其余 15 名为 TTS 合成
+// 全部 45 名武将都有阵亡语音：前 24 名为 noname 公开素材，其余 21 名为 TTS 合成
 const DEATH_VOICE_HEROES = new Set([
   'bulianshi', 'caiwenji', 'caocao', 'daqiao', 'diaochan', 'ganning', 'guanyu',
   'huangyueying', 'huangzhong', 'liubei', 'lvbu', 'lvmeng', 'simayi', 'sunquan',
@@ -74,6 +78,8 @@ const DEATH_VOICE_HEROES = new Set([
   'zhangliao', 'xuchu', 'guojia', 'machao', 'zhugeliang', 'huanggai', 'luxun',
   'huatuo', 'guanyinping', 'zhangxingcai', 'bianfuren', 'zhugeguo', 'caojie',
   'fuhuanghou', 'mayunlu',
+  // 第 1 批 6 名女将（TTS 合成）
+  'sunru', 'hetaishou', 'wuguotai', 'ganfuren', 'zoushi', 'guohuanghou',
 ]);
 
 /** 阵亡台词：传入武将 id */
@@ -82,7 +88,7 @@ export function playDeathVoice(heroId: string): boolean {
   return playFile(`audio/die/${heroId}.mp3`);
 }
 
-/** 登场台词：39 名武将均有本地文件（真实素材或 TTS 合成） */
+/** 登场台词：45 名武将均有本地文件（真实素材或 TTS 合成） */
 export function playEnterVoice(heroId: string): boolean {
   if (!DEATH_VOICE_HEROES.has(heroId)) return false;
   return playFile(`audio/enter/${heroId}.mp3`);
