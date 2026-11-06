@@ -72,7 +72,7 @@ export function playSkillVoice(skillName: string): boolean {
 // 全部 45 名武将都有阵亡语音：前 24 名为 noname 公开素材，其余 21 名为 TTS 合成
 const DEATH_VOICE_HEROES = new Set([
   'bulianshi', 'caiwenji', 'caocao', 'daqiao', 'diaochan', 'ganning', 'guanyu',
-  'huangyueying', 'huangzhong', 'liubei', 'lvbu', 'lvmeng', 'simayi', 'sunquan',
+  'huangyueying', 'huangzhong', 'liubei', 'lubu', 'lvmeng', 'simayi', 'sunquan',
   'sunshangxiang', 'wangyi', 'xiahoudun', 'xiaoqiao', 'zhangchunhua', 'zhangfei',
   'zhaoyun', 'zhenji', 'zhouyu', 'zhurong',
   'zhangliao', 'xuchu', 'guojia', 'machao', 'zhugeliang', 'huanggai', 'luxun',
