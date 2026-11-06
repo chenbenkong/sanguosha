@@ -116,6 +116,10 @@ export interface Player {
   juMarks?: number;
   /** 卑弥呼「拜假」已觉醒（骨疽→蚕食） */
   baiJiaAwakened?: boolean;
+  /** 孙寒华「妙剑」等级（1~3） */
+  miaoJianLevel?: number;
+  /** 孙寒华「莲华」等级（1~3） */
+  lianHuaLevel?: number;
 }
 
 /** 装备区：武器 / 防具 / +1马 / -1马 */

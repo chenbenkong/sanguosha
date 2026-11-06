@@ -307,6 +307,8 @@ const App: React.FC = () => {
   const roundLastTurnRef = useRef<number | null>(null); // 卑弥呼「纵傀」轮次检测
   const fengpoBoostRef = useRef<Record<string, number>>({}); // 凤魄伤害加成（按牌 id）
   const shouxiDeclaredRef = useRef<Set<string>>(new Set()); // 曹节「守玺」已声明牌名（每种限一次）
+  const chongxuUsedRef = useRef<boolean>(false); // 孙寒华「冲虚」出牌阶段限一次
+  const miaoJianUsedRef = useRef<boolean>(false); // 孙寒华「妙剑」出牌阶段限一次
   const shenxianTurnRef = useRef<number>(-1); // 张星彩「甚贤」本回合是否已发动
   const doutuSkipRef = useRef<number | null>(null); // 伏皇后「惴恐」赢：目标跳过出牌阶段
   const doutuDistanceRef = useRef<Record<number, number>>({}); // 「惴恐」没赢：到伏皇后距离视为 1
@@ -1171,6 +1173,8 @@ const App: React.FC = () => {
       if (p.hero.name === '张琪瑛') p.zhangMarks = ['紫微', '后土', '玉清', '勾陈'];
       // 卑弥呼：初始化傀/疽/觉醒状态
       if (p.hero.name === '卑弥呼') { p.hasKui = false; p.juMarks = 0; p.baiJiaAwakened = false; }
+      // 孙寒华：妙剑/莲华初始 1 级
+      if (p.hero.name === '孙寒华') { p.miaoJianLevel = 1; p.lianHuaLevel = 1; }
     });
 
     setDeck(shuffledDeck);
@@ -1192,6 +1196,8 @@ const App: React.FC = () => {
     fengpoUsedRef.current = false;
     roundLastTurnRef.current = null;
     shenxianTurnRef.current = -1;
+    chongxuUsedRef.current = false;
+    miaoJianUsedRef.current = false;
     
     // Lord starts
     const lordIndex = newPlayers.findIndex(p => p.identity === Identity.ZHUGONG);
@@ -1828,6 +1834,12 @@ const App: React.FC = () => {
           await delay(600);
         }
 
+        // 孙寒华：回合开始时重置出牌阶段限一次的「冲虚 / 妙剑」
+        if (currentPlayer.hero.name === '孙寒华') {
+          chongxuUsedRef.current = false;
+          miaoJianUsedRef.current = false;
+        }
+
         // 甘夫人「神智」：准备阶段弃置所有手牌，弃置数不小于体力值则回复1点
         if (currentPlayer.hero.name === '甘夫人' && skillsOn(currentPlayer.id)
             && currentPlayer.hand.length >= currentPlayer.hp && currentPlayer.hp < currentPlayer.maxHp
@@ -1995,6 +2007,77 @@ const App: React.FC = () => {
 
       // ACTION PHASE
       else if (currentPhase === GamePhase.ACTION) {
+        // 孙寒华「冲虚」：出牌阶段限一次，集灵获得分数，用于升级妙剑/莲华或摸牌
+        if (currentPlayer.hero.name === '孙寒华' && skillsOn(currentPlayer.id) && !chongxuUsedRef.current) {
+          chongxuUsedRef.current = true;
+          const p = getPlayer(currentPlayer.id);
+          if (p) {
+            let score = 1; // 简化：每次集灵获得 1 分
+            addLog(`孙寒华发动「冲虚」，集灵获得 ${score} 分`, 'skill');
+            showSkillBanner('孙寒华', '冲虚');
+            await delay(400);
+            if ((p.miaoJianLevel ?? 1) < 3) {
+              updatePlayer(p.id, { miaoJianLevel: (p.miaoJianLevel ?? 1) + 1 });
+              addLog(`孙寒华用分数升级「妙剑」至 ${(p.miaoJianLevel ?? 1) + 1} 级`, 'skill');
+            } else if ((p.lianHuaLevel ?? 1) < 3) {
+              updatePlayer(p.id, { lianHuaLevel: (p.lianHuaLevel ?? 1) + 1 });
+              addLog(`孙寒华用分数升级「莲华」至 ${(p.lianHuaLevel ?? 1) + 1} 级`, 'skill');
+            } else {
+              drawCards(p.id, score);
+              addLog(`孙寒华用分数摸 ${score} 张牌`, 'skill');
+            }
+            await delay(400);
+          }
+        }
+
+        // 孙寒华「妙剑」：出牌阶段限一次，按等级将牌当【无中生有】或【刺杀】使用（刺杀近似普通【杀】）
+        if (currentPlayer.hero.name === '孙寒华' && skillsOn(currentPlayer.id) && !miaoJianUsedRef.current) {
+          miaoJianUsedRef.current = true;
+          const p = getPlayer(currentPlayer.id);
+          if (p) {
+            const lv = p.miaoJianLevel ?? 1;
+            const trick = lv >= 1 ? p.hand.find(c => c.type !== CardType.BASIC) : undefined;
+            const slashCard = lv >= 2
+              ? p.hand.find(c => c.type === CardType.BASIC)
+              : p.hand.find(c => c.name === CardName.SHA);
+            if (lv >= 3 || trick) {
+              if (lv >= 3) {
+                addLog('孙寒华发动「妙剑」，视为使用一张【无中生有】', 'skill');
+              } else if (trick) {
+                mutateHand(p.id, h => h.filter(c => c.id !== trick.id));
+                addLog(`孙寒华发动「妙剑」，将【${trick.name}】当【无中生有】使用`, 'skill');
+              }
+              showSkillBanner('孙寒华', '妙剑');
+              await delay(400);
+              drawCards(p.id, 2);
+            } else if (slashCard) {
+              const foes = playersRef.current.filter(o => !o.isDead && o.id !== p.id && isEnemy(p, o));
+              if (foes.length) {
+                const foe = [...foes].sort((a, b) => a.hp - b.hp)[0];
+                mutateHand(p.id, h => h.filter(c => c.id !== slashCard.id));
+                addLog(`孙寒华发动「妙剑」，将【${slashCard.name}】当【刺杀】对 ${foe.hero.name} 使用（近似普通【杀】）`, 'skill');
+                showSkillBanner('孙寒华', '妙剑');
+                await delay(400);
+                const meNow = getPlayer(p.id);
+                const foeNow = getPlayer(foe.id);
+                if (meNow && foeNow) {
+                  const virtualSlash: Card = {
+                    id: `miaojian-${p.id}-${Date.now()}`,
+                    name: CardName.SHA,
+                    type: CardType.BASIC,
+                    suit: Suit.SPADE,
+                    rank: 'K',
+                    value: 13,
+                    description: '妙剑：视为使用一张【刺杀】',
+                    imageColor: 'from-slate-700 to-slate-900',
+                  };
+                  await resolveCardEffect(meNow, [foeNow], virtualSlash);
+                }
+              }
+            }
+          }
+        }
+
         // 何太后「鸩毒」：其他角色出牌阶段开始时，弃一张手牌令其视为使用【酒】，然后对其造成1点伤害
         const hetai = playersRef.current.find(p => !p.isDead && p.hero.name === '何太后'
           && p.id !== currentPlayer.id && skillsOn(p.id));
@@ -4046,6 +4129,38 @@ const App: React.FC = () => {
                 addLog(`${helper.hero.name} 未交出【闪】，也成为此【杀】的目标`, 'skill');
               }
               await delay(450);
+            }
+          }
+
+          // 孙寒华「莲华」：成为其他角色【杀】的目标时按等级结算（摸牌 / 黑桃取消 / 弃牌否则取消）
+          if (effectiveTarget.hero.name === '孙寒华' && source.id !== effectiveTarget.id && skillsOn(effectiveTarget.id)) {
+            const lv = effectiveTarget.lianHuaLevel ?? 1;
+            drawCards(effectiveTarget.id, 1);
+            addLog(`孙寒华成为 ${source.hero.name} 的【杀】目标，发动「莲华」（${lv} 级）摸一张牌`, 'skill');
+            showSkillBanner('孙寒华', '莲华');
+            await delay(350);
+            if (lv >= 2) {
+              const jc = await performJudgment(effectiveTarget.id, '莲华');
+              if (jc && jc.suit === Suit.SPADE) {
+                addLog('【莲华】判定为黑桃，此【杀】被取消', 'skill');
+                await delay(400);
+                continue;
+              }
+            }
+            if (lv >= 3) {
+              const sp = getPlayer(source.id);
+              const willing = !!sp && sp.hand.length > 0
+                && (effectiveTarget.hp <= 2 || sp.hand.length >= 2);
+              if (willing && sp) {
+                const cost = [...sp.hand].sort((a, b) => a.value - b.value)[0];
+                discardCards(sp.id, [cost]);
+                addLog(`【莲华】${sp.hero.name} 弃置【${cost.name}】，此【杀】继续`, 'skill');
+                await delay(350);
+              } else {
+                addLog(`【莲华】${source.hero.name} 未弃置牌，此【杀】被取消`, 'skill');
+                await delay(350);
+                continue;
+              }
             }
           }
 
