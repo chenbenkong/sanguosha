@@ -5948,8 +5948,8 @@ const App: React.FC = () => {
         <div key={`heal-${healNumber.id}`} className="absolute inset-0 z-[70] pointer-events-none animate-heal-flash" />
       )}
 
-      {/* Visual Effect Overlay - 优化版卡牌动画（判定演出期间让位，避免两层卡牌叠影） */}
-      {visualCard && !judgmentVisual && (
+      {/* Visual Effect Overlay - 优化版卡牌动画（判定/濒死期间让位，避免叠影与遮挡抉择弹窗） */}
+      {visualCard && !judgmentVisual && !dyingState?.isActive && (
         <div className="absolute inset-0 z-50 flex items-center justify-center pointer-events-none overflow-hidden" style={{ contain: 'layout style paint' }}>
           {/* 出牌聚光：中心微亮 / 四周压暗，视线聚焦到牌面（仅完整档） */}
           {fxFlourish && <div className="absolute inset-0 card-spotlight"></div>}
