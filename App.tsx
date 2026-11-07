@@ -344,7 +344,12 @@ const App: React.FC = () => {
   const lingrenUsedRef = useRef<boolean>(false); // 曹婴「凌人」出牌阶段限一次
   const lingrenBoostRef = useRef<Record<string, { targetId: number; bonus: number }>>({}); // 凌人伤害加成（按牌 id）
   const runweiUsedRef = useRef<boolean>(false); // 陆郁生「润微」出牌阶段限一次
-  const runweiGiftRef = useRef<{ targetId: number; ids: string[] } | null>(null); // 润微本阶段给出的牌
+  const runweiGiftRef = useRef<Array<{ targetId: number; ids: string[] }>>([]); // 润微本阶段给出的牌（可能有多次）
+  // 润微：失去 X 张牌后可在本阶段再次发动，且不能指定本回合获得过牌的角色
+  const runweiExtraRef = useRef<{ turn: number; lossX: number; lost: number } | null>(null);
+  const runweiSecondUsedRef = useRef<boolean>(false);
+  const runweiSecondFireRef = useRef<((blocked: number[]) => Promise<number>) | null>(null); // 满足失去 X 张后由弃牌/用牌事件直接触发第二次发动
+  const runweiBlockedRef = useRef<{ turn: number; ids: number[] }>({ turn: -1, ids: [] });
   const shuanghuaiUsedRef = useRef<boolean>(false); // 陆郁生「霜怀」每回合限一次
   const lastShuanghuaiTargetRef = useRef<number | null>(null); // 霜怀上一次的目标
   const yanyuCountRef = useRef<number>(0); // 夏侯氏「燕语」本阶段重铸【杀】数
@@ -1668,7 +1673,11 @@ const App: React.FC = () => {
     lingrenUsedRef.current = false;
     lingrenBoostRef.current = {};
     runweiUsedRef.current = false;
-    runweiGiftRef.current = null;
+    runweiGiftRef.current = [];
+    runweiExtraRef.current = null;
+    runweiSecondUsedRef.current = false;
+    runweiSecondFireRef.current = null;
+    runweiBlockedRef.current = { turn: -1, ids: [] };
     shuanghuaiUsedRef.current = false;
     lastShuanghuaiTargetRef.current = null;
     yanyuCountRef.current = 0;
@@ -2027,6 +2036,22 @@ const App: React.FC = () => {
         addLog(`【明哲】王元姬于回合外因弃置失去红色牌，摸一张牌`, 'skill');
         showSkillBanner(wj.hero.name, '明哲');
         drawCardsRef.current?.(wj.id, 1);
+      }
+    }
+
+    // 陆郁生「润微」：本阶段失去 X 张牌后，可再次发动（X 为其上次发动令目标获得的牌数）
+    if (before && before.hero.name === '陆郁生' && skillsOn(before.id)
+        && phaseLiveRef.current === GamePhase.ACTION && turnLiveRef.current === before.id) {
+      const extra = runweiExtraRef.current;
+      if (extra && extra.turn === turnCountRef.current && !runweiSecondUsedRef.current && extra.lossX > 0) {
+        extra.lost += cardsToDiscard.length;
+        if (extra.lost >= extra.lossX && runweiSecondFireRef.current) {
+          const fire = runweiSecondFireRef.current;
+          runweiSecondUsedRef.current = true;
+          runweiExtraRef.current = null;
+          addLog(`【润微】陆郁生本阶段已失去 ${extra.lost} 张牌（达到上次发动时获得的 ${extra.lossX} 张），可再次发动「润微」，且不能指定本回合获得过牌的角色`, 'skill');
+          void fire(runweiBlockedRef.current.ids);
+        }
       }
     }
   };
@@ -2516,6 +2541,9 @@ const App: React.FC = () => {
         // 陆郁生：每回合重置「霜怀」；自己的回合重置「润微」
         shuanghuaiUsedRef.current = false;
         if (currentPlayer.hero.name === '陆郁生') runweiUsedRef.current = false;
+        runweiExtraRef.current = null;
+        runweiSecondUsedRef.current = false;
+        runweiSecondFireRef.current = null;
 
         // 夏侯氏：回合开始时重置「燕语」重铸计数
         if (currentPlayer.hero.name === '夏侯氏') yanyuCountRef.current = 0;
@@ -3047,35 +3075,55 @@ const App: React.FC = () => {
         }
 
         // 陆郁生「润微」：出牌阶段限一次，展示牌堆顶至多五张，令一名角色获得其中一种颜色的所有牌
-        if (currentPlayer.hero.name === '陆郁生' && skillsOn(currentPlayer.id) && !runweiUsedRef.current) {
-          runweiUsedRef.current = true;
-          const top = deckRef.current.slice(0, 5);
-          if (top.length > 0) {
+        if (currentPlayer.hero.name === '陆郁生' && skillsOn(currentPlayer.id)) {
+          const doRunwei = async (excludeIds: number[]): Promise<number> => {
+            const top = deckRef.current.slice(0, 5);
+            if (top.length === 0) return 0;
             const red = top.filter(c => c.suit === Suit.HEART || c.suit === Suit.DIAMOND);
             const black = top.filter(c => c.suit === Suit.SPADE || c.suit === Suit.CLUB);
             const picked = red.length >= black.length ? red : black;
-            if (picked.length > 0) {
-              const allies = playersRef.current
-                .filter(p => !p.isDead && p.id !== currentPlayer.id && isAlly(currentPlayer, p))
-                .sort((a, b) => a.hand.length - b.hand.length);
-              const target = allies[0] ?? currentPlayer;
-              const rest = top.filter(c => !picked.some(pc => pc.id === c.id));
-              setDeck(prev => prev.slice(top.length));
-              deckRef.current = deckRef.current.slice(top.length);
-              if (rest.length > 0) {
-                setDiscardPile(prev => {
-                  const next = [...prev, ...rest];
-                  discardPileRef.current = next;
-                  return next;
-                });
-              }
-              mutateHand(target.id, h => [...h, ...picked]);
-              runweiGiftRef.current = { targetId: target.id, ids: picked.map(c => c.id) };
-              addLog(`【润微】陆郁生展示牌堆顶 ${top.length} 张，令 ${target.hero.name} 获得${red.length >= black.length ? '红' : '黑'}色牌 ${picked.map(c => `【${c.name}】`).join('、')}`, 'skill');
-              showSkillBanner('陆郁生', '润微');
-              await delay(450);
+            if (picked.length === 0) return 0;
+            const allies = playersRef.current
+              .filter(p => !p.isDead && p.id !== currentPlayer.id && isAlly(currentPlayer, p) && !excludeIds.includes(p.id))
+              .sort((a, b) => a.hand.length - b.hand.length);
+            let target = allies[0];
+            if (!target) {
+              if (excludeIds.includes(currentPlayer.id)) return 0;
+              target = currentPlayer;
+            }
+            const rest = top.filter(c => !picked.some(pc => pc.id === c.id));
+            setDeck(prev => prev.slice(top.length));
+            deckRef.current = deckRef.current.slice(top.length);
+            if (rest.length > 0) {
+              setDiscardPile(prev => {
+                const next = [...prev, ...rest];
+                discardPileRef.current = next;
+                return next;
+              });
+            }
+            mutateHand(target.id, h => [...h, ...picked]);
+            runweiGiftRef.current.push({ targetId: target.id, ids: picked.map(c => c.id) });
+            if (runweiBlockedRef.current.turn !== turnCountRef.current) {
+              runweiBlockedRef.current = { turn: turnCountRef.current, ids: [] };
+            }
+            runweiBlockedRef.current.ids.push(target.id);
+            addLog(`【润微】陆郁生展示牌堆顶 ${top.length} 张，令 ${target.hero.name} 获得${red.length >= black.length ? '红' : '黑'}色牌 ${picked.map(c => `【${c.name}】`).join('、')}`, 'skill');
+            showSkillBanner('陆郁生', '润微');
+            await delay(450);
+            return picked.length;
+          };
+
+          if (!runweiUsedRef.current) {
+            runweiUsedRef.current = true;
+            const gained = await doRunwei([]);
+            if (gained > 0) {
+              runweiExtraRef.current = { turn: turnCountRef.current, lossX: gained, lost: 0 };
+              runweiSecondFireRef.current = async (blocked: number[]) => await doRunwei(blocked);
             }
           }
+
+          // 失去 X 张牌后的再次发动：由 discardCards 事件钩子（用牌/弃置）累加 lost，
+          // 达到 lossX 时直接调用 runweiSecondFireRef（本阶段限一次，且排除已获得过牌的角色）
         }
 
         // 赵襄「芳魂」：移去 1 个「梅影」，发动「龙胆」将【闪】当【杀】使用，结算后摸一张牌
@@ -3709,17 +3757,17 @@ const App: React.FC = () => {
         }
 
         // 陆郁生「润微」：本阶段结束时，弃置因此法获得的手牌
-        if (runweiGiftRef.current) {
-          const { targetId, ids } = runweiGiftRef.current;
-          const gifted = getPlayer(targetId);
-          if (gifted) {
+        if (runweiGiftRef.current.length > 0) {
+          for (const { targetId, ids } of runweiGiftRef.current) {
+            const gifted = getPlayer(targetId);
+            if (!gifted) continue;
             const remain = gifted.hand.filter(c => ids.includes(c.id));
             if (remain.length > 0) {
               mutateHand(targetId, h => h.filter(c => !ids.includes(c.id)));
               addLog(`【润微】阶段结束，${gifted.hero.name} 弃置未使用的 ${remain.length} 张润微牌`, 'skill');
             }
           }
-          runweiGiftRef.current = null;
+          runweiGiftRef.current = [];
         }
 
         // 夏侯氏「燕语」（结束阶段部分）：本阶段重铸过不少于两张【杀】，令一名男性角色摸两张牌
