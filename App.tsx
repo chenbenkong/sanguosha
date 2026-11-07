@@ -6443,6 +6443,8 @@ const App: React.FC = () => {
         addLog(`${source.hero.name} 使用了【铁索连环】`, 'info');
         // 标记目标为横置状态
         for (const target of targets) {
+          // 王异「贞烈」：铁索连环属非延时锦囊，可令其对自己无效
+          if (await tryZhenlie(target, source, card)) continue;
           // 切换横置状态
           const newChainedState = !target.isChained;
           updatePlayer(target.id, { isChained: newChainedState });
@@ -6525,6 +6527,8 @@ const App: React.FC = () => {
         
         for (const player of sortedPlayers) {
           if (revealedCards.length === 0) break;
+          // 王异「贞烈」：五谷丰登属非延时锦囊，可令其对自己无效（不参与选牌）
+          if (await tryZhenlie(player, source, card)) continue;
           
           if (player.isHuman && !isAiTakeover) {
             // 人类玩家选择（30 秒未选自动代选，避免单一响应等待无限挂起）
@@ -6585,6 +6589,8 @@ const App: React.FC = () => {
         
         // 所有存活角色依次回复1点体力
         for (const player of alivePlayers) {
+          // 王异「贞烈」：桃园结义属非延时锦囊，可令其对自己无效（不回复）
+          if (await tryZhenlie(player, source, card)) continue;
           if (player.hp < player.maxHp) {
             const newHp = Math.min(player.hp + 1, player.maxHp);
             const healAmount = newHp - player.hp;
@@ -7536,10 +7542,11 @@ const App: React.FC = () => {
   // 王异「贞烈」：成为【杀】或非延时锦囊目标时，失去1点体力弃其一张手牌，令此牌无效
   const tryZhenlie = async (target: Player, source: Player, card: Card): Promise<boolean> => {
     if (target.hero.name !== '王异' || target.id === source.id || target.isDead || target.hp <= 1) return false;
-    const harmful = card.name === CardName.SHA
-      || [CardName.JUEDOU, CardName.NANMAN, CardName.WANJIAN, CardName.SHUNSHOU,
-          CardName.GUOHE, CardName.HUOGONG, CardName.JIEDAO].includes(card.name);
-    if (!harmful) return false;
+    // 官方覆盖：其他角色使用的【杀】或「非延时锦囊牌」全部牌型
+    // （延时锦囊：乐不思蜀 / 兵粮寸断 / 闪电 不在其列）
+    const delayedTricks: CardName[] = [CardName.LESI, CardName.BINGLIANG, CardName.SHANDIAN];
+    const isNonDelayedTrick = card.type === CardType.SCROLL && !delayedTricks.includes(card.name);
+    if (card.name !== CardName.SHA && !isNonDelayedTrick) return false;
     const attacker = getPlayer(source.id);
     if (!attacker || attacker.hand.length === 0) return false;
     updatePlayer(target.id, { hp: target.hp - 1 });
