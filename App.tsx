@@ -218,6 +218,7 @@ const App: React.FC = () => {
     if (screen !== 'game' || winnerSide) return;
     const label =
       phase === GamePhase.START ? '回合开始' :
+      phase === GamePhase.JUDGE ? '判定阶段' :
       phase === GamePhase.DRAW ? '摸牌阶段' :
       phase === GamePhase.ACTION ? '出牌阶段' :
       phase === GamePhase.DISCARD ? '弃牌阶段' :
@@ -361,6 +362,8 @@ const App: React.FC = () => {
   const cangHuiUsedRef = useRef<boolean>(false); // 孙鲁班「谮毁」本回合已发动
   const shenxianTurnRef = useRef<number>(-1); // 张星彩「甚贤」本回合是否已发动
   const doutuSkipRef = useRef<number | null>(null); // 伏皇后「惴恐」赢：目标跳过出牌阶段
+  // 判定阶段结算结果：兵粮寸断跳过摸牌、乐不思蜀跳过出牌（进入判定阶段前清零）
+  const judgeSkipRef = useRef<{ draw: boolean; action: boolean }>({ draw: false, action: false });
   const doutuDistanceRef = useRef<Record<number, number>>({}); // 「惴恐」没赢：到伏皇后距离视为 1
   const yuejianCountRef = useRef<number>(0); // 卞夫人「约俭」本回合已发动次数（上限 2）
   const yuejianGainedRef = useRef<Set<string>>(new Set()); // 已被「约俭」获得的牌：结算后不再重复置入弃牌堆
@@ -850,6 +853,45 @@ const App: React.FC = () => {
       playersRef.current = updated;
       return updated;
     });
+  };
+
+  // 延时锦囊进入判定区：按进入先后顺序追加，并同步旧的状态布尔（座位徽标与既有技能仍读这些布尔）
+  const addDelayedTrick = (playerId: number, card: Card) => {
+    const p = playersRef.current.find(x => x.id === playerId);
+    if (!p) return;
+    const zone = [...(p.judgeZone ?? []), card];
+    playersRef.current = playersRef.current.map(x => x.id === playerId ? {
+      ...x,
+      judgeZone: zone,
+      isLeBuSiShu: zone.some(c => c.name === CardName.LESI),
+      isBingLiangCunDuan: zone.some(c => c.name === CardName.BINGLIANG),
+      isShandian: zone.some(c => c.name === CardName.SHANDIAN),
+    } : x);
+    setPlayers(playersRef.current);
+    // 延时锦囊实际停留在判定区：从弃牌堆移出，避免同一张牌同时存在于两处
+    if (discardPileRef.current.some(c => c.id === card.id)) {
+      const newDiscard = discardPileRef.current.filter(c => c.id !== card.id);
+      discardPileRef.current = newDiscard;
+      setDiscardPile(newDiscard);
+    }
+  };
+
+  // 判定完成：从判定区移除该牌并置入弃牌堆，同步旧布尔
+  const removeDelayedTrick = (playerId: number, card: Card) => {
+    const p = playersRef.current.find(x => x.id === playerId);
+    if (!p) return;
+    const zone = (p.judgeZone ?? []).filter(c => c.id !== card.id);
+    playersRef.current = playersRef.current.map(x => x.id === playerId ? {
+      ...x,
+      judgeZone: zone,
+      isLeBuSiShu: zone.some(c => c.name === CardName.LESI),
+      isBingLiangCunDuan: zone.some(c => c.name === CardName.BINGLIANG),
+      isShandian: zone.some(c => c.name === CardName.SHANDIAN),
+    } : x);
+    setPlayers(playersRef.current);
+    const newDiscard = [...discardPileRef.current, card];
+    discardPileRef.current = newDiscard;
+    setDiscardPile(newDiscard);
   };
 
   const isAlly = (a: Player, b: Player) => {
@@ -1592,11 +1634,12 @@ const App: React.FC = () => {
     // __devState 读取当前对局信息；__devPatch 按 id 覆盖体力/手牌/装备，用于构造技能触发场景。
     if (debugDev) {
       const devWin = window as unknown as {
-        __devState?: () => Array<{ id: number; name: string; hp: number; maxHp: number; identity: string; isHuman: boolean; hand: string[]; equip: string[]; sealed: boolean }>;
+        __devState?: () => Array<{ id: number; name: string; hp: number; maxHp: number; identity: string; isHuman: boolean; hand: string[]; equip: string[]; sealed: boolean; judge: string[] }>;
         __devPatch?: (spec: Array<{ id: number; hp?: number; maxHp?: number; hand?: string[]; equip?: string[]; marks?: number }>) => void;
         __devDamage?: (victimId: number, sourceId: number, amount: number, nature?: 'fire' | 'thunder') => void;
         __devKill?: (victimId: number, killerId?: number) => void;
         __devIdentity?: (spec: Array<{ id: number; identity: string }>) => void;
+        __devTrick?: (spec: Array<{ id: number; cards: string[] }>) => void;
       };
       devWin.__devState = () => playersRef.current.map(p => ({
         id: p.id,
@@ -1608,6 +1651,7 @@ const App: React.FC = () => {
         hand: p.hand.map(c => c.name),
         equip: Object.values(p.equipment ?? {}).filter((c): c is Card => !!c).map(c => c.name),
         sealed: isSkillSealed(p.id),
+        judge: (p.judgeZone ?? []).map(c => c.name),
       }));
       devWin.__devPatch = (spec) => {
         const pool = [...deckRef.current];
@@ -1662,6 +1706,37 @@ const App: React.FC = () => {
         });
         playersRef.current = next;
         setPlayers(next);
+      };
+      devWin.__devTrick = (spec) => {
+        const pool = [...deckRef.current];
+        const next = playersRef.current.map(p => ({ ...p }));
+        spec.forEach(s => {
+          const idx = next.findIndex(x => x.id === s.id);
+          if (idx < 0) return;
+          const p = next[idx];
+          const cards: Card[] = s.cards.map((nm, i) => {
+            const di = pool.findIndex(c => c.name === (nm as CardName));
+            if (di >= 0) return pool.splice(di, 1)[0];
+            return {
+              ...(p.hand[0] ?? { id: '', name: nm as CardName, type: CardType.SCROLL, suit: Suit.SPADE, rank: '2', value: 2, description: '', imageColor: '' }),
+              id: `devt-${s.id}-${i}-${Date.now()}`,
+              name: nm as CardName,
+              description: '开发态构造延时锦囊',
+            } as Card;
+          });
+          const zone = [...(p.judgeZone ?? []), ...cards];
+          next[idx] = {
+            ...p,
+            judgeZone: zone,
+            isLeBuSiShu: zone.some(c => c.name === CardName.LESI),
+            isBingLiangCunDuan: zone.some(c => c.name === CardName.BINGLIANG),
+            isShandian: zone.some(c => c.name === CardName.SHANDIAN),
+          };
+        });
+        playersRef.current = next;
+        setPlayers(next);
+        deckRef.current = pool;
+        setDeck(pool);
       };
     }
 
@@ -1959,6 +2034,14 @@ const App: React.FC = () => {
     // 先更新状态
     updatePlayer(victimId, { isDead: true, isRevealed: true, hand: [] }); 
 
+    // 判定区的延时锦囊随角色阵亡置入弃牌堆
+    if (victim.judgeZone && victim.judgeZone.length > 0) {
+      const nd = [...discardPileRef.current, ...victim.judgeZone];
+      discardPileRef.current = nd;
+      setDiscardPile(nd);
+      updatePlayer(victimId, { judgeZone: [], isLeBuSiShu: false, isBingLiangCunDuan: false, isShandian: false });
+    }
+
     // 清理可能阻塞流程的状态
     setDyingState(null);
     if (pendingReaction) setPendingReaction(null);
@@ -2135,6 +2218,8 @@ const App: React.FC = () => {
       
       // START PHASE
       if (currentPhase === GamePhase.START) {
+        // 新一轮回合：清空判定阶段对摸牌/出牌阶段的跳过标记
+        judgeSkipRef.current = { draw: false, action: false };
         setPendingReaction(null);
         setAdvice(null);
         setSelectedCardIds([]);
@@ -2349,35 +2434,7 @@ const App: React.FC = () => {
           }
         }
 
-        // 闪电判定：判定牌为黑桃2-9时受到3点雷电伤害，否则传递给下一名角色
-        if (currentPlayer.isShandian) {
-          updatePlayer(currentPlayer.id, { isShandian: false });
-          const jc = await performJudgment(currentPlayer.id, '闪电');
-          const rankNum = jc ? (parseInt(jc.rank.replace(/\D/g, ''), 10) || 0) : 0;
-          if (jc && jc.suit === Suit.SPADE && rankNum >= 2 && rankNum <= 9) {
-            addLog(`⚡【闪电】命中！${currentPlayer.hero.name} 受到3点雷电伤害！`, 'danger');
-            await takeDamage(currentPlayer.id, currentPlayer.id, 3, {
-              ...jc, name: CardName.SHANDIAN,
-            } as Card, 'thunder');
-          } else {
-            // 传递给下一名存活角色
-            let nextIdx = (currentPlayer.id + 1) % players.length;
-            let safety = 0;
-            while (safety < players.length) {
-              const np = getPlayer(nextIdx);
-              if (np && !np.isDead) break;
-              nextIdx = (nextIdx + 1) % players.length;
-              safety++;
-            }
-            if (safety < players.length && nextIdx !== currentPlayer.id) {
-              updatePlayer(nextIdx, { isShandian: true });
-              addLog(`【闪电】未命中，传递给 ${getPlayer(nextIdx)?.hero.name}`, 'info');
-            } else {
-              addLog(`【闪电】未命中，无人可传递，进入弃牌堆`, 'info');
-            }
-          }
-          await delay(600);
-        }
+        // 闪电判定已移入独立的「判定阶段」，在判定区按放置先后统一结算
 
         // 孙寒华：回合开始时重置出牌阶段限一次的「冲虚 / 妙剑」
         if (currentPlayer.hero.name === '孙寒华') {
@@ -2564,17 +2621,104 @@ const App: React.FC = () => {
             await handleDeath(latestCurrent.id);
             setPhase(GamePhase.END);
           } else {
-            // 救活后继续本回合，避免同一「回合+阶段」去重后停在开始阶段
-            setPhase(GamePhase.DRAW);
+            // 救活后继续本回合，进入判定阶段（延时锦囊仍需逐张结算）
+            setPhase(GamePhase.JUDGE);
           }
           return;
         }
         await delay(800);
-        setPhase(GamePhase.DRAW);
+        setPhase(GamePhase.JUDGE);
+      }
+
+      // JUDGE PHASE：判定阶段——判定区内的延时锦囊按进入先后逐张结算
+      else if (currentPhase === GamePhase.JUDGE) {
+        const judgeOwner = getPlayer(turnIndex);
+        if (!judgeOwner) return;
+        const zone = [...(judgeOwner.judgeZone ?? [])];
+        if (zone.length === 0) {
+          setPhase(GamePhase.DRAW);
+          return;
+        }
+        addLog(`【判定阶段】${judgeOwner.hero.name} 的判定区共 ${zone.length} 张延时锦囊，按放置先后逐张判定`, 'info');
+        await delay(500);
+        for (let i = 0; i < zone.length; i++) {
+          const trick = zone[i];
+          const cur = getPlayer(turnIndex);
+          if (!cur) break;
+          const inZone = (cur.judgeZone ?? []).some(c => c.id === trick.id);
+          if (!inZone) continue;
+          addLog(`【判定阶段】第 ${i + 1}/${zone.length} 张：${trick.name}（${trick.suit}${trick.rank}）`, 'info');
+          if (cur.isDead) {
+            removeDelayedTrick(turnIndex, trick);
+            addLog(`【判定阶段】${cur.hero.name} 已阵亡，【${trick.name}】直接置入弃牌堆`, 'info');
+            continue;
+          }
+          if (trick.name === CardName.LESI) {
+            const jc = await performJudgment(turnIndex, '乐不思蜀');
+            removeDelayedTrick(turnIndex, trick);
+            if (jc && jc.suit === Suit.HEART) {
+              addLog(`判定为红桃，【乐不思蜀】解除，${cur.hero.name} 可正常出牌`, 'success');
+            } else {
+              judgeSkipRef.current.action = true;
+              addLog(`判定为${jc ? jc.suit : '无'}，【乐不思蜀】生效，${cur.hero.name} 将跳过出牌阶段`, 'warning');
+            }
+          } else if (trick.name === CardName.BINGLIANG) {
+            const jc = await performJudgment(turnIndex, '兵粮寸断');
+            removeDelayedTrick(turnIndex, trick);
+            if (jc && jc.suit === Suit.CLUB) {
+              addLog(`判定为梅花，【兵粮寸断】解除，${cur.hero.name} 可正常摸牌`, 'success');
+            } else {
+              judgeSkipRef.current.draw = true;
+              addLog(`判定为${jc ? jc.suit : '无'}，【兵粮寸断】生效，${cur.hero.name} 将跳过摸牌阶段`, 'warning');
+            }
+          } else if (trick.name === CardName.SHANDIAN) {
+            // 闪电：判定牌为黑桃2-9时受到3点雷电伤害，否则传递给下一名存活角色
+            const jc = await performJudgment(turnIndex, '闪电');
+            removeDelayedTrick(turnIndex, trick);
+            const rankNum = jc ? (parseInt(jc.rank.replace(/\D/g, ''), 10) || 0) : 0;
+            if (jc && jc.suit === Suit.SPADE && rankNum >= 2 && rankNum <= 9) {
+              addLog(`⚡【闪电】命中！${cur.hero.name} 受到3点雷电伤害！`, 'danger');
+              await takeDamage(cur.id, cur.id, 3, {
+                ...jc, name: CardName.SHANDIAN,
+              } as Card, 'thunder');
+            } else {
+              let nextIdx = (cur.id + 1) % players.length;
+              let safety = 0;
+              while (safety < players.length) {
+                const np = getPlayer(nextIdx);
+                if (np && !np.isDead) break;
+                nextIdx = (nextIdx + 1) % players.length;
+                safety++;
+              }
+              if (safety < players.length && nextIdx !== cur.id) {
+                addDelayedTrick(nextIdx, trick);
+                addLog(`【闪电】未命中，传递给 ${getPlayer(nextIdx)?.hero.name}`, 'info');
+              } else {
+                addLog(`【闪电】未命中，无人可传递，进入弃牌堆`, 'info');
+              }
+            }
+          }
+          await delay(600);
+        }
+        // 判定区清空后进入摸牌阶段；兵粮寸断的跳过由 DRAW 读取 judgeSkipRef
+        const after = getPlayer(turnIndex);
+        if (after && after.isDead) {
+          setPhase(GamePhase.END);
+        } else {
+          setPhase(GamePhase.DRAW);
+        }
       }
       
       // DRAW PHASE
       else if (currentPhase === GamePhase.DRAW) {
+        // 判定阶段判定为非梅花：兵粮寸断生效，整个摸牌阶段跳过
+        if (judgeSkipRef.current.draw) {
+          judgeSkipRef.current.draw = false;
+          addLog(`${currentPlayer.hero.name} 受【兵粮寸断】影响，跳过摸牌阶段！`, 'warning');
+          await delay(600);
+          setPhase(GamePhase.ACTION);
+          return;
+        }
         // 辛宪英「才识」：摸牌阶段选择手牌上限+1（本回合不能对其他角色用牌）或回复1点体力（本回合不能对自己用牌）
         if (currentPlayer.hero.name === '辛宪英' && skillsOn(currentPlayer.id)) {
           if (currentPlayer.hp < currentPlayer.maxHp && currentPlayer.hp <= 2) {
@@ -2601,17 +2745,8 @@ const App: React.FC = () => {
           addLog(`${currentPlayer.hero.name} 发动「英姿」，额外摸一张牌`, 'skill');
           showSkillBanner(currentPlayer.hero.name, '英姿');
         }
-        // 检查是否有"兵粮寸断"效果：判定为梅花则解除，否则跳过摸牌阶段
-        if (currentPlayer.isBingLiangCunDuan) {
-          updatePlayer(currentPlayer.id, { isBingLiangCunDuan: false });
-          const jc = await performJudgment(currentPlayer.id, '兵粮寸断');
-          if (jc && jc.suit === Suit.CLUB) {
-            addLog(`判定为梅花，【兵粮寸断】解除，${currentPlayer.hero.name} 正常摸牌`, 'success');
-            drawCards(currentPlayer.id, drawCount);
-          } else {
-            addLog(`${currentPlayer.hero.name} 受【兵粮寸断】影响，跳过摸牌阶段！`, 'warning');
-          }
-        } else if (currentPlayer.hero.name === '张辽') {
+        // 兵粮寸断已在判定阶段结算，这里只按结果决定是否摸牌
+        if (currentPlayer.hero.name === '张辽') {
           // 张辽「突袭」：不摸牌，改为获得至多两名其他角色的各一张手牌
           const candidates = playersRef.current
             .filter(p => !p.isDead && p.id !== currentPlayer.id && p.hand.length > 0)
@@ -2650,6 +2785,14 @@ const App: React.FC = () => {
 
       // ACTION PHASE
       else if (currentPhase === GamePhase.ACTION) {
+        // 判定阶段判定为非红桃：乐不思蜀生效，整个出牌阶段跳过
+        if (judgeSkipRef.current.action) {
+          judgeSkipRef.current.action = false;
+          addLog(`${currentPlayer.hero.name} 受【乐不思蜀】影响，跳过出牌阶段！`, 'warning');
+          await delay(600);
+          setPhase(GamePhase.DISCARD);
+          return;
+        }
         // 王元姬「谦冲」：出牌阶段开始时，若装备区不全黑/不全红，选一种牌型本回合无次数与距离限制
         if (currentPlayer.hero.name === '王元姬' && skillsOn(currentPlayer.id)) {
           const p = getPlayer(currentPlayer.id)!;
@@ -3152,22 +3295,8 @@ const App: React.FC = () => {
           dbgMark('action:setDiscard:doutu');
           setPhase(GamePhase.DISCARD);
         }
-        // 检查是否有"乐不思蜀"效果：判定为红桃则解除，否则跳过出牌阶段
-        else if (currentPlayer.isLeBuSiShu) {
-          updatePlayer(currentPlayer.id, { isLeBuSiShu: false });
-          const jc = await performJudgment(currentPlayer.id, '乐不思蜀');
-          if (jc && jc.suit === Suit.HEART) {
-            addLog(`判定为红桃，【乐不思蜀】解除，${currentPlayer.hero.name} 正常出牌`, 'success');
-            if (!currentPlayer.isHuman || isAiTakeover) {
-              await cpuAI(currentPlayer);
-            }
-          } else {
-            addLog(`${currentPlayer.hero.name} 受【乐不思蜀】影响，跳过出牌阶段！`, 'warning');
-          }
-          await delay(800);
-          dbgMark('action:setDiscard:lebu');
-          setPhase(GamePhase.DISCARD);
-        } else {
+        // 乐不思蜀已在判定阶段结算（judgeSkipRef.action），此处只处理惴恐与正常出牌
+        else {
           // AI or Human Auto-Takeover
           if (!currentPlayer.isHuman || isAiTakeover) {
             await cpuAI(currentPlayer);
@@ -6116,9 +6245,9 @@ const App: React.FC = () => {
           addLog(`【无懈可击】生效，【${card.name}】对 ${target.hero.name} 的效果被抵消`, 'success');
           return;
         }
-        // 设置乐不思蜀状态
-        updatePlayer(target.id, { isLeBuSiShu: true });
-        addLog(`${target.hero.name} 中了【乐不思蜀】，下回合判定非红桃将跳过出牌阶段`, 'warning');
+        // 放入判定区：判定阶段按进入先后逐张结算
+        addDelayedTrick(target.id, card);
+        addLog(`${target.hero.name} 中了【乐不思蜀】，判定区第 ${(getPlayer(target.id)?.judgeZone?.length ?? 1)} 张，下回合判定非红桃将跳过出牌阶段`, 'warning');
       }
       // 过河拆桥
       else if (card.name === CardName.GUOHE) {
@@ -6263,9 +6392,9 @@ const App: React.FC = () => {
           addLog(`【无懈可击】生效，【${card.name}】对 ${target.hero.name} 的效果被抵消`, 'success');
           return;
         }
-        // 设置兵粮寸断状态
-        updatePlayer(target.id, { isBingLiangCunDuan: true });
-        addLog(`${target.hero.name} 中了【兵粮寸断】，下回合判定非梅花将跳过摸牌阶段`, 'warning');
+        // 放入判定区：判定阶段按进入先后逐张结算
+        addDelayedTrick(target.id, card);
+        addLog(`${target.hero.name} 中了【兵粮寸断】，判定区第 ${(getPlayer(target.id)?.judgeZone?.length ?? 1)} 张，下回合判定非梅花将跳过摸牌阶段`, 'warning');
       }
       // 五谷丰登
       else if (card.name === CardName.WUGU) {
@@ -6432,8 +6561,8 @@ const App: React.FC = () => {
         if (isWuxieUsed) {
           addLog(`【无懈可击】生效，【闪电】被抵消`, 'success');
         } else {
-          updatePlayer(source.id, { isShandian: true });
-          addLog(`⚡【闪电】悬于 ${source.hero.name} 头顶，下回合开始时判定`, 'warning');
+          addDelayedTrick(source.id, card);
+          addLog(`⚡【闪电】置于 ${source.hero.name} 的判定区第 ${(getPlayer(source.id)?.judgeZone?.length ?? 1)} 张，下回合判定阶段结算`, 'warning');
         }
       }
     } finally {
@@ -10624,8 +10753,8 @@ const App: React.FC = () => {
             当前阶段 · <span className="text-[#e8cf94]">{getPlayer(turnIndex)?.hero.name}</span>
           </div>
           <div className="flex items-center gap-1">
-            {[GamePhase.START, GamePhase.DRAW, GamePhase.ACTION, GamePhase.DISCARD, GamePhase.END].map((ph, i) => {
-              const phIndex = [GamePhase.START, GamePhase.DRAW, GamePhase.ACTION, GamePhase.DISCARD, GamePhase.END].indexOf(phase);
+            {[GamePhase.START, GamePhase.JUDGE, GamePhase.DRAW, GamePhase.ACTION, GamePhase.DISCARD, GamePhase.END].map((ph, i) => {
+              const phIndex = [GamePhase.START, GamePhase.JUDGE, GamePhase.DRAW, GamePhase.ACTION, GamePhase.DISCARD, GamePhase.END].indexOf(phase);
               const active = ph === phase;
               const passed = phIndex >= 0 && i < phIndex;
               const short = ph.replace('回合', '').replace('阶段', '');

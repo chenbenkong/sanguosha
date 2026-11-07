@@ -106,6 +106,8 @@ export interface Player {
   isLeBuSiShu?: boolean; // 乐不思蜀状态
   isBingLiangCunDuan?: boolean; // 兵粮寸断状态
   isShandian?: boolean; // 闪电挂置状态（判定区）
+  /** 判定区：延时锦囊按进入先后顺序排列，判定阶段逐张结算 */
+  judgeZone?: Card[];
   // 装备区
   equipment?: Equipment;
   /** 张琪瑛「法箓」标记（紫微/后土/玉清/勾陈，每种限一枚） */
@@ -184,6 +186,7 @@ export type EquipmentSlot = keyof Equipment;
 
 export enum GamePhase {
   START = '回合开始',
+  JUDGE = '判定阶段',
   DRAW = '摸牌阶段',
   ACTION = '出牌阶段',
   DISCARD = '弃牌阶段',
