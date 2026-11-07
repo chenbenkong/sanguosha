@@ -3140,18 +3140,42 @@ const App: React.FC = () => {
             addLog(`【忠鉴】辛宪英展示【${own.name}】(${own.suit}${own.rank})，${target.hero.name} 展示 ${shown.map(c => `【${c.name}】(${c.suit}${c.rank})`).join('、')}`, 'skill');
             showSkillBanner('辛宪英', '忠鉴');
             if (rankSame) addLog('【忠鉴】双方展示牌点数相同，本回合「忠鉴」改为限两次', 'skill');
-            if (rankSame) {
-              const victimCard = [...shown].sort((a, b) => b.value - a.value)[0];
-              discardCards(target.id, [victimCard]);
-              addLog(`【忠鉴】双方展示牌点数相同，辛宪英弃置 ${target.hero.name} 的【${victimCard.name}】`, 'info');
-            }
             if (colorSame) {
-              drawCards(me.id, 1);
-              addLog('【忠鉴】双方展示牌颜色相同，辛宪英摸一张牌', 'success');
+              // 颜色相同：摸一张牌 或 弃置其一张展示牌（人类弹窗选择；AI 按溢出程度判断）
+              let chooseDiscard = false;
+              if (currentPlayer.isHuman) {
+                const pick = await requestSkillChoice({
+                  skill: '忠鉴',
+                  owner: '辛宪英',
+                  title: `【忠鉴】双方展示牌颜色相同，请选择：摸一张牌，或弃置 ${target.hero.name} 的一张展示牌`,
+                  hint: '颜色相同触发：可摸一张牌，也可弃置其一张牌',
+                  mode: 'choose',
+                  choices: [
+                    { id: 'draw', label: '摸一张牌', desc: '辛宪英摸一张牌' },
+                    { id: 'discard', label: '弃置其一张牌', desc: `弃置 ${target.hero.name} 一张展示牌` },
+                  ],
+                  cancelLabel: '摸一张牌',
+                }, true);
+                chooseDiscard = !!pick && pick.kind === 'choose' && pick.id === 'discard';
+                if (pick && pick.kind === 'timeout') {
+                  chooseDiscard = (target.hand.length - target.hp) >= 2;
+                }
+              } else {
+                // AI：目标手牌溢出 2 张及以上时弃置，否则摸牌
+                chooseDiscard = (target.hand.length - target.hp) >= 2;
+              }
+              if (chooseDiscard) {
+                const victimCard = [...shown].sort((a, b) => b.value - a.value)[0];
+                discardCards(target.id, [victimCard]);
+                addLog(`【忠鉴】辛宪英选择弃置 ${target.hero.name} 的【${victimCard.name}】`, 'info');
+              } else {
+                drawCards(me.id, 1);
+                addLog('【忠鉴】辛宪英选择摸一张牌', 'success');
+              }
             }
             if (!colorSame && !rankSame) {
               updatePlayer(me.id, { maxHp: me.maxHp - 1 });
-              addLog('【忠鉴】双方展示牌颜色与点数都不同，辛宪英减1点体力上限', 'danger');
+              addLog(`【忠鉴】双方展示牌颜色与点数都不同，辛宪英体力上限 -1（${me.maxHp} → ${me.maxHp - 1}）`, 'danger');
             }
             await delay(350);
             guard++;
