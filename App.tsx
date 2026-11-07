@@ -5790,6 +5790,15 @@ const App: React.FC = () => {
         playCard(source.id, card);
         slashUsageRef.current[source.id] = (slashUsageRef.current[source.id] ?? 0) + 1;
 
+        // 朱雀羽扇：可以将一张普通【杀】当火【杀】使用（简化：装备后自动转化，不额外询问）
+        let slashCard = card;
+        if (source.equipment?.weapon?.name === CardName.ZHUQUE && !card.attribute) {
+          slashCard = { ...card, attribute: 'fire' as const };
+          addLog(`【朱雀羽扇】${source.hero.name} 将普通【杀】转化为火【杀】使用`, 'skill');
+          showSkillBanner(source.hero.name, '朱雀羽扇');
+          await delay(300);
+        }
+
         // 方天画戟：打出最后一张手牌【杀】时，可额外指定最多 2 名范围内的角色
         let slashTargets = targets;
         const isFangtian = source.equipment?.weapon?.name === CardName.FANGTIAN;
@@ -5958,7 +5967,7 @@ const App: React.FC = () => {
             continue;
           }
           // 藤甲：普通【杀】无效（火杀/雷杀不受影响）
-          if (!ignoreArmor && armor === CardName.TENGJIA && !card.attribute) {
+          if (!ignoreArmor && armor === CardName.TENGJIA && !slashCard.attribute) {
             addLog(`${effectiveTarget.hero.name} 的【藤甲】挡住了普通【杀】，伤害无效`, 'success');
             await delay(500);
             continue;
@@ -5985,7 +5994,7 @@ const App: React.FC = () => {
             if (jc && (jc.suit === Suit.HEART || jc.suit === Suit.DIAMOND)) {
               addLog(`${source.hero.name} 发动「铁骑」，判定为红色，${effectiveTarget.hero.name} 无法闪避！`, 'skill');
               showSkillBanner(source.hero.name, '铁骑');
-              await takeDamage(effectiveTarget.id, source.id, 1, card);
+              await takeDamage(effectiveTarget.id, source.id, 1, slashCard);
               continue;
             }
             addLog(`「铁骑」判定为黑色，${effectiveTarget.hero.name} 仍可出【闪】`, 'info');
@@ -5996,7 +6005,7 @@ const App: React.FC = () => {
           if (isLieGong) {
             addLog(`${source.hero.name} 发动「烈弓」，${effectiveTarget.hero.name} 无法闪避！`, 'skill');
             showSkillBanner(source.hero.name, '烈弓');
-            await takeDamage(effectiveTarget.id, source.id, 1, card);
+            await takeDamage(effectiveTarget.id, source.id, 1, slashCard);
             continue;
           }
 
@@ -6014,7 +6023,7 @@ const App: React.FC = () => {
             showSkillBanner(source.hero.name, '贯石斧');
             await delay(400);
             const t = getPlayer(effectiveTarget.id);
-            if (t && !t.isDead) await takeDamage(t.id, source.id, 1, card);
+            if (t && !t.isDead) await takeDamage(t.id, source.id, 1, slashCard);
             await delay(300);
             continue;
           }
@@ -7465,6 +7474,17 @@ const App: React.FC = () => {
           && (damageCard.name === CardName.SHA || damageCard.name === CardName.JUEDOU)) {
         finalAmount += 1;
         addLog(`【裸衣】触发，${source?.hero.name ?? ''} 的伤害+1`, 'danger');
+      }
+
+      // 古锭刀（锁定技）：你的【杀】造成伤害时，若目标没有手牌，伤害+1
+      if (damageCard?.name === CardName.SHA && sourceId !== victimId
+          && source?.equipment?.weapon?.name === CardName.GUDING) {
+        const victimNow = getPlayer(victimId);
+        if (victimNow && victimNow.hand.length === 0) {
+          finalAmount += 1;
+          addLog(`【古锭刀】目标${victimNow.hero.name}没有手牌，此伤害+1`, 'danger');
+          showSkillBanner(source.hero.name, '古锭刀');
+        }
       }
 
       // 马云禄「凤魄」：首张【杀】的伤害加成（按牌 id 一次性结算）

@@ -41,6 +41,8 @@ export enum CardName {
   CIXIONG = '雌雄双股剑',
   HANBING = '寒冰剑',
   QILIN = '麒麟弓',
+  GUDING = '古锭刀',
+  ZHUQUE = '朱雀羽扇',
   BAGUA = '八卦阵',
   RENWANG = '仁王盾',
   TENGJIA = '藤甲',

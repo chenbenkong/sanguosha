@@ -23,6 +23,8 @@ export const EQUIP_META: Partial<Record<CardName, EquipMeta>> = {
   [CardName.CIXIONG]: { slot: 'weapon', range: 2, desc: '攻击范围2。你使用【杀】指定异性目标后，可令其弃一张手牌，或令你摸一张牌。', face: 'from-[#f6edef] via-[#ecdde1] to-[#dcc8cd]', accent: '#8a4a5a' },
   [CardName.HANBING]: { slot: 'weapon', range: 2, desc: '攻击范围2。你的【杀】造成伤害时，可防止伤害并改为弃置目标两张牌。', face: 'from-[#eff4f7] via-[#e0eaf1] to-[#c9dae6]', accent: '#3a6280' },
   [CardName.QILIN]: { slot: 'weapon', range: 5, desc: '攻击范围5。你的【杀】造成伤害时，可弃置目标的一匹坐骑。', face: 'from-[#f7f0e4] via-[#efe2cb] to-[#e0c9a5]', accent: '#8a6a2a' },
+  [CardName.GUDING]: { slot: 'weapon', range: 2, desc: '攻击范围2。锁定技：你的【杀】造成伤害时，若目标没有手牌，伤害+1。', face: 'from-[#f2efe9] via-[#e4ded4] to-[#cfc6b8]', accent: '#5f5445' },
+  [CardName.ZHUQUE]: { slot: 'weapon', range: 4, desc: '攻击范围4。你可以将一张普通【杀】当火【杀】使用。', face: 'from-[#fbefec] via-[#f5dbd3] to-[#e7bfb0]', accent: '#9a4a2e' },
   [CardName.BAGUA]: { slot: 'armor', desc: '需要使用【闪】时，可进行一次判定：红色则视为你打出【闪】。', face: 'from-[#f1f5f2] via-[#e3ebe6] to-[#cfdad3]', accent: '#3f6b58' },
   [CardName.RENWANG]: { slot: 'armor', desc: '黑色的【杀】对你无效。', face: 'from-[#f4f1ed] via-[#e9e4dd] to-[#d9d1c6]', accent: '#5b5148' },
   [CardName.TENGJIA]: { slot: 'armor', desc: '锁定技：南蛮入侵、万箭齐发与普通【杀】对你无效；你受到火焰伤害时伤害+1。', face: 'from-[#f1f4ec] via-[#e4ebdf] to-[#d0dbc6]', accent: '#4f6b3a' },
@@ -956,6 +958,9 @@ const generateDeck = (): Card[] => {
   addEquipAll(CardName.CIXIONG, [[S, '2']]);
   addEquipAll(CardName.HANBING, [[S, '2']]);
   addEquipAll(CardName.QILIN, [[H, '5']]);
+  // 古锭刀 ♠A（攻击距离2） / 朱雀羽扇 ♦A（攻击距离4）
+  addEquipAll(CardName.GUDING, [[S, 'A']]);
+  addEquipAll(CardName.ZHUQUE, [[D, 'A']]);
   addEquipAll(CardName.BAGUA, [[S, '2'], [C, '2']]);
   addEquipAll(CardName.RENWANG, [[C, '2']]);
   addEquipAll(CardName.TENGJIA, [[S, '2'], [C, '2']]);
