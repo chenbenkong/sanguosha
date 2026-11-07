@@ -3174,8 +3174,9 @@ const App: React.FC = () => {
               }
             }
             if (!colorSame && !rankSame) {
-              updatePlayer(me.id, { maxHp: me.maxHp - 1 });
-              addLog(`【忠鉴】双方展示牌颜色与点数都不同，辛宪英体力上限 -1（${me.maxHp} → ${me.maxHp - 1}）`, 'danger');
+              const prevDelta = me.handLimitDelta ?? 0;
+              updatePlayer(me.id, { handLimitDelta: prevDelta - 1 });
+              addLog(`【忠鉴】双方展示牌颜色与点数都不同，辛宪英手牌上限 -1（累计 ${prevDelta} → ${prevDelta - 1}）`, 'danger');
             }
             await delay(350);
             guard++;
