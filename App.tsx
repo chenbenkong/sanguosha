@@ -1670,6 +1670,7 @@ const App: React.FC = () => {
           let attribute: 'fire' | 'thunder' | undefined;
           if (nm.startsWith('火')) { name = nm.slice(1) as CardName; attribute = 'fire'; }
           else if (nm.startsWith('黑')) { name = nm.slice(1) as CardName; suit = Suit.SPADE; }
+          else if (nm.startsWith('♦')) { name = nm.slice(1) as CardName; suit = Suit.DIAMOND; }
           const idx = pool.findIndex(c => c.name === name);
           if (idx >= 0) {
             const found = pool.splice(idx, 1)[0];
