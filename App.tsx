@@ -370,6 +370,8 @@ const App: React.FC = () => {
   const doutuDistanceRef = useRef<Record<number, number>>({}); // 「惴恐」没赢：到伏皇后距离视为 1
   const yuejianCountRef = useRef<number>(0); // 卞夫人「约俭」本回合已发动次数（上限 2）
   const yuejianGainedRef = useRef<Set<string>>(new Set()); // 已被「约俭」获得的牌：结算后不再重复置入弃牌堆
+  // 孙鲁育「穆穆」：获得防具后，本回合该角色不能使用或打出【杀】
+  const mumuNoSlashRef = useRef<number | null>(null);
 
   // 孙尚香「结姻」技能状态
   const [isJieyinMode, setIsJieyinMode] = useState<boolean>(false);
@@ -622,6 +624,9 @@ const App: React.FC = () => {
   }, [delay]);
 
   // 优化：限制日志数量，避免内存泄漏和性能问题
+  const logsRef = useRef<LogEntry[]>([]);
+  useEffect(() => { logsRef.current = logs; }, [logs]);
+
   const addLog = useCallback((text: string, type: LogEntry['type'] = 'info') => {
     progressAtRef.current = Date.now();
     // 日志属非紧急 UI：标记为 transition，AI 连续出牌刷日志时不再阻塞卡牌/动画的高优先级渲染
@@ -1394,6 +1399,8 @@ const App: React.FC = () => {
   // 本回合是否还能使用这张【杀】（张飞「咆哮」、诸葛连弩不限；
   // 张星彩「枪舞」：点数大于判定结果的【杀】不计入次数）
   const canPlaySlash = useCallback((p: Player, card?: Card) => {
+    // 孙鲁育「穆穆」：获得防具牌后本回合不能使用【杀】
+    if (mumuNoSlashRef.current === p.id) return false;
     if (p.equipment?.weapon?.name === CardName.ZHUGE) return true;
     if (p.hero.name === '张飞') return true;
     // 王元姬「谦冲」：本回合选择基本牌则【杀】无次数限制
@@ -1649,7 +1656,9 @@ const App: React.FC = () => {
         __devKill?: (victimId: number, killerId?: number) => void;
         __devIdentity?: (spec: Array<{ id: number; identity: string }>) => void;
         __devTrick?: (spec: Array<{ id: number; cards: string[] }>) => void;
+        __devLogs?: () => string[];
       };
+      devWin.__devLogs = () => logsRef.current.map(l => l.text);
       devWin.__devState = () => playersRef.current.map(p => ({
         id: p.id,
         name: p.hero.name,
@@ -2365,6 +2374,8 @@ const App: React.FC = () => {
         }
         jiaozhaoUsedRef.current = false;
         setHasUsedJiaozhao(false);
+        // 「本回合」类禁【杀】效果在新回合开始时清零
+        mumuNoSlashRef.current = null;
         addLog(`>>> ${currentPlayer.hero.name} (${currentPlayer.isHuman ? '你' : 'AI'}) 回合开始 <<<`, 'info');
 
         // 伏皇后「惴恐」：其他角色的回合开始时，若她已受伤，可与其拼点。
@@ -3184,6 +3195,8 @@ const App: React.FC = () => {
               });
               addLog(`孙鲁育发动「穆穆」，获得 ${armorOwner.hero.name} 的【${armor.name}】，本回合不能使用或打出【杀】`, 'skill');
               showSkillBanner('孙鲁育', '穆穆');
+              // 禁【杀】实际生效：本回合该角色不能使用或打出【杀】
+              mumuNoSlashRef.current = currentPlayer.id;
               await delay(300);
             }
           }
@@ -4164,6 +4177,13 @@ const App: React.FC = () => {
       const canUseSkill = pendingReaction.canUseLongdan || (me.hero.name === '赵云');
       const skillCardName = pendingReaction.skillCardName || 
                            (neededCard === CardName.SHAN ? CardName.SHA : CardName.SHAN);
+
+      // 「穆穆」：本回合不能打出【杀】（含武圣/龙胆等转化）
+      if (neededCard === CardName.SHA && mumuNoSlashRef.current === me.id) {
+        addLog('你因「穆穆」本回合不能打出【杀】', 'skill');
+        setTimeout(() => { clickGuard.current = false; }, 120);
+        return;
+      }
       
       // 检查是否使用了无懈可击（仅无懈响应阶段可打出）
       if (card.name === CardName.WUXIE && neededCard === CardName.WUXIE && responder.hand.some(c => c.name === CardName.WUXIE)) {
@@ -5008,7 +5028,9 @@ const App: React.FC = () => {
         return;
       }
       if (!canPlaySlash(me, card)) {
-        addLog('出牌阶段只能使用一张【杀】（诸葛连弩 / 张飞「咆哮」不限；张星彩「枪舞」可让大点数【杀】不计次数）', 'warning');
+        addLog(mumuNoSlashRef.current === me.id
+          ? '「穆穆」：本回合已获得防具牌，不能使用【杀】'
+          : '出牌阶段只能使用一张【杀】（诸葛连弩 / 张飞「咆哮」不限；张星彩「枪舞」可让大点数【杀】不计次数）', 'warning');
         setTimeout(() => { clickGuard.current = false; }, 200);
         return;
       }
@@ -6907,6 +6929,13 @@ const App: React.FC = () => {
           }
         }
 
+        // 「穆穆」：本回合不能打出【杀】
+        if (neededCard === CardName.SHA && mumuNoSlashRef.current === responder.id) {
+          addLog(`${responder.hero.name} 因「穆穆」本回合不能打出【杀】`, 'skill');
+          showSkillBanner(responder.hero.name, '穆穆');
+          return false;
+        }
+        
         // 简单 AI 有概率反应慢半拍，不出【闪】
         if (neededCard === CardName.SHAN && aiDifficultyRef.current === 'easy'
             && responder.hp > 1 && Math.random() < 0.22) {
