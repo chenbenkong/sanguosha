@@ -52,6 +52,28 @@ const FX_LABEL: Record<FxLevel, string> = {
 const FX_TAG: Record<FxLevel, string> = { classic: '典', pure: '净', subtle: '克', full: '全' };
 const FX_ORDER: FxLevel[] = ['classic', 'pure', 'subtle', 'full'];
 
+// 战报仅依赖 logs 自身：独立 memo，避免读秒/动画等高频状态带动 40 行战报一起重渲染。
+// 只在 logs 引用变化（新增一条战报）时更新，内容、条数、字号与原实现完全一致。
+const LogRows = React.memo(function LogRows({ logs }: { logs: LogEntry[] }) {
+  return (
+    <>
+      {logs.slice(-40).map(log => (
+        <div key={log.id} className={`
+          px-3 py-1.5 rounded-sm text-[13px] leading-relaxed font-serif
+          ${log.type === 'danger' ? 'bg-[#3a1512]/60 text-[#f0c8c2] border-l-2 border-[#c86b62]' :
+            log.type === 'success' ? 'bg-[#2a2114]/60 text-[#f0e0b8] border-l-2 border-[#c8a45c]' :
+            log.type === 'skill' ? 'bg-[#1c2a33]/60 text-[#cfe0ee] border-l-2 border-[#8fb4d9]' :
+            log.type === 'chat' ? 'bg-[#2a2414]/60 text-[#f0e8c8] border-l-2 border-[#c8a45c]' :
+            log.type === 'warning' ? 'bg-[#33240f]/60 text-[#f0dcb8] border-l-2 border-[#c8963c]' :
+            'bg-[#1f1914]/60 text-[#cdc2b0] border-l-2 border-[#6a5642]'}
+        `}>
+          {log.text}
+        </div>
+      ))}
+    </>
+  );
+});
+
 // 仅本地开发构建：定向测试探针开关（生产构建为 false，相关代码被裁剪）
 const DEV_BUILD = (import.meta as unknown as { env?: { DEV?: boolean } }).env?.DEV === true;
 
@@ -10513,20 +10535,8 @@ const App: React.FC = () => {
                  }, 500);
                }}
              >
-               {/* 只渲染最近 40 条：AI 高频写日志时避免整块重绘拖慢帧率 */}
-               {logs.slice(-40).map(log => (
-                  <div key={log.id} className={`
-                    px-3 py-1.5 rounded-sm text-[13px] leading-relaxed font-serif
-                    ${log.type === 'danger' ? 'bg-[#3a1512]/60 text-[#f0c8c2] border-l-2 border-[#c86b62]' : 
-                      log.type === 'success' ? 'bg-[#2a2114]/60 text-[#f0e0b8] border-l-2 border-[#c8a45c]' : 
-                      log.type === 'skill' ? 'bg-[#1c2a33]/60 text-[#cfe0ee] border-l-2 border-[#8fb4d9]' :
-                      log.type === 'chat' ? 'bg-[#2a2414]/60 text-[#f0e8c8] border-l-2 border-[#c8a45c]' : 
-                      log.type === 'warning' ? 'bg-[#33240f]/60 text-[#f0dcb8] border-l-2 border-[#c8963c]' : 
-                      'bg-[#1f1914]/60 text-[#cdc2b0] border-l-2 border-[#6a5642]'}
-                  `}>
-                    {log.text}
-                  </div>
-                ))}
+               {/* 只渲染最近 40 条：独立 memo 组件，仅在 logs 变化时更新 */}
+               <LogRows logs={logs} />
                <div ref={logsEndRef} />
              </div>
            </div>
