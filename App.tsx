@@ -380,6 +380,8 @@ const App: React.FC = () => {
   const [isJieyinMode, setIsJieyinMode] = useState<boolean>(false);
   const [jieyinTarget, setJieyinTarget] = useState<number | null>(null);
   const [hasUsedJieyin, setHasUsedJieyin] = useState<boolean>(false);
+  // 刘备「激将」：主动使用【杀】时令其他蜀势力角色打出一张【杀】
+  const [isJijiangMode, setIsJijiangMode] = useState<boolean>(false);
 
   // 甘宁「奇袭」技能状态：将黑色牌当【过河拆桥】使用
   const [isQixiMode, setIsQixiMode] = useState<boolean>(false);
@@ -4113,6 +4115,7 @@ const App: React.FC = () => {
         setJieyinTarget(null);
       }
       if (isQixiMode) setIsQixiMode(false);
+      setIsJijiangMode(false);
       if (isFanjianMode) setIsFanjianMode(false);
       if (isGuoseMode) setIsGuoseMode(false);
       if (isQingnangMode) {
@@ -4138,7 +4141,7 @@ const App: React.FC = () => {
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [showRules, showSkillModal, showDiscardViewer, advice, isZhihengMode, isLijianMode, isRendeMode, isJieyinMode, isQixiMode, isZhangbaMode, zhangbaPending, isFanjianMode, isGuoseMode, isQingnangMode, isAnxuMode, inspectPlayerId]);
+  }, [showRules, showSkillModal, showDiscardViewer, advice, isZhihengMode, isLijianMode, isRendeMode, isJieyinMode, isQixiMode, isJijiangMode, isZhangbaMode, zhangbaPending, isFanjianMode, isGuoseMode, isQingnangMode, isAnxuMode, inspectPlayerId]);
 
   // Clear any selection when entering reaction mode
   useEffect(() => {
@@ -4902,6 +4905,57 @@ const App: React.FC = () => {
         addLog('「安恤」最多选择两名角色', 'warning');
       }
       setTimeout(() => { clickGuard.current = false; }, 200);
+      return;
+    }
+
+    // 刘备「激将」：主动使用【杀】时，令其他蜀势力角色打出一张【杀】（视为刘备使用）
+    if (isJijiangMode) {
+      const meL = players.find(p => p.isHuman) || players[0];
+      const target = players.find(p => p.id === targetId);
+      if (!target || target.isDead) {
+        setTimeout(() => { clickGuard.current = false; }, 200);
+        return;
+      }
+      if (target.id === meL.id) {
+        addLog('「激将」不能对自己使用，请选择其他角色', 'warning');
+        setTimeout(() => { clickGuard.current = false; }, 200);
+        return;
+      }
+      const reach = getAttackRange(meL);
+      const dist = getDistance(meL.id, target.id);
+      if (dist > reach) {
+        addLog(`距离不足：你与 ${target.hero.name} 距离 ${dist}，攻击范围 ${reach}`, 'warning');
+        setTimeout(() => { clickGuard.current = false; }, 200);
+        return;
+      }
+      if (!canPlaySlash(meL)) {
+        addLog('本回合使用的【杀】已达到上限，无法再发动「激将」', 'warning');
+        setIsJijiangMode(false);
+        setTimeout(() => { clickGuard.current = false; }, 200);
+        return;
+      }
+      const helper = playersRef.current.find(p =>
+        !p.isDead && p.id !== meL.id && p.hero.kingdom === meL.hero.kingdom
+        && p.hand.some(c => c.name === CardName.SHA));
+      if (!helper) {
+        addLog('没有其他蜀势力角色可以打出【杀】，「激将」无效', 'warning');
+        setIsJijiangMode(false);
+        setTimeout(() => { clickGuard.current = false; }, 200);
+        return;
+      }
+      const helpCard = helper.hand.find(c => c.name === CardName.SHA)!;
+      mutateHand(helper.id, h => h.filter(c => c.id !== helpCard.id));
+      setIsJijiangMode(false);
+      setIsSelectingTarget(false);
+      addLog(`刘备 发动「激将」，${helper.hero.name} 打出了【杀】（视为 刘备 使用）`, 'skill');
+      showSkillBanner('刘备', '激将');
+      setIsProcessing(p => p + 1);
+      try {
+        await resolveCardEffect(meL, [target], helpCard);
+      } finally {
+        setIsProcessing(p => Math.max(0, p - 1));
+        setTimeout(() => { clickGuard.current = false; }, 200);
+      }
       return;
     }
 
@@ -10762,7 +10816,7 @@ const App: React.FC = () => {
             // 选中【杀】类牌时，超出攻击范围的目标灰显
             const outOfRange = !p.isDead && isSelectingTarget && slashLikeActive && getDistance(me.id, p.id) > getAttackRange(me);
             // 正处于「选择目标」流程时，给合法目标一个明确的候选标记
-            const selectableTarget = !p.isDead && (isSelectingTarget || isLijianMode || isJieyinMode
+            const selectableTarget = !p.isDead && (isSelectingTarget || isLijianMode || isJieyinMode || isJijiangMode
               || (isRendeMode && rendeSelectedCardIds.length > 0) || isJiedaoMode);
             
             return (
@@ -10796,7 +10850,7 @@ const App: React.FC = () => {
                 tabIndex={0}
                 aria-label={p.isDead ? `${p.hero.name}（已阵亡）` : `查看 ${p.hero.name} 的武将详情`}
                 onClick={() => {
-                  const selecting = isSelectingTarget || isLijianMode || isJieyinMode
+                  const selecting = isSelectingTarget || isLijianMode || isJieyinMode || isJijiangMode
                     || (isRendeMode && rendeSelectedCardIds.length > 0) || (isJiedaoMode && !p.isDead);
                   if (selecting) {
                     handleTargetClick(p.id);
@@ -10807,7 +10861,7 @@ const App: React.FC = () => {
                 onKeyDown={(e) => {
                   if (e.key !== 'Enter' && e.key !== ' ') return;
                   e.preventDefault();
-                  const selecting = isSelectingTarget || isLijianMode || isJieyinMode
+                  const selecting = isSelectingTarget || isLijianMode || isJieyinMode || isJijiangMode
                     || (isRendeMode && rendeSelectedCardIds.length > 0) || (isJiedaoMode && !p.isDead);
                   if (selecting) {
                     handleTargetClick(p.id);
@@ -11781,6 +11835,36 @@ const App: React.FC = () => {
                            className="btn-ink px-4 py-2 rounded-lg font-ancient text-base"
                          >
                            取消结姻
+                         </button>
+                       )}
+
+                       {/* 刘备「激将」：主公技，主动使用【杀】时可令其他蜀势力角色打出【杀】 */}
+                       {players[0].hero.name === '刘备' && players[0].identity === Identity.ZHUGONG && !isJijiangMode
+                         && players.slice(1).some(p => !p.isDead && p.hero.kingdom === '蜀'
+                           && p.hand.some(c => c.name === CardName.SHA)) && (
+                         <button
+                           onClick={() => {
+                             setIsJijiangMode(true);
+                             setIsSelectingTarget(false);
+                             setSelectedCardIds([]);
+                             setActiveSelectedId(null);
+                             addLog('请选择【杀】的目标（刘备「激将」）...', 'info');
+                           }}
+                           className="skill-btn text-base"
+                         >
+                           激将
+                         </button>
+                       )}
+
+                       {isJijiangMode && (
+                         <button
+                           onClick={() => {
+                             setIsJijiangMode(false);
+                             addLog('取消了「激将」技能', 'info');
+                           }}
+                           className="btn-ink px-4 py-2 rounded-lg font-ancient text-base"
+                         >
+                           取消激将
                          </button>
                        )}
 
