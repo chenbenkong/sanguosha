@@ -5779,18 +5779,9 @@ const App: React.FC = () => {
         }
       }
 
-      // 鲍三娘「镇南」：成为多目标牌的目标且目标数大于使用者体力值时，弃一张牌对其造成1点伤害
+      // 鲍三娘「镇南」：非【杀】的多目标牌在此结算；多目标【杀】在 slashTargets 确定后结算
       if (targets.length > 1 && card.name !== CardName.SHA) {
-        const bao = targets.find(t => t.hero.name === '鲍三娘' && t.id !== source.id && skillsOn(t.id) && !t.isDead);
-        const srcNow = getPlayer(source.id);
-        if (bao && srcNow && !srcNow.isDead && targets.length > srcNow.hp && bao.hand.length > 0) {
-          const cost = [...bao.hand].sort((a, b) => a.value - b.value)[0];
-          discardCards(bao.id, [cost]);
-          addLog(`【镇南】鲍三娘弃置【${cost.name}】，对 ${source.hero.name} 造成 1 点伤害`, 'skill');
-          showSkillBanner('鲍三娘', '镇南');
-          await delay(300);
-          await takeDamage(source.id, bao.id, 1, card);
-        }
+        await triggerZhennan(source, targets, card);
       }
 
       // Log construction
@@ -5868,6 +5859,9 @@ const App: React.FC = () => {
             showSkillBanner(source.hero.name, '方天画戟');
           }
         }
+
+        // 鲍三娘「镇南」：多目标【杀】的目标数在方天画戟/福绵追加后确定
+        await triggerZhennan(source, slashTargets, card);
 
         // 马云禄「凤魄」：回合内第一张【杀】仅指定唯一目标后，
         // 可令自己摸 X 张牌或此【杀】伤害 +X（X 为目标方块手牌数）。
@@ -7474,6 +7468,23 @@ const App: React.FC = () => {
     } else {
       addLog(`「烈刃」拼点未获胜`, 'info');
     }
+  };
+
+  // 鲍三娘「镇南」：一张牌指定多个目标后，若鲍三娘为目标之一且目标数大于使用者当前体力值，
+  // 可弃置一张牌，对使用者造成1点伤害。多目标【杀】（福绵/方天画戟）同样适用。
+  const triggerZhennan = async (source: Player, finalTargets: Player[], card: Card) => {
+    if (finalTargets.length <= 1) return;
+    const bao = finalTargets.find(t => t.hero.name === '鲍三娘' && t.id !== source.id && skillsOn(t.id) && !t.isDead);
+    const srcNow = getPlayer(source.id);
+    if (!bao || !srcNow || srcNow.isDead) return;
+    if (finalTargets.length <= srcNow.hp) return;
+    if (bao.hand.length === 0) return;
+    const cost = [...bao.hand].sort((a, b) => a.value - b.value)[0];
+    discardCards(bao.id, [cost]);
+    addLog(`【镇南】鲍三娘弃置【${cost.name}】，对 ${srcNow.hero.name} 造成 1 点伤害（目标 ${finalTargets.length} > 体力 ${srcNow.hp}）`, 'skill');
+    showSkillBanner('鲍三娘', '镇南');
+    await delay(300);
+    await takeDamage(srcNow.id, bao.id, 1, card);
   };
 
   // 王异「贞烈」：成为【杀】或非延时锦囊目标时，失去1点体力弃其一张手牌，令此牌无效
