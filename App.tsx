@@ -5914,7 +5914,8 @@ const App: React.FC = () => {
         }
       }
 
-      // 孙鲁班「谮毁」：使用【杀】或黑色普通锦囊仅指定唯一目标时，令另一名角色也成为目标（限一次，AI 近似取"也成为目标"选项）
+      // 孙鲁班「谮毁」：出牌阶段限一次，使用【杀】或黑色普通锦囊仅指定唯一目标时，
+      // 令能成为此牌目标的另一名角色选择：①交给你一张牌，然后代替你成为此牌的使用者；②也成为此牌的目标
       if (source.hero.name === '孙鲁班' && skillsOn(source.id) && !cangHuiUsedRef.current
           && targets.length === 1 && targets[0].id !== source.id
           && (card.name === CardName.SHA
@@ -5922,12 +5923,12 @@ const App: React.FC = () => {
         const extra = playersRef.current.filter(p => !p.isDead && p.id !== source.id && p.id !== targets[0].id);
         if (extra.length) {
           const aiBest = [...extra].sort((a, b) => b.hand.length - a.hand.length)[0];
-          // 人类玩家：弹窗选择「令谁也成为目标」或「不发动」；AI / 托管：自动取手牌最多者
+          // 第一步：孙鲁班（人类）指定拉入哪名角色；AI / 托管自动取手牌最多者；人类点「不发动」则放弃
           const pick = await requestSkillChoice({
             skill: '谮毁',
             owner: '孙鲁班',
-            title: `【${card.name}】仅指定 ${targets[0].hero.name} 为目标，是否令另一名角色也成为此牌目标？`,
-            hint: '规则另含「交给一张牌并代替你成为使用者」选项，本作只实现「也成为目标」',
+            title: `【${card.name}】仅指定 ${targets[0].hero.name} 为目标，是否发动「谮毁」？`,
+            hint: '被选中的角色会自行选择「交一张牌并代替你成为使用者」或「也成为此牌的目标」',
             mode: 'target',
             targets: extra.map(p => ({ id: p.id, name: p.hero.name, sub: `手牌 ${p.hand.length}` })),
             min: 0,
@@ -5938,10 +5939,38 @@ const App: React.FC = () => {
             ? aiBest
             : (pick.kind === 'target' && pick.ids.length ? (extra.find(p => p.id === pick.ids[0]) ?? null) : null);
           if (chosen) {
-            targets = [...targets, chosen];
             cangHuiUsedRef.current = true;
-            addLog(`【谮毁】孙鲁班令 ${chosen.hero.name} 选择成为【${card.name}】的目标${pick && pick.kind === 'target' ? '（玩家指定）' : '（自动）'}`, 'skill');
             showSkillBanner('孙鲁班', '谮毁');
+            // 第二步：由被指定的角色选择分支（人类弹窗；AI / 托管按近似收益自动）
+            const canPay = chosen.hand.length > 0;
+            let branch: 'substitute' | 'target' = 'target';
+            if (canPay) {
+              const pick2 = await requestSkillChoice({
+                skill: '谮毁',
+                owner: chosen.hero.name,
+                title: `${source.hero.name} 发动「谮毁」，请选择：`,
+                hint: `【${card.name}】的使用者仍是 ${source.hero.name}，还是由你代替？`,
+                mode: 'choose',
+                choices: [
+                  { id: 'substitute', label: '交一张牌，代替其成为使用者', desc: `交给 ${source.hero.name} 一张手牌，此牌改由你使用` },
+                  { id: 'target', label: '也成为此牌的目标', desc: `此牌仍由 ${source.hero.name} 使用，目标增加你` },
+                ],
+                cancelLabel: '也成为此牌的目标',
+              }, chosen.isHuman && !isAiTakeoverRef.current);
+              if (pick2 && pick2.kind === 'choose') branch = pick2.id === 'substitute' ? 'substitute' : 'target';
+              else if (!pick2) branch = chosen.hand.length <= 1 ? 'substitute' : 'target';
+            }
+            if (branch === 'substitute' && canPay) {
+              const cost = chosen.hand[Math.floor(Math.random() * chosen.hand.length)];
+              mutateHand(chosen.id, h => h.filter(c => c.id !== cost.id));
+              mutateHand(source.id, h => [...h, cost]);
+              mutateHand(source.id, h => h.filter(c => c.id !== card.id));
+              addLog(`【谮毁】${chosen.hero.name} 将【${cost.name}】交给 ${source.hero.name}，代替其成为【${card.name}】的使用者（孙鲁班退出此牌结算，伤害来源改为 ${chosen.hero.name}）`, 'skill');
+              source = chosen;
+            } else {
+              targets = [...targets, chosen];
+              addLog(`【谮毁】${chosen.hero.name} 选择成为【${card.name}】的目标（使用者仍为孙鲁班）`, 'skill');
+            }
           } else {
             addLog('【谮毁】孙鲁班放弃发动', 'info');
           }
