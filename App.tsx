@@ -1,5 +1,5 @@
 ﻿import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { Hero, Player, Card, GamePhase, CardName, LogEntry, Identity, Suit, CardType, Equipment } from './types';
+import { Hero, Player, Card, GamePhase, CardName, LogEntry, Identity, Suit, CardType, Equipment, EquipmentSlot } from './types';
 import { HEROES, INITIAL_DECK, EQUIP_META } from './constants';
 import { playSfx, SFX_FOR_NAME } from './src/audio/sfx';
 import { playCardVoice, playSkillVoice, playDeathVoice, playEnterVoice, hasCardVoice } from './src/audio/voice';
@@ -331,6 +331,8 @@ const App: React.FC = () => {
   const shenxianTurnRef = useRef<number>(-1); // 张星彩「甚贤」本回合是否已发动
   const doutuSkipRef = useRef<number | null>(null); // 伏皇后「惴恐」赢：目标跳过出牌阶段
   const doutuDistanceRef = useRef<Record<number, number>>({}); // 「惴恐」没赢：到伏皇后距离视为 1
+  const yuejianCountRef = useRef<number>(0); // 卞夫人「约俭」本回合已发动次数（上限 2）
+  const yuejianGainedRef = useRef<Set<string>>(new Set()); // 已被「约俭」获得的牌：结算后不再重复置入弃牌堆
 
   // 孙尚香「结姻」技能状态
   const [isJieyinMode, setIsJieyinMode] = useState<boolean>(false);
@@ -665,6 +667,93 @@ const App: React.FC = () => {
   // 从ref中获取最新的玩家信息
   const getPlayer = (id: number) => playersRef.current.find(p => p.id === id);
 
+  // ── 通用「技能选择」弹窗 ──
+  // 人类角色触发时弹窗可选；AI 角色 / 托管状态直接返回 null，调用方走原有自动最优路径。
+  type SkillChoiceRequest = {
+    skill: string;
+    owner: string;
+    title: string;
+    hint?: string;
+    mode: 'choose' | 'card' | 'target';
+    choices?: { id: string; label: string; desc?: string }[];
+    cards?: Card[];
+    targets?: { id: number; name: string; sub?: string }[];
+    min?: number;
+    max?: number;
+    cancelLabel?: string;
+  };
+  type SkillChoiceResult =
+    | { kind: 'choose'; id: string }
+    | { kind: 'card'; ids: string[] }
+    | { kind: 'target'; ids: number[] }
+    | { kind: 'cancel' }
+    | { kind: 'timeout' };
+  const SKILL_CHOICE_SECONDS = 30;
+  const [skillChoice, setSkillChoice] = useState<SkillChoiceRequest | null>(null);
+  const [skillChoiceSel, setSkillChoiceSel] = useState<string[]>([]);
+  const [skillChoiceLeft, setSkillChoiceLeft] = useState<number | null>(null);
+  const skillChoiceResolver = useRef<((r: SkillChoiceResult) => void) | null>(null);
+  const isAiTakeoverRef = useRef<boolean>(false);
+  useEffect(() => { isAiTakeoverRef.current = isAiTakeover; }, [isAiTakeover]);
+
+  const resolveSkillChoice = useCallback((r: SkillChoiceResult) => {
+    const resolve = skillChoiceResolver.current;
+    skillChoiceResolver.current = null;
+    setSkillChoice(null);
+    setSkillChoiceSel([]);
+    setSkillChoiceLeft(null);
+    resolve?.(r);
+  }, []);
+
+  const requestSkillChoice = useCallback((req: SkillChoiceRequest, allowPrompt = true): Promise<SkillChoiceResult | null> => {
+    if (!allowPrompt || isAiTakeoverRef.current) return Promise.resolve(null);
+    return new Promise<SkillChoiceResult>(resolve => {
+      skillChoiceResolver.current = resolve;
+      setSkillChoiceSel([]);
+      setSkillChoiceLeft(SKILL_CHOICE_SECONDS);
+      setSkillChoice(req);
+    });
+  }, []);
+
+  // 读秒与超时兜底：30 秒无操作即按 AI 最优继续，并写战报
+  useEffect(() => {
+    if (!skillChoice) return;
+    const tick = window.setInterval(() => setSkillChoiceLeft(v => (v === null ? null : Math.max(0, v - 1))), 1000);
+    const timeout = window.setTimeout(() => {
+      addLog(`【${skillChoice.skill}】${skillChoice.owner} 未在 ${SKILL_CHOICE_SECONDS} 秒内选择，自动按 AI 最优继续`, 'warning');
+      resolveSkillChoice({ kind: 'timeout' });
+    }, SKILL_CHOICE_SECONDS * 1000);
+    return () => { window.clearInterval(tick); window.clearTimeout(timeout); };
+  }, [skillChoice, resolveSkillChoice, addLog]);
+
+  useEffect(() => {
+    if (!skillChoice) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') resolveSkillChoice({ kind: 'cancel' }); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [skillChoice, resolveSkillChoice]);
+
+  const toggleSkillChoiceItem = (key: string, single: boolean) => {
+    setSkillChoiceSel(prev => {
+      if (single) return prev.includes(key) ? [] : [key];
+      if (prev.includes(key)) return prev.filter(x => x !== key);
+      const max = skillChoice?.max ?? 99;
+      return prev.length >= max ? [...prev.slice(1), key] : [...prev, key];
+    });
+  };
+
+  const skillChoiceValid = (() => {
+    const min = skillChoice?.min ?? 1;
+    const max = skillChoice?.max ?? 99;
+    return skillChoiceSel.length >= min && skillChoiceSel.length <= max;
+  })();
+
+  const submitSkillChoice = () => {
+    if (!skillChoice || !skillChoiceValid) return;
+    if (skillChoice.mode === 'card') resolveSkillChoice({ kind: 'card', ids: skillChoiceSel });
+    else if (skillChoice.mode === 'target') resolveSkillChoice({ kind: 'target', ids: skillChoiceSel.map(Number) });
+  };
+
   // 诸葛果「羽化」：非基本牌不计入手牌上限；董白「黠慧」：黑色牌不计入手牌上限
   const nonBasicCount = (p: Player) => {
     if (p.hero.name === '诸葛果') return p.hand.filter(c => c.type !== CardType.BASIC).length;
@@ -891,10 +980,25 @@ const App: React.FC = () => {
     const ownerNow = getPlayer(owner.id);
     if (!hmNow || !ownerNow) return;
     if (hmNow.hand.length > 0) {
-      const low = [...hmNow.hand].sort((a, b) => rankValue(a.rank) - rankValue(b.rank))[0];
+      const aiLow = [...hmNow.hand].sort((a, b) => rankValue(a.rank) - rankValue(b.rank))[0];
+      // 人类玩家：自选弃哪张牌（花色决定效果）；AI / 托管：仍弃点数最小者
+      const pick = await requestSkillChoice({
+        skill: '嬉战',
+        owner: '花鬘',
+        title: `${ownerNow.hero.name} 的回合开始，是否弃一张牌令本回合「芳踪」失效？`,
+        hint: '花色决定效果：♠ 令其视为使用【酒】 / ♥ 视为【无中生有】 / ♣ 视为【铁索连环】 / ♦ 视为火【杀】',
+        mode: 'card',
+        cards: hmNow.hand,
+        min: 1,
+        max: 1,
+        cancelLabel: '交给系统自动弃牌',
+      }, hmNow.isHuman);
+      const low = (!pick || pick.kind === 'timeout' || pick.kind === 'cancel')
+        ? aiLow
+        : ((pick.kind === 'card' ? hmNow.hand.find(c => c.id === pick.ids[0]) : null) ?? aiLow);
       discardCards(hmNow.id, [low]);
       fangzongDisabledTurnRef.current = turnCountRef.current;
-      addLog(`【嬉战】花鬘 弃置【${low.name}】（${low.suit}），本回合「芳踪」失效`, 'skill');
+      addLog(`【嬉战】花鬘 弃置【${low.name}】（${low.suit}），本回合「芳踪」失效${pick && pick.kind === 'card' ? '（玩家选择）' : '（自动）'}`, 'skill');
       showSkillBanner('花鬘', '嬉战');
       await delay(250);
       if (low.suit === Suit.SPADE) {
@@ -1661,7 +1765,13 @@ const App: React.FC = () => {
 
   // --- Core Game Functions ---
 
-  const discardCards = (playerId: number, cardsToDiscard: Card[]) => {
+  const discardCards = (playerId: number, cardsToDiscardIn: Card[]) => {
+    // 「约俭」已在结算前获得该牌：从此处跳过，避免同一张牌既入手又进弃牌堆
+    const cardsToDiscard = cardsToDiscardIn.filter(c => {
+      if (yuejianGainedRef.current.has(c.id)) { yuejianGainedRef.current.delete(c.id); return false; }
+      return true;
+    });
+    if (!cardsToDiscard.length) return;
     // 创建要移除的卡牌ID集合，确保只移除指定的卡牌
     const cardIdsToRemove = new Set(cardsToDiscard.map(card => card.id));
     const before = getPlayer(playerId);
@@ -1803,17 +1913,32 @@ const App: React.FC = () => {
     // 羊徽瑜「劝封」：其他角色死亡后，可失去「弘仪」并获得其所有技能（替换武将牌），体力上限+1、回复1
     const quanfengOwner = playersRef.current.find(p => !p.isDead && p.id !== victimId && p.hero.name === '羊徽瑜' && skillsOn(p.id) && !p.quanfengUsed);
     if (quanfengOwner) {
-      const newMax = quanfengOwner.maxHp + 1;
-      const healed = Math.min(newMax, quanfengOwner.hp + 1);
-      updatePlayer(quanfengOwner.id, {
-        hero: victim.hero,
-        maxHp: newMax,
-        hp: healed,
-        quanfengUsed: true,
-        hongyiTargetId: null,
-      });
-      addLog(`【劝封】羊徽瑜失去「弘仪」，获得 ${victim.hero.name} 的全部技能，体力上限+1并回复1点体力（${healed}/${newMax}）`, 'skill');
-      showSkillBanner('羊徽瑜', '劝封');
+      // 人类玩家：决定是否发动；AI / 托管：照旧直接发动
+      const pick = await requestSkillChoice({
+        skill: '劝封',
+        owner: '羊徽瑜',
+        title: `${victim.hero.name} 已阵亡，是否发动「劝封」？`,
+        hint: '失去「弘仪」，获得其全部技能（替换武将牌），体力上限 +1 并回复 1 点体力',
+        mode: 'choose',
+        choices: [{ id: 'yes', label: '发动' }, { id: 'no', label: '不发动' }],
+        cancelLabel: '不发动',
+      }, quanfengOwner.isHuman);
+      const go = (!pick || pick.kind === 'timeout') ? true : (pick.kind === 'choose' ? pick.id === 'yes' : false);
+      if (go) {
+        const newMax = quanfengOwner.maxHp + 1;
+        const healed = Math.min(newMax, quanfengOwner.hp + 1);
+        updatePlayer(quanfengOwner.id, {
+          hero: victim.hero,
+          maxHp: newMax,
+          hp: healed,
+          quanfengUsed: true,
+          hongyiTargetId: null,
+        });
+        addLog(`【劝封】羊徽瑜失去「弘仪」，获得 ${victim.hero.name} 的全部技能，体力上限+1并回复1点体力（${healed}/${newMax}）${pick && pick.kind === 'choose' ? '（玩家选择）' : '（自动）'}`, 'skill');
+        showSkillBanner('羊徽瑜', '劝封');
+      } else {
+        addLog('【劝封】羊徽瑜放弃发动', 'info');
+      }
     }
 
     if (killerId !== undefined && killerId !== victimId) {
@@ -2040,11 +2165,26 @@ const App: React.FC = () => {
           const p = getPlayer(currentPlayer.id);
           if (p && p.hand.length > 0) {
             const keepValue = (c: Card) => (c.name === CardName.SHA ? 2 : c.type === CardType.BASIC ? 1 : 3);
-            const picked = [...p.hand].sort((a, b) => keepValue(a) - keepValue(b)).slice(0, 2);
+            const aiPick = [...p.hand].sort((a, b) => keepValue(a) - keepValue(b)).slice(0, 2);
+            // 人类玩家：从手牌里自选任意张（规则为“任意张牌”）；AI / 托管：仍取低价值的两张
+            const pick = await requestSkillChoice({
+              skill: '箜声',
+              owner: '周妃',
+              title: '准备阶段：可将任意张手牌置于武将牌上，结束阶段再收回或使用',
+              hint: `当前手牌 ${p.hand.length} 张，最多可置上 ${p.hand.length} 张`,
+              mode: 'card',
+              cards: p.hand,
+              min: 1,
+              max: p.hand.length,
+              cancelLabel: '不发动',
+            }, currentPlayer.isHuman);
+            const picked = (!pick || pick.kind === 'timeout')
+              ? aiPick
+              : (pick.kind === 'card' ? p.hand.filter(c => pick.ids.includes(c.id)) : []);
             if (picked.length > 0) {
               mutateHand(p.id, h => h.filter(c => !picked.some(x => x.id === c.id)));
               updatePlayer(p.id, { placedCards: [...(p.placedCards ?? []), ...picked] });
-              addLog(`【箜声】周妃将 ${picked.length} 张牌置于武将牌上`, 'skill');
+              addLog(`【箜声】周妃将 ${picked.length} 张牌置于武将牌上${pick && pick.kind === 'card' ? '（玩家选择）' : '（自动）'}`, 'skill');
               showSkillBanner('周妃', '箜声');
               const myHandAfter = p.hand.length - picked.length;
               const richer = playersRef.current.filter(o => !o.isDead && o.id !== p.id && o.hand.length > myHandAfter);
@@ -2196,6 +2336,8 @@ const App: React.FC = () => {
 
         // 孙鲁班「谮毁」：回合开始时重置限一次
         if (currentPlayer.hero.name === '孙鲁班') cangHuiUsedRef.current = false;
+        // 卞夫人「约俭」：每回合限两次，随回合重置
+        yuejianCountRef.current = 0;
 
         // 吴苋「福绵」：准备阶段选择一项；与上回合选择不同则该项数值 +1
         if (currentPlayer.hero.name === '吴苋' && skillsOn(currentPlayer.id)) {
@@ -3072,6 +3214,42 @@ const App: React.FC = () => {
               drawCards(hm.id, need);
               addLog(`【芳踪】花鬘 结束阶段将手牌摸至 ${alive} 张（摸 ${need} 张）`, 'skill');
               showSkillBanner('花鬘', '芳踪');
+              await delay(400);
+            }
+          }
+        }
+
+        // 诸葛果「羽化」结束阶段分支：若手牌数大于体力值，观看牌堆顶 X 张（X 为手牌类别数），
+        // 将任意数量置于牌堆顶，其余置于牌堆底。
+        if (currentPlayer.hero.name === '诸葛果' && skillsOn(currentPlayer.id)) {
+          const zg = getPlayer(currentPlayer.id);
+          if (zg && zg.hand.length > zg.hp) {
+            const typeCount = new Set(zg.hand.map(c => c.type)).size;
+            const x = Math.min(5, Math.max(1, typeCount));
+            const deckNow = [...deckRef.current];
+            const viewed = deckNow.slice(-x).reverse();
+            if (viewed.length > 0) {
+              const pick = await requestSkillChoice({
+                skill: '羽化',
+                owner: '诸葛果',
+                title: `结束阶段：手牌 ${zg.hand.length} 多于体力 ${zg.hp}，观看牌堆顶 ${viewed.length} 张`,
+                hint: '选中的牌置于牌堆顶（下一张先摸到），未选中的置于牌堆底',
+                mode: 'card',
+                cards: viewed,
+                min: 0,
+                max: viewed.length,
+                cancelLabel: '全部放回牌堆顶',
+              }, currentPlayer.isHuman);
+              const topCards = (!pick || pick.kind === 'timeout' || pick.kind === 'cancel')
+                ? viewed
+                : viewed.filter(c => pick.ids.includes(c.id));
+              const bottomCards = viewed.filter(c => !topCards.includes(c));
+              const restDeck = deckNow.slice(0, Math.max(0, deckNow.length - viewed.length));
+              const nextDeck = [...bottomCards, ...restDeck, ...topCards];
+              setDeck(nextDeck);
+              deckRef.current = nextDeck;
+              addLog(`【羽化】诸葛果观看牌堆顶 ${viewed.length} 张，将 ${topCards.length} 张置于牌堆顶、${bottomCards.length} 张置于牌堆底${pick && pick.kind === 'card' ? '（玩家选择）' : '（自动）'}`, 'skill');
+              showSkillBanner('诸葛果', '羽化');
               await delay(400);
             }
           }
@@ -5019,8 +5197,58 @@ const App: React.FC = () => {
         showSkillBanner('张琪瑛', '真仪');
       }
     }
+    // 司马懿「鬼才」：判定牌生效前，可打出一张手牌替换之
+    let guicaiNote = '';
+    const simayi = playersRef.current.find(p => !p.isDead && p.hero.name === '司马懿' && skillsOn(p.id) && p.hand.length > 0);
+    if (simayi) {
+      const badJudge = (c: Card) => {
+        if (reason === '闪电') return c.suit === Suit.SPADE && c.value >= 2 && c.value <= 9;
+        if (reason === '乐不思蜀' || reason === '兵粮寸断') return c.suit !== Suit.HEART;
+        if (reason === '洛神') return !(c.suit === Suit.SPADE || c.suit === Suit.CLUB);
+        return false;
+      };
+      const judged = getPlayer(playerId);
+      const friendly = simayi.id === playerId || (judged ? isAlly(simayi, judged) : false);
+      let replaceCard: Card | null = null;
+      if (simayi.isHuman && !isAiTakeoverRef.current) {
+        // 人类玩家：弹窗选择是否用手牌替换判定牌；托管时走下方 AI 分支
+        const pick = await requestSkillChoice({
+          skill: '鬼才',
+          owner: '司马懿',
+          title: `${playerName} 的【${reason}】判定为 ${finalCard.suit}${finalCard.rank}，是否打出一张手牌替换？`,
+          hint: '规则：在一名角色的判定牌生效前，你可以打出一张手牌代替之',
+          mode: 'card',
+          cards: simayi.hand,
+          min: 1,
+          max: 1,
+          cancelLabel: '不发动',
+        }, true);
+        if (pick && pick.kind === 'card') {
+          replaceCard = simayi.hand.find(c => c.id === pick.ids[0]) ?? null;
+        } else if (pick && pick.kind === 'timeout') {
+          replaceCard = friendly && badJudge(finalCard)
+            ? ([...simayi.hand].filter(c => !badJudge(c)).sort((a, b) => rankValue(a.rank) - rankValue(b.rank))[0] ?? null)
+            : null;
+        }
+      } else if (friendly && badJudge(finalCard)) {
+        // AI：仅当判定对象为己方且当前结果不利时，取点数最小的“不坏”手牌替换
+        replaceCard = [...simayi.hand].filter(c => !badJudge(c)).sort((a, b) => rankValue(a.rank) - rankValue(b.rank))[0] ?? null;
+      }
+      if (replaceCard) {
+        mutateHand(simayi.id, h => h.filter(c => c.id !== replaceCard!.id));
+        setDiscardPile(prev => {
+          const next = [...prev, judgmentCard];
+          discardPileRef.current = next;
+          return next;
+        });
+        finalCard = replaceCard;
+        guicaiNote = `，触发「鬼才」改为【${replaceCard.name}】`;
+        addLog(`【鬼才】司马懿打出【${replaceCard.name}】替换 ${playerName} 的【${reason}】判定牌（原 ${judgmentCard.suit}${judgmentCard.rank}）${simayi.isHuman ? '（玩家选择）' : '（自动）'}`, 'skill');
+        showSkillBanner('司马懿', '鬼才');
+      }
+    }
     const rankDisplay = finalCard.rank;
-    addLog(`⚖️ ${playerName} 的【${reason}】判定：${finalCard.suit} ${rankDisplay}（判定牌：【${judgmentCard.name}】）${isXiaoqiao && finalCard.suit !== judgmentCard.suit ? '，触发「红颜」视为红桃' : ''}${zhenyiNote}`, 'warning');
+    addLog(`⚖️ ${playerName} 的【${reason}】判定：${finalCard.suit} ${rankDisplay}（判定牌：【${judgmentCard.name}】）${isXiaoqiao && finalCard.suit !== judgmentCard.suit ? '，触发「红颜」视为红桃' : ''}${zhenyiNote}${guicaiNote}`, 'warning');
     showJudgmentVisual(finalCard, playerName, reason);
     await delay(1600);
     // 郭嘉「天妒」：判定牌生效后获得之
@@ -5084,6 +5312,31 @@ const App: React.FC = () => {
         if (!targets.length) return;
       }
 
+      // 卞夫人「约俭」：其他角色对你使用的牌置入弃牌堆时，展示手牌，若无同花色牌则获得之（每回合限两次）
+      {
+        const bf = playersRef.current.find(p => !p.isDead && p.hero.name === '卞夫人' && skillsOn(p.id));
+        // 基本牌 / 锦囊使用后进入弃牌堆；装备牌进入装备区，不触发
+        const willDiscard = card.type === CardType.BASIC || card.type === CardType.SCROLL;
+        const inHand = source.hand.some(c => c.id === card.id); // 仅处理真实手牌（排除虚拟牌）
+        if (bf && bf.id !== source.id && targets.some(t => t.id === bf.id)
+            && yuejianCountRef.current < 2 && willDiscard && inHand) {
+          const shown = bf.hand.map(c => `${c.suit}【${c.name}】`).join(' ');
+          addLog(`【约俭】卞夫人展示手牌：${shown || '（无）'}`, 'skill');
+          if (!bf.hand.some(c => c.suit === card.suit)) {
+            yuejianCountRef.current += 1;
+            yuejianGainedRef.current.add(card.id);
+            setTimeout(() => { yuejianGainedRef.current.delete(card.id); }, 5000); // 兜底清理，避免标记残留
+            mutateHand(source.id, h => h.filter(c => c.id !== card.id)); // 使用的牌离开使用者手牌
+            mutateHand(bf.id, h => [...h, card]);
+            addLog(`【约俭】卞夫人手牌均无 ${card.suit} 花色，获得置入弃牌堆的【${card.name}】`, 'skill');
+            showSkillBanner('卞夫人', '约俭');
+            await delay(300);
+          } else {
+            addLog(`【约俭】卞夫人手牌中有 ${card.suit} 花色，未获得【${card.name}】`, 'info');
+          }
+        }
+      }
+
       // 卑弥呼「蚕食」：觉醒后，单体基本牌/普通锦囊可额外指定带“傀”的敌人
       const canShiOffense = source.hero.name === '卑弥呼' && source.baiJiaAwakened
         && targets.length === 1 && targets[0].id !== source.id
@@ -5124,11 +5377,30 @@ const App: React.FC = () => {
               || (card.type === CardType.SCROLL && (card.suit === Suit.SPADE || card.suit === Suit.CLUB)))) {
         const extra = playersRef.current.filter(p => !p.isDead && p.id !== source.id && p.id !== targets[0].id);
         if (extra.length) {
-          const chosen = [...extra].sort((a, b) => b.hand.length - a.hand.length)[0];
-          targets = [...targets, chosen];
-          cangHuiUsedRef.current = true;
-          addLog(`【谮毁】孙鲁班令 ${chosen.hero.name} 选择成为【${card.name}】的目标`, 'skill');
-          showSkillBanner('孙鲁班', '谮毁');
+          const aiBest = [...extra].sort((a, b) => b.hand.length - a.hand.length)[0];
+          // 人类玩家：弹窗选择「令谁也成为目标」或「不发动」；AI / 托管：自动取手牌最多者
+          const pick = await requestSkillChoice({
+            skill: '谮毁',
+            owner: '孙鲁班',
+            title: `【${card.name}】仅指定 ${targets[0].hero.name} 为目标，是否令另一名角色也成为此牌目标？`,
+            hint: '规则另含「交给一张牌并代替你成为使用者」选项，本作只实现「也成为目标」',
+            mode: 'target',
+            targets: extra.map(p => ({ id: p.id, name: p.hero.name, sub: `手牌 ${p.hand.length}` })),
+            min: 0,
+            max: 1,
+            cancelLabel: '不发动',
+          }, source.isHuman);
+          const chosen = (!pick || pick.kind === 'timeout')
+            ? aiBest
+            : (pick.kind === 'target' && pick.ids.length ? (extra.find(p => p.id === pick.ids[0]) ?? null) : null);
+          if (chosen) {
+            targets = [...targets, chosen];
+            cangHuiUsedRef.current = true;
+            addLog(`【谮毁】孙鲁班令 ${chosen.hero.name} 选择成为【${card.name}】的目标${pick && pick.kind === 'target' ? '（玩家指定）' : '（自动）'}`, 'skill');
+            showSkillBanner('孙鲁班', '谮毁');
+          } else {
+            addLog('【谮毁】孙鲁班放弃发动', 'info');
+          }
         }
       }
 
@@ -7009,12 +7281,43 @@ const App: React.FC = () => {
       const czy = playersRef.current.find(p => !p.isDead && p.hero.name === '蔡贞姬' && skillsOn(p.id));
       if (czy && czy.id !== victimId && finalAmount > 0 && !sheyiUsedRef.current && czy.hp > 0) {
         const v = getPlayer(victimId);
-        if (v && v.hp < czy.hp && v.hp - finalAmount <= 1 && czy.hand.length >= czy.hp) {
-          const give = czy.hand.slice(0, czy.hp);
+        const equipEntries: { card: Card; slot: EquipmentSlot }[] = [];
+        const eq = { ...(czy.equipment ?? {}) };
+        (Object.keys(eq) as EquipmentSlot[]).forEach(slot => {
+          const c = eq[slot];
+          if (c) equipEntries.push({ card: c, slot });
+        });
+        const handAvail = czy.hand;
+        const allAvail: Card[] = [...handAvail, ...equipEntries.map(e => e.card)];
+        if (v && v.hp < czy.hp && v.hp - finalAmount <= 1 && allAvail.length >= czy.hp) {
+          const aiPick = handAvail.slice(0, czy.hp);
+          // 人类玩家：从手牌与装备中自选至少 X 张交给受害者；AI / 托管：仍取自手牌前 X 张
+          const pick = await requestSkillChoice({
+            skill: '舍裔',
+            owner: '蔡贞姬',
+            title: `是否发动「舍裔」？将至少 ${czy.hp} 张牌交给 ${v.hero.name}，防止即将受到的 ${finalAmount} 点伤害`,
+            hint: `可选牌 ${allAvail.length} 张（手牌 ${handAvail.length} / 装备 ${equipEntries.length}），至少交 ${czy.hp} 张`,
+            mode: 'card',
+            cards: allAvail,
+            min: czy.hp,
+            max: allAvail.length,
+            cancelLabel: '不发动',
+          }, czy.isHuman);
+          const give = (!pick || pick.kind === 'timeout')
+            ? aiPick
+            : (pick.kind === 'card' ? allAvail.filter(c => pick.ids.includes(c.id)) : []);
+          if (give.length === 0) return;
           sheyiUsedRef.current = true;
-          mutateHand(czy.id, h => h.filter(c => !give.some(g => g.id === c.id)));
+          const handGive = give.filter(c => handAvail.some(h => h.id === c.id));
+          const equipGive = equipEntries.filter(e => give.some(c => c.id === e.card.id));
+          mutateHand(czy.id, h => h.filter(c => !handGive.some(g => g.id === c.id)));
+          if (equipGive.length > 0) {
+            const nextEq = { ...eq };
+            for (const e of equipGive) delete nextEq[e.slot];
+            updatePlayer(czy.id, { equipment: nextEq });
+          }
           mutateHand(victimId, h => [...h, ...give]);
-          addLog(`【舍裔】蔡贞姬将 ${give.length} 张牌交给 ${v.hero.name}，防止此伤害`, 'skill');
+          addLog(`【舍裔】蔡贞姬将 ${give.length} 张牌交给 ${v.hero.name}（手牌 ${handGive.length} / 装备 ${equipGive.length}），防止此伤害${pick && pick.kind === 'card' ? '（玩家选择）' : '（自动）'}`, 'skill');
           showSkillBanner('蔡贞姬', '舍裔');
           await delay(300);
           return;
@@ -7156,20 +7459,42 @@ const App: React.FC = () => {
       // 张昌蒲「抵诽」：受到伤害后摸或弃一张并展示手牌，若无伤害牌花色则回复1点体力
       const zcpVictim = getPlayer(victimId);
       if (zcpVictim && !zcpVictim.isDead && zcpVictim.hero.name === '张昌蒲' && skillsOn(victimId) && damageCard) {
-        const wantDraw = zcpVictim.hand.length < zcpVictim.hp;
-        if (wantDraw) {
-          drawCards(victimId, 1);
-        } else if (zcpVictim.hand.length > 0) {
-          const low = [...zcpVictim.hand].sort((a, b) => rankValue(a.rank) - rankValue(b.rank))[0];
-          discardCards(victimId, [low]);
-        }
-        const shown = (getPlayer(victimId)?.hand ?? []).map(c => `【${c.name}】`).join('');
-        addLog(`【抵诽】张昌蒲${wantDraw ? '摸一张牌' : '弃置一张牌'}，展示手牌：${shown || '（无）'}`, 'skill');
-        showSkillBanner('张昌蒲', '抵诽');
-        const zcpAfter = getPlayer(victimId);
-        if (zcpAfter && !zcpAfter.isDead && !zcpAfter.hand.some(c => c.suit === damageCard.suit)) {
-          recoverHp(victimId, 1);
-          addLog(`【抵诽】张昌蒲手牌均无${damageCard.suit}花色，回复1点体力`, 'skill');
+        const aiDraw = zcpVictim.hand.length < zcpVictim.hp || zcpVictim.hand.length === 0;
+        const suitDist = ['♥', '♦', '♠', '♣'].map(s => `${s}${zcpVictim.hand.filter(c => c.suit === s).length}`).join('  ');
+        // 人类玩家：先看手牌花色分布，再决定发动方式 / 不发动；AI / 托管：沿用原自动策略
+        const pick = await requestSkillChoice({
+          skill: '抵诽',
+          owner: '张昌蒲',
+          title: `是否发动「抵诽」？伤害牌为 ${damageCard.suit}${damageCard.rank}【${damageCard.name}】`,
+          hint: `你的手牌花色：${suitDist}；发动后展示手牌，若没有 ${damageCard.suit} 花色则回复 1 点体力`,
+          mode: 'choose',
+          choices: [
+            { id: 'draw', label: '发动：摸一张牌' },
+            ...(zcpVictim.hand.length > 0 ? [{ id: 'discard', label: '发动：弃置一张牌', desc: '自动弃点数最小的一张' }] : []),
+            { id: 'skip', label: '不发动' },
+          ],
+          cancelLabel: '不发动',
+        }, zcpVictim.isHuman);
+        const act = (!pick || pick.kind === 'timeout')
+          ? (aiDraw ? 'draw' : 'discard')
+          : (pick.kind === 'choose' ? pick.id : 'skip');
+        if (act === 'skip') {
+          addLog('【抵诽】张昌蒲放弃发动', 'info');
+        } else {
+          if (act === 'draw') {
+            drawCards(victimId, 1);
+          } else {
+            const low = [...zcpVictim.hand].sort((a, b) => rankValue(a.rank) - rankValue(b.rank))[0];
+            discardCards(victimId, [low]);
+          }
+          const shown = (getPlayer(victimId)?.hand ?? []).map(c => `【${c.name}】`).join('');
+          addLog(`【抵诽】张昌蒲${act === 'draw' ? '摸一张牌' : '弃置一张牌'}，展示手牌：${shown || '（无）'}${pick && pick.kind === 'choose' ? '（玩家选择）' : '（自动）'}`, 'skill');
+          showSkillBanner('张昌蒲', '抵诽');
+          const zcpAfter = getPlayer(victimId);
+          if (zcpAfter && !zcpAfter.isDead && !zcpAfter.hand.some(c => c.suit === damageCard.suit)) {
+            recoverHp(victimId, 1);
+            addLog(`【抵诽】张昌蒲手牌均无${damageCard.suit}花色，回复1点体力`, 'skill');
+          }
         }
         await delay(300);
       }
@@ -7270,12 +7595,27 @@ const App: React.FC = () => {
       // 羊徽瑜「劝封」：处于濒死状态时，可加2点体力上限并回复4点体力（限定技）
       const hyDying = getPlayer(victimId);
       if (hyDying && hyDying.hero.name === '羊徽瑜' && skillsOn(victimId) && !hyDying.quanfengUsed && newHp <= 0) {
-        const newMax = hyDying.maxHp + 2;
-        const healed = Math.min(newMax, Math.max(0, hyDying.hp) + 4);
-        updatePlayer(victimId, { maxHp: newMax, hp: healed, quanfengUsed: true });
-        addLog(`【劝封】羊徽瑜加2点体力上限并回复4点体力（${healed}/${newMax}）`, 'skill');
-        showSkillBanner('羊徽瑜', '劝封');
-        await delay(400);
+        // 人类玩家：决定是否发动限定技；AI / 托管：照旧直接发动
+        const pick = await requestSkillChoice({
+          skill: '劝封',
+          owner: '羊徽瑜',
+          title: '你处于濒死状态，是否发动限定技「劝封」自救？',
+          hint: '体力上限 +2 并回复 4 点体力；不发动则继续求桃，可能阵亡',
+          mode: 'choose',
+          choices: [{ id: 'yes', label: '发动' }, { id: 'no', label: '不发动' }],
+          cancelLabel: '不发动',
+        }, hyDying.isHuman);
+        const go = (!pick || pick.kind === 'timeout') ? true : (pick.kind === 'choose' ? pick.id === 'yes' : false);
+        if (go) {
+          const newMax = hyDying.maxHp + 2;
+          const healed = Math.min(newMax, Math.max(0, hyDying.hp) + 4);
+          updatePlayer(victimId, { maxHp: newMax, hp: healed, quanfengUsed: true });
+          addLog(`【劝封】羊徽瑜加2点体力上限并回复4点体力（${healed}/${newMax}）${pick && pick.kind === 'choose' ? '（玩家选择）' : '（自动）'}`, 'skill');
+          showSkillBanner('羊徽瑜', '劝封');
+          await delay(400);
+        } else {
+          addLog('【劝封】羊徽瑜放弃发动，继续濒死结算', 'info');
+        }
       }
 
       // 当体力值小于等于0时，进入濒死状态
@@ -8751,6 +9091,97 @@ const App: React.FC = () => {
                </div>
             </div>
          </div>
+      )}
+
+      {/* 通用技能选择弹窗（人类角色可选；AI / 托管不出现） */}
+      {skillChoice && !isAiTakeover && (
+        <div className="absolute inset-0 z-50 modal-mask flex items-center justify-center p-4">
+          <div className="modal-frame w-full max-w-2xl p-5" role="dialog" aria-label={`${skillChoice.skill}选择`}>
+            <div className="flex items-center justify-between mb-1">
+              <h3 className="modal-title text-2xl font-ancient">【{skillChoice.skill}】</h3>
+              <span className="modal-text-dim text-sm tabular-nums">{skillChoiceLeft ?? SKILL_CHOICE_SECONDS} 秒</span>
+            </div>
+            <p className="modal-text text-base mb-1">{skillChoice.title}</p>
+            {skillChoice.hint && <p className="modal-text-dim text-sm mb-2">{skillChoice.hint}</p>}
+            <div className="modal-divider mb-3" />
+
+            {skillChoice.mode === 'choose' && (
+              <div className="flex flex-col gap-2">
+                {skillChoice.choices?.map(ch => (
+                  <button
+                    key={ch.id}
+                    onClick={() => resolveSkillChoice({ kind: 'choose', id: ch.id })}
+                    className="btn-ink min-h-[44px] px-4 py-2 rounded-lg text-left"
+                  >
+                    <span className="font-bold">{ch.label}</span>
+                    {ch.desc && <span className="block text-xs opacity-70">{ch.desc}</span>}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {skillChoice.mode === 'card' && (
+              <>
+                <div className="flex flex-wrap gap-2 justify-center max-h-[46vh] overflow-y-auto p-1 scrollbar-thin">
+                  {skillChoice.cards?.map(c => {
+                    const on = skillChoiceSel.includes(c.id);
+                    return (
+                      <div
+                        key={c.id}
+                        className="relative cursor-pointer min-w-[44px] min-h-[44px] flex items-center justify-center"
+                        onClick={() => toggleSkillChoiceItem(c.id, false)}
+                        role="button"
+                        aria-label={`选择【${c.name}】`}
+                      >
+                        <CardComponent card={c} small />
+                        {on && <span className="absolute inset-0 rounded-lg ring-2 ring-[#e8cf94] bg-[#e8cf94]/10" />}
+                      </div>
+                    );
+                  })}
+                </div>
+                <p className="modal-text-dim text-xs text-center mt-2">
+                  已选 {skillChoiceSel.length} 张，需 {skillChoice.min ?? 1}–{skillChoice.max ?? (skillChoice.cards?.length ?? 0)} 张
+                </p>
+              </>
+            )}
+
+            {skillChoice.mode === 'target' && (
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                {skillChoice.targets?.map(t => {
+                  const on = skillChoiceSel.includes(String(t.id));
+                  return (
+                    <button
+                      key={t.id}
+                      onClick={() => toggleSkillChoiceItem(String(t.id), true)}
+                      className={`btn-ink min-h-[44px] px-3 py-2 rounded-lg text-sm ${on ? 'ring-2 ring-[#e8cf94]' : ''}`}
+                    >
+                      <span className="font-bold">{t.name}</span>
+                      {t.sub && <span className="block text-xs opacity-70">{t.sub}</span>}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+
+            <div className="flex justify-end gap-2 mt-4">
+              <button
+                onClick={() => resolveSkillChoice({ kind: 'cancel' })}
+                className="btn-ink min-h-[44px] px-4 rounded-lg text-sm"
+              >
+                {skillChoice.cancelLabel || '取消'}
+              </button>
+              {(skillChoice.mode === 'card' || skillChoice.mode === 'target') && (
+                <button
+                  onClick={submitSkillChoice}
+                  disabled={!skillChoiceValid}
+                  className="btn-ink min-h-[44px] px-5 rounded-lg text-sm font-bold disabled:opacity-40"
+                >
+                  {skillChoice.mode === 'card' ? '确认选择' : '确认目标'}
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Manual Reaction Modal */}

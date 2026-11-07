@@ -425,8 +425,8 @@ export const HEROES: Hero[] = [
     maxHp: 3,
     avatarUrl: 'images/heroes/卞夫人.webp',
     description: '母仪天下',
-    skillName: '挽危',
-    skillDesc: '挽危：每回合限一次，当你的牌被其他角色弃置或获得后，你可以从牌堆获得一张同名牌；没有同名牌则改为摸一张牌。',
+    skillName: '挽危 / 约俭',
+    skillDesc: '挽危：每回合限一次，当你的牌被其他角色弃置或获得后，你可以从牌堆获得一张同名牌；没有同名牌则改为摸一张牌。约俭：每回合限两次，当其他角色对你使用的牌置入弃牌堆时，你可以展示所有手牌，若其中没有与之花色相同的牌，你获得之。',
     gender: 'female',
   },
   {
