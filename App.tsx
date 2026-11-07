@@ -372,6 +372,9 @@ const App: React.FC = () => {
   const yuejianGainedRef = useRef<Set<string>>(new Set()); // 已被「约俭」获得的牌：结算后不再重复置入弃牌堆
   // 孙鲁育「穆穆」：获得防具后，本回合该角色不能使用或打出【杀】
   const mumuNoSlashRef = useRef<number | null>(null);
+  // 孙鲁育「魅步」：止息（至多使用 X 张牌，使用锦囊后结束出牌阶段）与本回合与孙鲁育距离视为 1
+  const zhixiRef = useRef<{ id: number; limit: number; used: number; trickUsed: boolean } | null>(null);
+  const meibuDistanceRef = useRef<Record<number, number>>({}); // 受影响角色 id → 孙鲁育 id（距离视为 1）
 
   // 孙尚香「结姻」技能状态
   const [isJieyinMode, setIsJieyinMode] = useState<boolean>(false);
@@ -1371,6 +1374,8 @@ const App: React.FC = () => {
     if (to?.equipment?.horsePlus) d += 1;
     // 伏皇后「惴恐」没赢：该角色与她本回合的距离视为 1
     if (doutuDistanceRef.current[fromId] === toId) return 1;
+    // 孙鲁育「魅步」：弃置的牌不为【杀】或黑色锦囊牌时，该角色本回合与孙鲁育的距离视为 1
+    if (meibuDistanceRef.current[fromId] === toId) return 1;
     return Math.max(1, d);
   }, []);
 
@@ -1429,6 +1434,12 @@ const App: React.FC = () => {
     if (!meta) return false;
     const player = getPlayer(playerId);
     if (!player) return false;
+    // 孙鲁育「魅步」止息：使用装备牌同样计入"至多使用 X 张牌"
+    const zx = zhixiRef.current;
+    if (zx && zx.id === playerId && zx.used >= zx.limit) {
+      addLog(`【止息】${player.hero.name} 本回合至多使用 ${zx.limit} 张牌，不能使用【${card.name}】`, 'warning');
+      return false;
+    }
     const slot = meta.slot;
     const prev = player.equipment?.[slot];
     const nextEquipment = { ...(player.equipment ?? {}), [slot]: card };
@@ -1464,6 +1475,7 @@ const App: React.FC = () => {
       }
       showSkillBanner(player.hero.name, '祈禳');
     }
+    if (zhixiRef.current?.id === playerId) zhixiRef.current.used += 1;
     return true;
   }, [getPlayer, mutateHand, updatePlayer, triggerXiaoji, onEquipLost]);
 
@@ -2376,6 +2388,8 @@ const App: React.FC = () => {
         setHasUsedJiaozhao(false);
         // 「本回合」类禁【杀】效果在新回合开始时清零
         mumuNoSlashRef.current = null;
+        zhixiRef.current = null;
+        meibuDistanceRef.current = {};
         addLog(`>>> ${currentPlayer.hero.name} (${currentPlayer.isHuman ? '你' : 'AI'}) 回合开始 <<<`, 'info');
 
         // 伏皇后「惴恐」：其他角色的回合开始时，若她已受伤，可与其拼点。
@@ -3147,10 +3161,13 @@ const App: React.FC = () => {
               ?? luyu.hand.find(c => c.name !== CardName.TAO && c.name !== CardName.SHAN);
             if (prefer) {
               discardCards(luyu.id, [prefer]);
+              // 「止息」：至多使用 X 张牌（X 为体力值），使用锦囊牌后结束出牌阶段
+              zhixiRef.current = { id: currentPlayer.id, limit: Math.max(1, currentPlayer.hp), used: 0, trickUsed: false };
               addLog(`【魅步】孙鲁育弃置【${prefer.name}】，令 ${currentPlayer.hero.name} 本回合获得「止息」（至多使用 ${currentPlayer.hp} 张牌，使用锦囊后结束出牌阶段）`, 'skill');
               showSkillBanner('孙鲁育', '魅步');
               if (!(prefer.name === CardName.SHA
                   || (prefer.type === CardType.SCROLL && (prefer.suit === Suit.SPADE || prefer.suit === Suit.CLUB)))) {
+                meibuDistanceRef.current[currentPlayer.id] = luyu.id;
                 addLog(`【魅步】弃置的牌不是【杀】或黑色锦囊牌，本回合 ${currentPlayer.hero.name} 与孙鲁育的距离为 1`, 'info');
               }
               await delay(300);
@@ -4992,6 +5009,15 @@ const App: React.FC = () => {
     const card = me.hand.find(c => c.id === selectedCardIds[0]);
 
     if (!target || !card || target.isDead) return;
+    // 孙鲁育「魅步」止息：本回合使用牌已达上限
+    {
+      const zx = zhixiRef.current;
+      if (zx && zx.id === me.id && zx.used >= zx.limit) {
+        addLog(`【止息】你本回合至多使用 ${zx.limit} 张牌，已达上限`, 'warning');
+        setTimeout(() => { clickGuard.current = false; }, 200);
+        return;
+      }
+    }
 
     // 通用目标合法性钩子：伤害牌的目标可能被技能禁止（花鬘「芳踪」等）
     const vetoReason = getTargetLegalityVeto(me, target, card);
@@ -5174,6 +5200,14 @@ const App: React.FC = () => {
     const me = players.find(p => p.isHuman) || players[0];
     const card = me.hand.find(c => c.id === selectedCardIds[0]);
     if (!card) return;
+    // 孙鲁育「魅步」止息：本回合使用牌已达上限
+    {
+      const zx = zhixiRef.current;
+      if (zx && zx.id === me.id && zx.used >= zx.limit) {
+        addLog(`【止息】你本回合至多使用 ${zx.limit} 张牌，已达上限`, 'warning');
+        return;
+      }
+    }
     
     setIsProcessing(p => p + 1);
     try {
@@ -5604,6 +5638,8 @@ const App: React.FC = () => {
   const resolveCardEffect = async (source: Player, targets: Player[], card: Card) => {
     if (fxFly && targets.length > 0) spawnCardFlight(card, source.id, targets[0].id);
     setIsProcessing(p => p + 1);
+    // 孙鲁育「魅步」止息：统计本回合已使用的牌数（打出响应不经过此处，不受限制）
+    if (zhixiRef.current?.id === source.id) zhixiRef.current.used += 1;
     try {
       // 通用「勇决」（存嗣授予）：同势力角色本回合使用的第一张牌为【杀】时，结算后获得之
       {
@@ -6689,8 +6725,21 @@ const App: React.FC = () => {
       }
     } finally {
       setIsProcessing(p => Math.max(0, p - 1));
+      // 孙鲁育「魅步」止息：使用锦囊牌后，若使用者正处于自己的出牌阶段，立即结束出牌阶段
+      const zx = zhixiRef.current;
+      if (zx && zx.id === source.id && card.type === CardType.SCROLL) {
+        zx.trickUsed = true;
+        const humanOwner = playersRef.current.find(p => p.id === source.id && p.isHuman);
+        if (humanOwner && !isAiTakeover && phaseLiveRef.current === GamePhase.ACTION) {
+          addLog(`【止息】${source.hero.name} 使用锦囊牌后结束出牌阶段`, 'skill');
+          setPhase(GamePhase.DISCARD);
+        }
+      }
     }
   };
+
+  // 「止息」闸门需要在 cpuAI 内遮蔽同名函数，这里保留一份本名别名供其内部调用
+  const resolveCardEffectBase = resolveCardEffect;
 
   const triggerReaction = async (responderId: number, sourceId: number, neededCard: CardName, triggerCard: Card, isSecondReaction: boolean = false) => {
     setIsProcessing(p => p + 1);
@@ -8249,6 +8298,24 @@ const App: React.FC = () => {
     dbgMark(`cpu:enter:${aiPlayer.hero.name}`);
     // 邹氏「倾城」：被暗置的角色技能不发动
     const aiSkillsOn = skillsOn(aiPlayer.id);
+    // 孙鲁育「魅步」止息：AI 侧同样受"至多使用 X 张牌、使用锦囊后结束出牌阶段"限制
+    // （在本函数内遮蔽 resolveCardEffect，所有出牌分支自动走此闸门；超限时静默跳过，
+    //  并刷新进度心跳，避免看门狗把"到期不应出牌"误判为卡死）
+    const baseResolveCardEffect = resolveCardEffectBase;
+    const resolveCardEffect = async (src: Player, tgs: Player[], cd: Card): Promise<void> => {
+      const zx = zhixiRef.current;
+      if (zx && zx.id === src.id) {
+        if (zx.used >= zx.limit || zx.trickUsed) {
+          if (zx.used >= zx.limit && !zx.trickUsed) {
+            addLog(`【止息】${src.hero.name} 本回合已使用 ${zx.used} 张牌，达到上限，不再出牌`, 'info');
+            zx.trickUsed = true; // 用同一标记停止后续尝试，避免刷屏
+          }
+          progressAtRef.current = Date.now();
+          return;
+        }
+      }
+      await baseResolveCardEffect(src, tgs, cd);
+    };
     // 出牌前先「思考」：头像暖光 + 随机 300~800ms，AI 不再瞬发
     await aiThink(aiPlayer.id);
 
