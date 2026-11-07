@@ -1595,6 +1595,8 @@ const App: React.FC = () => {
         __devState?: () => Array<{ id: number; name: string; hp: number; maxHp: number; identity: string; isHuman: boolean; hand: string[]; equip: string[]; sealed: boolean }>;
         __devPatch?: (spec: Array<{ id: number; hp?: number; maxHp?: number; hand?: string[]; equip?: string[]; marks?: number }>) => void;
         __devDamage?: (victimId: number, sourceId: number, amount: number, nature?: 'fire' | 'thunder') => void;
+        __devKill?: (victimId: number, killerId?: number) => void;
+        __devIdentity?: (spec: Array<{ id: number; identity: string }>) => void;
       };
       devWin.__devState = () => playersRef.current.map(p => ({
         id: p.id,
@@ -1649,6 +1651,17 @@ const App: React.FC = () => {
       };
       devWin.__devDamage = (victimId, sourceId, amount, nature) => {
         void takeDamage(victimId, sourceId, amount, undefined, nature);
+      };
+      devWin.__devKill = (victimId, killerId) => {
+        void handleDeath(victimId, killerId);
+      };
+      devWin.__devIdentity = (spec) => {
+        const next = playersRef.current.map(p => {
+          const s = spec.find(x => x.id === p.id);
+          return s ? { ...p, identity: s.identity as Identity, isRevealed: true } : p;
+        });
+        playersRef.current = next;
+        setPlayers(next);
       };
     }
 
@@ -2036,15 +2049,19 @@ const App: React.FC = () => {
 
       // 检查主公是否阵亡
       if (lord.isDead) {
-        // 官方规则：主公阵亡时，若反贼已全部阵亡则内奸获胜，否则反贼获胜。
-        // （此前要求「场上只剩内奸一人」，会漏掉忠臣仍存活的情形，误判成反贼胜）
+        // 官方规则：主公阵亡时，只有「内奸是除主公外的唯一存活者」才判内奸胜；
+        // 若仍有其他角色存活（忠臣等），反贼的胜利条件（主公阵亡）已成立，判反贼胜。
         const aliveRebels = updatedPlayers.filter(p => p.identity === Identity.FANZEI && !p.isDead);
         const aliveSpy = updatedPlayers.find(p => p.identity === Identity.NEIJIAN && !p.isDead);
-        if (aliveRebels.length === 0) {
-          // 反贼已清空：内奸存活则内奸胜，内奸也已阵亡则视为朝廷方获胜（主公死于意外）
-          handleGameOver(aliveSpy ? 'spy' : 'lord');
-        } else {
+        if (aliveRebels.length > 0) {
           handleGameOver('rebel');
+        } else if (aliveSpy) {
+          // 内奸需单独存活（与主公单挑胜出）才算赢；仍有忠臣等他人存活则判反贼胜
+          const otherAlive = updatedPlayers.filter(p => !p.isDead && p.id !== aliveSpy.id);
+          handleGameOver(otherAlive.length === 0 ? 'spy' : 'rebel');
+        } else {
+          // 反贼与内奸均已阵亡：视为朝廷方获胜（主公死于意外）
+          handleGameOver('lord');
         }
         return;
       }
