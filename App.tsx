@@ -129,6 +129,15 @@ const App: React.FC = () => {
   
   // Feature State
   const [isAiTakeover, setIsAiTakeover] = useState<boolean>(false);
+  // 看门狗复位信号：卡死恢复时自增，触发主循环重新推进当前阶段
+  const [loopNudge, setLoopNudge] = useState<number>(0);
+
+  // 仅本地开发：阶段推进轨迹（用于定位长局卡死，生产构建为 no-op 且被裁剪）
+  const dbgMark = (where: string) => {
+    if (!DEV_BUILD) return;
+    const w = window as unknown as { __sgTrace?: Array<{ where: string; t: number }> };
+    w.__sgTrace = [...(w.__sgTrace || []), { where, t: Date.now() }].slice(-40);
+  };
 
   // 游戏速度控制（1x/2x/3x，持久化到 localStorage）
   const [speedLevel, setSpeedLevel] = useState<1 | 2 | 3>(() => {
@@ -553,6 +562,18 @@ const App: React.FC = () => {
   const playersRef = useRef<Player[]>([]);
   // 回合状态机去重：同一「回合+阶段」只推进一次，避免 isProcessing 抖动导致 AI 重复行动
   const turnStepRef = useRef<string>('');
+  // 并发结算保护：同一「回合+阶段」同时只允许一条 runTurn 链。
+  // 之前 isAiTakeover 切换会让主循环以新 key 再起一条链，两条 cpuAI 并发收尾时后写的那条
+  // 会把阶段从「结束阶段」写回「弃牌阶段」，而弃牌阶段已被去重跳过 → 对局永久停摆。
+  const activeStepRef = useRef<{ turn: number; phase: GamePhase; token: number } | null>(null);
+  const stageTokenRef = useRef<number>(0);
+  // 异步链闭包里的 phase/turnIndex 可能滞后，兜底推进时取实时值
+  const phaseLiveRef = useRef<GamePhase>(phase);
+  const turnLiveRef = useRef<number>(turnIndex);
+  // 推进心跳：addLog / 阶段开始时刷新，供卡死看门狗判断
+  const progressAtRef = useRef<number>(Date.now());
+  const stallKeyRef = useRef<string>('');
+  const stallCountRef = useRef<number>(0);
   // AI 回合节奏：1 倍速下额外放慢，2/3 倍速保持原速
   const aiTurnActiveRef = useRef<boolean>(false);
   // 铁索连环当前传导波次已结算的角色 id（见 takeDamage 注释）
@@ -574,6 +595,7 @@ const App: React.FC = () => {
 
   // 优化：限制日志数量，避免内存泄漏和性能问题
   const addLog = useCallback((text: string, type: LogEntry['type'] = 'info') => {
+    progressAtRef.current = Date.now();
     // 日志属非紧急 UI：标记为 transition，AI 连续出牌刷日志时不再阻塞卡牌/动画的高优先级渲染
     React.startTransition(() => {
       setLogs(prev => {
@@ -2047,7 +2069,15 @@ const App: React.FC = () => {
     // 同一「回合 + 阶段」只推进一次：isProcessing 从 1 回到 0 时不再重复触发
     const stepKey = `${screen}-${turnIndex}-${phase}-${isAiTakeover ? 'auto' : 'human'}`;
     if (turnStepRef.current === stepKey) return;
+    // 同一「回合+阶段」已有结算链在跑：禁止并发启动第二条
+    // （并发链会各写一次阶段，后写的那条把阶段写回上一阶段，而该阶段已被去重跳过 → 永久停摆）
+    const activeStep = activeStepRef.current;
+    if (activeStep && activeStep.turn === turnIndex && activeStep.phase === phase) return;
     turnStepRef.current = stepKey;
+    const stageToken = ++stageTokenRef.current;
+    activeStepRef.current = { turn: turnIndex, phase, token: stageToken };
+    progressAtRef.current = Date.now();
+    dbgMark('loop:' + stepKey);
 
     // 更新ref中的最新状态
     playersRef.current = players;
@@ -3080,6 +3110,7 @@ const App: React.FC = () => {
           doutuSkipRef.current = null;
           addLog(`${currentPlayer.hero.name} 受「惴恐」影响，本回合跳过出牌阶段`, 'warning');
           await delay(600);
+          dbgMark('action:setDiscard:doutu');
           setPhase(GamePhase.DISCARD);
         }
         // 检查是否有"乐不思蜀"效果：判定为红桃则解除，否则跳过出牌阶段
@@ -3095,6 +3126,7 @@ const App: React.FC = () => {
             addLog(`${currentPlayer.hero.name} 受【乐不思蜀】影响，跳过出牌阶段！`, 'warning');
           }
           await delay(800);
+          dbgMark('action:setDiscard:lebu');
           setPhase(GamePhase.DISCARD);
         } else {
           // AI or Human Auto-Takeover
@@ -3114,6 +3146,7 @@ const App: React.FC = () => {
         
         const rawExcess = updatedPlayer.hand.length - updatedPlayer.hp;
         const excess = excessCards(updatedPlayer);
+        dbgMark(`discard:enter:${updatedPlayer.hero.name}:excess=${excess}`);
         if (updatedPlayer.hero.name === '诸葛果' && rawExcess > excess) {
           addLog(`${updatedPlayer.hero.name} 发动「羽化」，非基本牌不计入手牌上限（应弃 ${excess} 张，原为 ${rawExcess} 张）`, 'skill');
           if ((import.meta as unknown as { env?: { DEV?: boolean } }).env?.DEV === true) {
@@ -3151,6 +3184,7 @@ const App: React.FC = () => {
         } else {
           // AI or Auto Discard：弃牌前同样有思考光环
           await aiThink(updatedPlayer.id, 1000);
+          dbgMark('discard:afterThink');
           if (excess > 0) {
             // 更新ref中的最新状态
             playersRef.current = players;
@@ -3180,12 +3214,14 @@ const App: React.FC = () => {
               }
             }
           }
+          dbgMark('discard:setEnd');
           setPhase(GamePhase.END);
         }
       }
 
       // END PHASE
       else if (currentPhase === GamePhase.END) {
+        dbgMark('end:enter');
         await delay(500);
 
         // 王元姬「尚俭」：任一角色结束阶段，若本回合失去的牌数不大于体力值，摸等量牌
@@ -3568,20 +3604,84 @@ const App: React.FC = () => {
         await delay(1000);
         setTurnPass(null);
 
+        dbgMark('end:setTurn');
         setTurnIndex(nextIndex);
         setPhase(GamePhase.START);
       }
     };
 
     // 兜底：阶段结算抛出异常时不要让主循环永久卡死，记录后跳过本阶段
+    const releaseStage = () => {
+      if (activeStepRef.current?.token === stageToken) activeStepRef.current = null;
+    };
     runTurn().catch((err) => {
       console.error('[runTurn] phase error', err);
       setIsProcessing(0);
       addLog('本阶段结算出现异常，已自动跳到结束阶段', 'danger');
       setPhase(GamePhase.END);
-    });
+    }).finally(releaseStage);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phase, turnIndex, screen, isAiTakeover, isProcessing, tutorialActive]); 
+  }, [phase, turnIndex, screen, isAiTakeover, isProcessing, tutorialActive, loopNudge]); 
+
+  // 仅本地开发：把主循环门控状态暴露到 window，便于长局卡死时定位（生产构建整段被移除）
+  useEffect(() => {
+    if (!DEV_BUILD) return;
+    (window as unknown as { __sgDbg?: Record<string, unknown> }).__sgDbg = {
+      phase, turnIndex, isProcessing, isAiTakeover,
+      stepKey: turnStepRef.current,
+      aiTurnActive: aiTurnActiveRef.current,
+      screen, winnerSide, logs: logs.length,
+      ui: {
+        dying: !!dyingState, reaction: !!pendingReaction,
+        skillChoice: !!skillChoice, wugu: !!wuguSelection,
+      },
+    };
+  });
+
+  // 实时同步阶段/回合，供异步链兜底判断使用
+  useEffect(() => {
+    phaseLiveRef.current = phase;
+    turnLiveRef.current = turnIndex;
+  }, [phase, turnIndex]);
+
+  // 卡死看门狗（防御）：非人类操作阶段若长时间没有任何战报推进，
+  // 先解锁并重跑本阶段一次，连续两次仍无进展则强制进入结束阶段。
+  // 人类操作阶段不介入（本身有 20 秒读秒兜底）。
+  useEffect(() => {
+    if (screen !== 'game') return;
+    const timer = window.setInterval(() => {
+      if (isGameOverRef.current || winnerSide || tutorialActive || !players.length) return;
+      const human = players.find(p => p.isHuman);
+      const humanInControl = !!human && !isAiTakeover && !human.isDead && turnIndex === human.id;
+      if (humanInControl) { stallKeyRef.current = ''; stallCountRef.current = 0; return; }
+      // 弹窗/查看面板打开属于正常停留，刷新心跳不判卡死
+      if (showRules || showDiscardViewer || inspectPlayerId !== null || showSkillModal || wuguSelection || dyingState || pendingReaction) {
+        progressAtRef.current = Date.now();
+        return;
+      }
+      if (Date.now() - progressAtRef.current < 12000) return;
+      const key = `${turnIndex}-${phase}`;
+      if (stallKeyRef.current !== key) { stallKeyRef.current = key; stallCountRef.current = 0; }
+      stallCountRef.current += 1;
+      progressAtRef.current = Date.now();
+      if (stallCountRef.current <= 2) {
+        addLog('检测到结算停滞，已自动重新推进本阶段', 'warning');
+        activeStepRef.current = null;
+        turnStepRef.current = '';
+        setIsProcessing(0);
+        setLoopNudge(n => n + 1);
+      } else {
+        addLog('本阶段连续停滞，强制结束本回合', 'danger');
+        activeStepRef.current = null;
+        turnStepRef.current = '';
+        setIsProcessing(0);
+        setPhase(GamePhase.END);
+      }
+    }, 2000);
+    return () => window.clearInterval(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [screen, winnerSide, tutorialActive, players, isAiTakeover, turnIndex, phase,
+      showRules, showDiscardViewer, inspectPlayerId, showSkillModal, wuguSelection, dyingState, pendingReaction]);
 
   // 人类决策读秒：出牌 / 弃牌阶段 20 秒未操作则自动处理，避免对局永久卡住
   useEffect(() => {
@@ -6165,12 +6265,27 @@ const App: React.FC = () => {
           if (revealedCards.length === 0) break;
           
           if (player.isHuman && !isAiTakeover) {
-            // 人类玩家选择
+            // 人类玩家选择（30 秒未选自动代选，避免单一响应等待无限挂起）
             const selectedCard = await new Promise<Card | null>(resolve => {
+              let settled = false;
+              let timer: ReturnType<typeof setTimeout> | null = null;
+              const finish = (card: Card | null) => {
+                if (settled) return;
+                settled = true;
+                if (timer) clearTimeout(timer);
+                setWuguSelection(null);
+                resolve(card);
+              };
+              timer = setTimeout(() => {
+                if (settled) return;
+                const auto = revealedCards[Math.floor(Math.random() * revealedCards.length)] ?? null;
+                addLog(`${player.hero.name} 选择超时，自动选取${auto ? `【${auto.name}】` : '无牌'}`, 'warning');
+                finish(auto);
+              }, 30000);
               setWuguSelection({
                 cards: revealedCards,
                 playerName: player.hero.name,
-                onSelect: (card: Card | null) => resolve(card)
+                onSelect: (card: Card | null) => finish(card)
               });
             });
             
@@ -7695,6 +7810,7 @@ const App: React.FC = () => {
   
   const cpuAI = async (aiPlayer: Player) => {
     aiTurnActiveRef.current = true;
+    dbgMark(`cpu:enter:${aiPlayer.hero.name}`);
     // 邹氏「倾城」：被暗置的角色技能不发动
     const aiSkillsOn = skillsOn(aiPlayer.id);
     // 出牌前先「思考」：头像暖光 + 随机 300~800ms，AI 不再瞬发
@@ -8135,6 +8251,7 @@ const App: React.FC = () => {
     }
 
     aiTurnActiveRef.current = false;
+    dbgMark(`cpu:setDiscard:${aiPlayer.hero.name}`);
     setPhase(GamePhase.DISCARD);
   };
 
