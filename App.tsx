@@ -5902,8 +5902,8 @@ const App: React.FC = () => {
          }
         playCard(source.id, card);
          addLog(`${source.hero.name} 找 ${target.hero.name} 决斗！`, 'danger');
-         // 先询问是否使用无懈可击
-         const isWuxieUsed = await triggerReaction(target.id, source.id, CardName.WUXIE, card);
+         // 无懈可击询问链（全座次 + 可被反无懈）
+         const isWuxieUsed = await resolveWuxieChain(source.id, card);
          if (!isWuxieUsed) {
            // 如果没有使用无懈可击，再询问是否使用杀
            await triggerReaction(target.id, source.id, CardName.SHA, card);
@@ -5937,8 +5937,8 @@ const App: React.FC = () => {
             continue;
           }
           if (await tryZhenlie(t, source, card)) continue;
-          // 先询问是否使用无懈可击
-          const isWuxieUsed = await triggerReaction(t.id, source.id, CardName.WUXIE, card);
+          // 无懈可击询问链（全座次 + 可被反无懈）
+          const isWuxieUsed = await resolveWuxieChain(source.id, card);
           if (!isWuxieUsed) {
             // 如果没有使用无懈可击，再询问是否使用杀
             await triggerReaction(t.id, source.id, CardName.SHA, card);
@@ -6020,8 +6020,8 @@ const App: React.FC = () => {
             continue;
           }
           if (await tryZhenlie(t, source, card)) continue;
-          // 先询问是否使用无懈可击
-          const isWuxieUsed = await triggerReaction(t.id, source.id, CardName.WUXIE, card);
+          // 无懈可击询问链（全座次 + 可被反无懈）
+          const isWuxieUsed = await resolveWuxieChain(source.id, card);
           if (!isWuxieUsed) {
             // 如果没有使用无懈可击，再询问是否使用闪
             await triggerReaction(t.id, source.id, CardName.SHAN, card);
@@ -6044,8 +6044,8 @@ const App: React.FC = () => {
         const targetHasEquip = !!(target.equipment?.weapon || target.equipment?.armor || target.equipment?.horsePlus || target.equipment?.horseMinus);
         if (target.hand.length > 0 || targetHasEquip) {
           playCard(source.id, card);
-          // 询问目标是否使用无懈可击
-          const isWuxieUsed = await triggerReaction(target.id, source.id, CardName.WUXIE, card);
+          // 无懈可击询问链（全座次 + 可被反无懈）
+          const isWuxieUsed = await resolveWuxieChain(source.id, card);
           if (!isWuxieUsed) {
             // 优先偷装备（有则 40% 概率），否则偷手牌
             const equipCards = [target.equipment?.weapon, target.equipment?.armor, target.equipment?.horsePlus, target.equipment?.horseMinus].filter(Boolean) as Card[];
@@ -6077,7 +6077,7 @@ const App: React.FC = () => {
               addLog(`${target.hero.name} 没有牌可偷`, 'info');
             }
           } else {
-            addLog(`${target.hero.name} 使用了【无懈可击】，免疫了【${card.name}】的效果！`, 'success');
+            addLog(`【无懈可击】生效，【${card.name}】对 ${target.hero.name} 的效果被抵消`, 'success');
           }
         } else {
           addLog(`${target.hero.name} 没有手牌可偷，【${card.name}】不消耗！`, 'warning');
@@ -6093,10 +6093,10 @@ const App: React.FC = () => {
         }
         playCard(source.id, card);
         addLog(`${source.hero.name} 对 ${target.hero.name} 使用了乐不思蜀`, 'info');
-        // 询问目标是否使用无懈可击
-        const isWuxieUsed = await triggerReaction(target.id, source.id, CardName.WUXIE, card);
+        // 无懈可击询问链（全座次 + 可被反无懈）
+        const isWuxieUsed = await resolveWuxieChain(source.id, card);
         if (isWuxieUsed) {
-          addLog(`${target.hero.name} 使用了【无懈可击】，免疫了【${card.name}】的效果！`, 'success');
+          addLog(`【无懈可击】生效，【${card.name}】对 ${target.hero.name} 的效果被抵消`, 'success');
           return;
         }
         // 设置乐不思蜀状态
@@ -6113,8 +6113,8 @@ const App: React.FC = () => {
         const equipCards = [target.equipment?.weapon, target.equipment?.armor, target.equipment?.horsePlus, target.equipment?.horseMinus].filter(Boolean) as Card[];
         if (target.hand.length > 0 || equipCards.length > 0) {
           playCard(source.id, card);
-          // 询问目标是否使用无懈可击
-          const isWuxieUsed = await triggerReaction(target.id, source.id, CardName.WUXIE, card);
+          // 无懈可击询问链（全座次 + 可被反无懈）
+          const isWuxieUsed = await resolveWuxieChain(source.id, card);
           if (!isWuxieUsed) {
             // 有装备且（无手牌 或 35% 概率）则拆装备
             const shouldEquip = equipCards.length > 0 && (target.hand.length === 0 || Math.random() < 0.35);
@@ -6150,7 +6150,7 @@ const App: React.FC = () => {
               triggerWanwei(target.id, [brokenCard.name]);
             }
           } else {
-            addLog(`${target.hero.name} 使用了【无懈可击】，免疫了【${card.name}】的效果！`, 'success');
+            addLog(`【无懈可击】生效，【${card.name}】对 ${target.hero.name} 的效果被抵消`, 'success');
           }
         } else {
           addLog(`${target.hero.name} 没有牌可弃置，【${card.name}】不消耗！`, 'warning');
@@ -6173,10 +6173,10 @@ const App: React.FC = () => {
           addLog(`${target.hero.name} 没有手牌，【火攻】无效！`, 'warning');
           return;
         }
-        // 询问目标是否使用无懈可击
-        const isWuxieUsed = await triggerReaction(target.id, source.id, CardName.WUXIE, card);
+        // 无懈可击询问链（全座次 + 可被反无懈）
+        const isWuxieUsed = await resolveWuxieChain(source.id, card);
         if (isWuxieUsed) {
-          addLog(`${target.hero.name} 使用了【无懈可击】，免疫了【火攻】的效果！`, 'success');
+          addLog(`【无懈可击】生效，【${card.name}】对 ${target.hero.name} 的效果被抵消`, 'success');
           return;
         }
         // 目标展示一张手牌
@@ -6240,10 +6240,10 @@ const App: React.FC = () => {
         playCard(source.id, card);
         const target = targets[0];
         addLog(`${source.hero.name} 对 ${target.hero.name} 使用了【兵粮寸断】`, 'info');
-        // 询问目标是否使用无懈可击
-        const isWuxieUsed = await triggerReaction(target.id, source.id, CardName.WUXIE, card);
+        // 无懈可击询问链（全座次 + 可被反无懈）
+        const isWuxieUsed = await resolveWuxieChain(source.id, card);
         if (isWuxieUsed) {
-          addLog(`${target.hero.name} 使用了【无懈可击】，免疫了【兵粮寸断】的效果！`, 'success');
+          addLog(`【无懈可击】生效，【${card.name}】对 ${target.hero.name} 的效果被抵消`, 'success');
           return;
         }
         // 设置兵粮寸断状态
@@ -6374,10 +6374,10 @@ const App: React.FC = () => {
         playCard(source.id, card);
         addLog(`${source.hero.name} 对 ${target.hero.name} 使用了【借刀杀人】，令其攻击 ${victim.hero.name}`, 'info');
         
-        // 询问目标是否使用无懈可击
-        const isWuxieUsed = await triggerReaction(target.id, source.id, CardName.WUXIE, card);
+        // 无懈可击询问链（全座次 + 可被反无懈）
+        const isWuxieUsed = await resolveWuxieChain(source.id, card);
         if (isWuxieUsed) {
-          addLog(`${target.hero.name} 使用了【无懈可击】，【借刀杀人】失效！`, 'success');
+          addLog(`【无懈可击】生效，【${card.name}】对 ${target.hero.name} 的效果被抵消`, 'success');
           return;
         }
         
@@ -6410,10 +6410,10 @@ const App: React.FC = () => {
         playCard(source.id, card);
         addLog(`${source.hero.name} 使用了【闪电】，将其放置于自己的判定区`, 'warning');
 
-        // 询问是否使用无懈可击（对自己使用的情况）
-        const isWuxieUsed = await triggerReaction(source.id, source.id, CardName.WUXIE, card);
+        // 无懈可击询问链（全座次 + 可被反无懈）
+        const isWuxieUsed = await resolveWuxieChain(source.id, card);
         if (isWuxieUsed) {
-          addLog(`${source.hero.name} 使用了【无懈可击】，【闪电】被抵消！`, 'success');
+          addLog(`【无懈可击】生效，【闪电】被抵消`, 'success');
         } else {
           updatePlayer(source.id, { isShandian: true });
           addLog(`⚡【闪电】悬于 ${source.hero.name} 头顶，下回合开始时判定`, 'warning');
@@ -6798,6 +6798,64 @@ const App: React.FC = () => {
     } finally {
       setIsProcessing(p => Math.max(0, p - 1));
     }
+  };
+
+  /**
+   * 无懈可击询问链（官方规则）：
+   * - 锦囊生效前，按座次依次询问所有合法角色（存活且手中有【无懈可击】）是否使用；
+   * - 一旦有人使用，该层结束，进入下一层：对这张【无懈可击】本身继续按座次询问是否反制；
+   * - 每层都重新按座次询问，但同一角色在同一链条中只被询问一次（asked 集合）；
+   * - 层数奇偶决定原锦囊最终是否被抵消。
+   * 返回 true = 原锦囊效果被抵消；false = 原锦囊最终生效。
+   */
+  const MAX_WUXIE_DEPTH = 6;
+  const resolveWuxieChain = async (sourceId: number, triggerCard: Card): Promise<boolean> => {
+    const total = playersRef.current.length;
+    if (total === 0) return false;
+    const asked = new Set<number>();
+    let anchor = sourceId;
+    let nullified = false;
+    let depth = 0;
+    while (depth < MAX_WUXIE_DEPTH) {
+      // 收集本层合法角色：从锚点（锦囊使用者 / 上一张无懈的使用者）起的座次顺序
+      const order: number[] = [];
+      for (let k = 0; k < total; k++) {
+        const id = (anchor + k) % total;
+        const p = playersRef.current.find(x => x.id === id);
+        if (!p || p.isDead || asked.has(id)) continue;
+        if (!p.hand.some(c => c.name === CardName.WUXIE)) continue;
+        order.push(id);
+      }
+      if (order.length === 0) break;
+      const orderNames = order.map(id => playersRef.current.find(p => p.id === id)?.hero.name ?? `#${id}`);
+      addLog(`【无懈可击】第 ${depth + 1} 层询问（座次）：${orderNames.join(' → ')}`, 'info');
+
+      let user = -1;
+      for (const id of order) {
+        asked.add(id);
+        const used = await triggerReaction(id, depth === 0 ? sourceId : anchor, CardName.WUXIE, triggerCard);
+        if (used) { user = id; break; }
+      }
+      if (user < 0) break;
+
+      depth++;
+      nullified = !nullified;
+      const name = playersRef.current.find(p => p.id === user)?.hero.name ?? `#${user}`;
+      addLog(
+        depth === 1
+          ? `无懈可击链（第 1 层）：${name} 以【无懈可击】抵消了【${triggerCard.name}】`
+          : `无懈可击链（第 ${depth} 层）：${name} 以【无懈可击】反制上一张【无懈可击】`,
+        'skill'
+      );
+      anchor = user;
+    }
+    if (depth > 0) {
+      addLog(
+        `无懈可击链结束：共 ${depth} 层，【${triggerCard.name}】${nullified ? '最终被抵消' : '最终生效'}`,
+        nullified ? 'success' : 'warning'
+      );
+    }
+    return nullified;
   };
 
   const askForPeaches = async (victimId: number): Promise<boolean> => {
