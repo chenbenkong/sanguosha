@@ -361,7 +361,10 @@ const App: React.FC = () => {
   const fumianTargetUsedRef = useRef<boolean>(false); // 吴苋「福绵」本回合额外目标已用
   const cangHuiUsedRef = useRef<boolean>(false); // 孙鲁班「谮毁」本回合已发动
   const shenxianTurnRef = useRef<number>(-1); // 张星彩「甚贤」本回合是否已发动
-  const doutuSkipRef = useRef<number | null>(null); // 伏皇后「惴恐」赢：目标跳过出牌阶段
+  // 伏皇后「惴恐」赢：该角色本回合使用牌不能选择除自己外的角色为目标
+  const doutuSelfOnlyRef = useRef<number | null>(null);
+  // 朱雀羽扇：本回合转换偏好（首张普通【杀】询问后记忆，避免每张都问）
+  const zhuquePrefRef = useRef<Record<number, 'fire' | 'normal'>>({});
   // 判定阶段结算结果：兵粮寸断跳过摸牌、乐不思蜀跳过出牌（进入判定阶段前清零）
   const judgeSkipRef = useRef<{ draw: boolean; action: boolean }>({ draw: false, action: false });
   const doutuDistanceRef = useRef<Record<number, number>>({}); // 「惴恐」没赢：到伏皇后距离视为 1
@@ -1057,6 +1060,11 @@ const App: React.FC = () => {
     const hm = playersRef.current.find(p => p.id === tgt.id);
     if (hm && active(hm) && src.id !== hm.id && canReach(src, hm)) return '芳踪';
     return null;
+  }, (src, tgt) => {
+    // 伏皇后「惴恐」获胜：该角色本回合使用牌不能选择除自己以外的角色为目标
+    if (src.id === tgt.id) return null;
+    if (doutuSelfOnlyRef.current === src.id) return '惴恐';
+    return null;
   }];
   // 「嬉战」：其他角色回合开始时，弃一张牌令本回合「芳踪」失效，按花色结算；无牌则流失1点体力
   turnStartHookRef.current = async (owner: Player) => {
@@ -1599,7 +1607,8 @@ const App: React.FC = () => {
     // 清空跨局技能状态（否则第二局起守玺等「每种牌名限一次」会被旧局记录吞掉）
     shouxiDeclaredRef.current = new Set();
     fengpoBoostRef.current = {};
-    doutuSkipRef.current = null;
+    doutuSelfOnlyRef.current = null;
+    zhuquePrefRef.current = {};
     doutuDistanceRef.current = {};
     xuejiUsedRef.current = false;
     setHasUsedXueji(false);
@@ -2238,8 +2247,9 @@ const App: React.FC = () => {
         fengpoUsedRef.current = false; // 重置「凤魄」
         fengpoBoostRef.current = {};
         shenxianTurnRef.current = -1; // 重置「甚贤」
-        doutuSkipRef.current = null; // 重置「惴恐」
+        doutuSelfOnlyRef.current = null; // 重置「惴恐」
         delete doutuDistanceRef.current[currentPlayer.id];
+        zhuquePrefRef.current = {}; // 重置「朱雀羽扇」本回合偏好
         setIsJiedaoMode(false); // 重置借刀杀人模式
         setJiedaoWeaponTarget(null); // 重置借刀目标
         setJiedaoVictimTarget(null); // 重置被攻击目标
@@ -2357,7 +2367,7 @@ const App: React.FC = () => {
         addLog(`>>> ${currentPlayer.hero.name} (${currentPlayer.isHuman ? '你' : 'AI'}) 回合开始 <<<`, 'info');
 
         // 伏皇后「惴恐」：其他角色的回合开始时，若她已受伤，可与其拼点。
-        // 赢：该角色本回合跳过出牌阶段；没赢：该角色与她的距离视为 1。
+        // 赢：该角色本回合使用牌不能选择除自己以外的角色为目标；没赢：距离视为 1。
         const fu = playersRef.current.find(p => !p.isDead && p.hero.name === '伏皇后');
         if (fu && fu.id !== currentPlayer.id && fu.hp < fu.maxHp
             && fu.hand.length > 0 && currentPlayer.hand.length > 0) {
@@ -2369,8 +2379,8 @@ const App: React.FC = () => {
           addLog(`伏皇后发动「惴恐」，与 ${tp.hero.name} 拼点：${fuCard.name}${fuCard.rank} vs ${tCard.name}${tCard.rank}`, 'skill');
           showSkillBanner('伏皇后', '惴恐');
           if (rankValue(fuCard.rank) > rankValue(tCard.rank)) {
-            doutuSkipRef.current = tp.id;
-            addLog(`「惴恐」获胜，${tp.hero.name} 本回合跳过出牌阶段`, 'danger');
+            doutuSelfOnlyRef.current = tp.id;
+            addLog(`「惴恐」获胜，${tp.hero.name} 本回合使用牌不能选择除自己以外的角色为目标`, 'danger');
           } else {
             doutuDistanceRef.current[tp.id] = fu.id;
             addLog(`「惴恐」未获胜，${tp.hero.name} 本回合与伏皇后的距离视为 1`, 'info');
@@ -3287,20 +3297,10 @@ const App: React.FC = () => {
           await delay(400);
         }
 
-        // 伏皇后「惴恐」获胜：本回合跳过出牌阶段
-        if (doutuSkipRef.current === currentPlayer.id) {
-          doutuSkipRef.current = null;
-          addLog(`${currentPlayer.hero.name} 受「惴恐」影响，本回合跳过出牌阶段`, 'warning');
-          await delay(600);
-          dbgMark('action:setDiscard:doutu');
-          setPhase(GamePhase.DISCARD);
-        }
-        // 乐不思蜀已在判定阶段结算（judgeSkipRef.action），此处只处理惴恐与正常出牌
-        else {
-          // AI or Human Auto-Takeover
-          if (!currentPlayer.isHuman || isAiTakeover) {
-            await cpuAI(currentPlayer);
-          }
+        // 乐不思蜀已在判定阶段结算（judgeSkipRef.action）；「惴恐」获胜只限制目标，不再跳过出牌阶段
+        // AI or Human Auto-Takeover
+        if (!currentPlayer.isHuman || isAiTakeover) {
+          await cpuAI(currentPlayer);
         }
         // If human and not takeover, we wait for UI interaction.
       }
@@ -4546,10 +4546,30 @@ const App: React.FC = () => {
     })[0];
     const foes = playersRef.current.filter(p => !p.isDead && p.id !== ownerId && isEnemy(owner, p));
     const foesWithCards = foes.filter(p => p.hand.length > 0 || Object.values(p.equipment ?? {}).some(Boolean));
-    let declared: CardName = CardName.SHA;
-    if (level >= 2 && foesWithCards.length > 0) declared = CardName.GUOHE;
-    else if (level >= 2 && foes.length >= 2) declared = CardName.NANMAN;
-    else if (owner.hp <= 1 && level >= 3) declared = CardName.JIU;
+    // 可声明牌名：Lv1 基本牌；Lv2+ 基本牌或普通锦囊（仅纳入引擎已实现、且可指向其他角色的牌名）
+    const basicNames: CardName[] = [CardName.SHA];
+    const scrollNames: CardName[] = [CardName.GUOHE, CardName.SHUNSHOU, CardName.JUEDOU, CardName.NANMAN, CardName.WANJIAN];
+    const declarable: CardName[] = level >= 2 ? [...basicNames, ...scrollNames] : basicNames;
+    // AI 推荐：优先能拆牌的锦囊 / 群体伤害 / 单点决斗 / 杀
+    let aiDeclared: CardName = CardName.SHA;
+    if (level >= 2 && foesWithCards.length > 0) aiDeclared = CardName.GUOHE;
+    else if (level >= 2 && foes.length >= 2) aiDeclared = CardName.NANMAN;
+    else if (level >= 2 && foes.length > 0) aiDeclared = CardName.JUEDOU;
+    let declared: CardName = aiDeclared;
+    if (owner.isHuman && !isAiTakeover) {
+      const r = await requestSkillChoice({
+        skill: '矫诏',
+        owner: owner.hero.name,
+        title: `展示【${shown.name}】，选择本回合要声明的牌名`,
+        hint: level >= 2
+          ? '声明后本阶段将按声明的牌名结算，不能选择自己为目标'
+          : 'Lv1 只能声明基本牌；受伤后可提升等级（Lv2 起可声明普通锦囊）',
+        mode: 'choose',
+        choices: declarable.map(n => ({ id: n, label: `【${n}】` })),
+        cancelLabel: `按 AI 推荐（${aiDeclared}）`,
+      });
+      if (r && r.kind === 'choose' && declarable.includes(r.id as CardName)) declared = r.id as CardName;
+    }
     discardCards(ownerId, [shown]);
     addLog(`郭皇后发动「矫诏」(Lv${level})，展示【${shown.name}】并声称为【${declared}】`, 'skill');
     showSkillBanner('郭皇后', '矫诏');
@@ -4563,18 +4583,14 @@ const App: React.FC = () => {
       ...shown,
       id: `jiaozhao-${ownerId}-${Date.now()}`,
       name: declared,
-      type: declared === CardName.SHA || declared === CardName.JIU
+      type: declared === CardName.SHA
         ? CardType.BASIC
         : ([CardName.SHUNSHOU, CardName.GUOHE, CardName.JUEDOU, CardName.NANMAN, CardName.WANJIAN] as CardName[]).includes(declared)
           ? CardType.SCROLL
           : shown.type,
       description: `矫诏：将【${shown.name}】当【${declared}】使用`,
     };
-    if (declared === CardName.JIU) {
-      if (!window.jiuBoost) window.jiuBoost = {};
-      window.jiuBoost[ownerId] = true;
-      addLog('「矫诏」视为使用【酒】，下一张【杀】伤害+1', 'success');
-    } else if (([CardName.NANMAN, CardName.WANJIAN] as CardName[]).includes(declared)) {
+    if (([CardName.NANMAN, CardName.WANJIAN] as CardName[]).includes(declared)) {
       const targets = playersRef.current.filter(p => !p.isDead && p.id !== ownerId);
       if (targets.length) await resolveCardEffect(me, targets, virtual);
     } else {
@@ -5069,6 +5085,14 @@ const App: React.FC = () => {
     const targetProtection = getTargetProtection(target, effectiveCardName);
     if (target.id !== me.id && targetProtection) {
       addLog(`${target.hero.name} 发动「${targetProtection}」，不能成为该牌的目标`, 'skill');
+      setTimeout(() => { clickGuard.current = false; }, 200);
+      return;
+    }
+
+    // 伏皇后「惴恐」获胜：本回合使用牌不能选择除自己以外的角色为目标
+    if (doutuSelfOnlyRef.current === me.id && target.id !== me.id
+        && card.name !== CardName.TAO && card.name !== CardName.JIU) {
+      addLog(`${me.hero.name} 受「惴恐」影响，本回合不能选择其他角色为目标`, 'warning');
       setTimeout(() => { clickGuard.current = false; }, 200);
       return;
     }
@@ -5790,13 +5814,44 @@ const App: React.FC = () => {
         playCard(source.id, card);
         slashUsageRef.current[source.id] = (slashUsageRef.current[source.id] ?? 0) + 1;
 
-        // 朱雀羽扇：可以将一张普通【杀】当火【杀】使用（简化：装备后自动转化，不额外询问）
+        // 朱雀羽扇：你可以将一张普通【杀】当火【杀】使用。
+        // 人类：本回合首张普通【杀】弹窗询问，选择记住本回合；AI：目标有藤甲才转火。
         let slashCard = card;
         if (source.equipment?.weapon?.name === CardName.ZHUQUE && !card.attribute) {
-          slashCard = { ...card, attribute: 'fire' as const };
-          addLog(`【朱雀羽扇】${source.hero.name} 将普通【杀】转化为火【杀】使用`, 'skill');
-          showSkillBanner(source.hero.name, '朱雀羽扇');
-          await delay(300);
+          let pref = zhuquePrefRef.current[source.id];
+          if (!pref) {
+            // AI：只有目标穿【藤甲】（火杀击穿免疫且火伤+1）、且目标不是免疫火焰伤害的孙茹时才转火
+            const hasTengjia = targets.some(t => getPlayer(t.id)?.equipment?.armor?.name === CardName.TENGJIA);
+            const fireWasted = targets.every(t => {
+              const p = getPlayer(t.id);
+              return p && p.hero.name === '孙茹' && skillsOn(p.id);
+            });
+            let chosen: 'fire' | 'normal' = hasTengjia && !fireWasted ? 'fire' : 'normal';
+            if (source.isHuman && !isAiTakeover) {
+              const r = await requestSkillChoice({
+                skill: '朱雀羽扇',
+                owner: source.hero.name,
+                title: '是否将这张普通【杀】以火【杀】使用？',
+                hint: '火【杀】可击穿【藤甲】的锁定技并使火焰伤害+1；选择会被记住本回合，后续普通【杀】不再询问',
+                mode: 'choose',
+                choices: [
+                  { id: 'fire', label: '以火【杀】使用' },
+                  { id: 'normal', label: '以普通【杀】使用' },
+                ],
+                cancelLabel: '以普通【杀】使用',
+              });
+              chosen = r && r.kind === 'choose' && r.id === 'fire' ? 'fire' : 'normal';
+            }
+            pref = chosen;
+            zhuquePrefRef.current[source.id] = chosen;
+            addLog(`【朱雀羽扇】${source.hero.name} 本回合偏好：${chosen === 'fire' ? '火【杀】' : '普通【杀】'}（后续普通【杀】按此偏好自动处理）`, 'skill');
+          }
+          if (pref === 'fire') {
+            slashCard = { ...card, attribute: 'fire' as const };
+            addLog(`【朱雀羽扇】${source.hero.name} 将普通【杀】转化为火【杀】使用`, 'skill');
+            showSkillBanner(source.hero.name, '朱雀羽扇');
+            await delay(300);
+          }
         }
 
         // 方天画戟：打出最后一张手牌【杀】时，可额外指定最多 2 名范围内的角色
@@ -5851,11 +5906,34 @@ const App: React.FC = () => {
             }
           }
 
-          // 曹节「守玺」：成为【杀】的目标后，声明一种牌名（简化：声明【杀】），
+          // 曹节「守玺」：成为【杀】的目标后，声明一种未以此法声明过的基本牌或锦囊牌牌名，
           // 除非使用者弃置一张该牌名的牌并获得曹节一张牌，否则此【杀】无效。
           if (effectiveTarget.hero.name === '曹节' && source.id !== effectiveTarget.id) {
-            const declared = CardName.SHA;
-            if (!shouxiDeclaredRef.current.has(declared)) {
+            const declarable = ([
+              CardName.SHA, CardName.SHAN, CardName.TAO, CardName.JIU,
+              CardName.WUXIE, CardName.GUOHE, CardName.SHUNSHOU, CardName.JUEDOU,
+              CardName.NANMAN, CardName.WANJIAN, CardName.WUZHONG,
+            ] as CardName[]).filter(n => !shouxiDeclaredRef.current.has(n));
+            let declared: CardName | null = null;
+            if (declarable.length > 0) {
+              if (effectiveTarget.isHuman && !isAiTakeover) {
+                const r = await requestSkillChoice({
+                  skill: '守玺',
+                  owner: '曹节',
+                  title: '选择要声明的牌名（每种牌名本局限一次）',
+                  hint: '若使用者弃置一张该牌名的牌并获得你一张牌，此【杀】继续；否则此【杀】对你无效',
+                  mode: 'choose',
+                  choices: declarable.map(n => ({ id: n, label: `【${n}】` })),
+                  cancelLabel: '放弃守玺',
+                });
+                if (r && r.kind === 'choose') declared = r.id as CardName;
+              } else {
+                // AI：优先声明对手最可能拿不出、且价值高的牌名
+                const prio: CardName[] = [CardName.TAO, CardName.WUXIE, CardName.WANJIAN, CardName.SHAN, CardName.SHA];
+                declared = prio.find(n => declarable.includes(n)) ?? declarable[0];
+              }
+            }
+            if (declared && !shouxiDeclaredRef.current.has(declared)) {
               shouxiDeclaredRef.current.add(declared);
               const payer = getPlayer(source.id);
               const payCard = payer?.hand.find(c => c.name === declared);
@@ -5871,7 +5949,7 @@ const App: React.FC = () => {
                 showSkillBanner(effectiveTarget.hero.name, '守玺');
                 await delay(450);
               } else {
-                addLog(`${effectiveTarget.hero.name} 发动「守玺」声明【${declared}】，${source.hero.name} 未支付，此【杀】无效`, 'skill');
+                addLog(`${effectiveTarget.hero.name} 发动「守玺」声明【${declared}】，${source.hero.name} 未支付（手牌中无【${declared}】或不足4张），此【杀】无效`, 'skill');
                 showSkillBanner(effectiveTarget.hero.name, '守玺');
                 await delay(450);
                 continue;
@@ -6010,7 +6088,8 @@ const App: React.FC = () => {
           }
 
           const hpBefore = getPlayer(effectiveTarget.id)?.hp ?? 0;
-          await triggerReaction(effectiveTarget.id, source.id, CardName.SHAN, card);
+          // 用转换后的牌结算（火【杀】造成火焰伤害）
+          await triggerReaction(effectiveTarget.id, source.id, CardName.SHAN, slashCard);
           const hpAfter = getPlayer(effectiveTarget.id)?.hp ?? 0;
 
           // 贯石斧：被【闪】抵消时，可弃两张牌令此【杀】依然造成伤害
@@ -6054,6 +6133,23 @@ const App: React.FC = () => {
          if (protect) {
            addLog(`${target.hero.name} 发动「${protect}」，【决斗】无效`, 'skill');
            return;
+         }
+         // 马云禄「凤魄」：回合内第一张【杀】或【决斗】仅指定唯一目标后，
+         // 可令自己摸 X 张牌或此牌伤害 +X（X 为目标方块手牌数）
+         if (source.hero.name === '马云禄' && !fengpoUsedRef.current) {
+           fengpoUsedRef.current = true;
+           const x = target.hand.filter(c => c.suit === Suit.DIAMOND).length;
+           if (x > 0) {
+             if (target.hp <= x + 1) {
+               fengpoBoostRef.current[card.id] = x;
+               addLog(`${source.hero.name} 发动「凤魄」，${target.hero.name} 有 ${x} 张方块手牌，此【决斗】伤害 +${x}`, 'skill');
+             } else {
+               drawCards(source.id, x);
+               addLog(`${source.hero.name} 发动「凤魄」，${target.hero.name} 有 ${x} 张方块手牌，${source.hero.name} 摸 ${x} 张牌`, 'skill');
+             }
+             showSkillBanner(source.hero.name, '凤魄');
+             await delay(400);
+           }
          }
         playCard(source.id, card);
          addLog(`${source.hero.name} 找 ${target.hero.name} 决斗！`, 'danger');
