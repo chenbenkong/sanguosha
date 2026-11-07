@@ -36,22 +36,33 @@
   .skill-glow { animation: none; box-shadow: 0 0 20px 6px rgba(212, 175, 55, 0.45); }
 }
 
-/* ===== AI 思考：头像外圈暖金呼吸光 ===== */
-@keyframes aiThinkingPulse {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(255, 214, 140, 0); }
-  50% { box-shadow: 0 0 0 4px rgba(255, 214, 140, 0.22), 0 0 26px 10px rgba(255, 200, 110, 0.34); }
+/* ===== AI 思考：头像外圈暖金呼吸光 =====
+   呼吸只动伪元素的 opacity（可走合成层），不再逐帧重绘 box-shadow */
+@keyframes aiThinkingFade {
+  0%, 100% { opacity: 0; }
+  50% { opacity: 1; }
 }
 .ai-thinking {
-  animation: aiThinkingPulse 1.15s ease-in-out infinite;
   border-radius: 10px;
+}
+.ai-thinking::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 10px;
+  pointer-events: none;
+  box-shadow: 0 0 0 4px rgba(255, 214, 140, 0.22), 0 0 26px 10px rgba(255, 200, 110, 0.34);
+  opacity: 0;
+  will-change: opacity;
+  animation: aiThinkingFade 1.15s ease-in-out infinite;
 }
 .ai-thinking img {
   filter: brightness(1.1) saturate(1.06);
 }
 @media (prefers-reduced-motion: reduce) {
-  .ai-thinking {
+  .ai-thinking::before {
     animation: none;
-    box-shadow: 0 0 0 3px rgba(232, 207, 148, 0.14), 0 0 16px 6px rgba(232, 207, 148, 0.22);
+    opacity: 0.55;
   }
   .ai-thinking img { filter: none; }
 }
@@ -346,16 +357,27 @@
 .hp-fish-empty::after {
   background: radial-gradient(ellipse at 50% 28%, rgba(255, 255, 255, 0.06), rgba(0, 0, 0, 0) 72%);
 }
-/* 残血：朱红呼吸警示 */
-.hp-fish-low {
-  animation: hpFishPulse 1.15s ease-in-out infinite;
+/* 残血：朱红呼吸警示（同样只动伪元素 opacity，避免逐帧重绘 box-shadow） */
+@keyframes hpFishFade {
+  0%, 100% { opacity: 0.35; }
+  50% { opacity: 1; }
 }
-@keyframes hpFishPulse {
-  0%, 100% { box-shadow: inset 0 -1px 3px rgba(0, 0, 0, 0.55), 0 0 6px 1px rgba(200, 45, 35, 0.55); }
-  50% { box-shadow: inset 0 -1px 3px rgba(0, 0, 0, 0.55), 0 0 12px 3px rgba(228, 70, 55, 0.85); }
+.hp-fish-low::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  box-shadow: 0 0 12px 3px rgba(228, 70, 55, 0.85);
+  opacity: 0.35;
+  will-change: opacity;
+  animation: hpFishFade 1.15s ease-in-out infinite;
 }
 @media (prefers-reduced-motion: reduce) {
-  .hp-fish-low { animation: none; box-shadow: inset 0 -1px 3px rgba(0, 0, 0, 0.55), 0 0 10px 2px rgba(228, 70, 55, 0.8); }
+  .hp-fish-low::before {
+    animation: none;
+    opacity: 0.85;
+  }
 }
 
 /* ===== 势力色（魏蓝 / 蜀红 / 吴绿 / 群金）===== */
@@ -2741,10 +2763,11 @@ a:focus-visible {
   82%  { opacity: 1; transform: translateX(0) scale(1); }
   100% { opacity: 0; transform: translateX(8px) scale(1); }
 }
+/* 技能名入场：只动 transform / opacity（letter-spacing 会触发布局与逐帧重绘），字距保持静态 */
 @keyframes fxSkillNameIn {
-  0%   { opacity: 0; transform: scale(1.16); letter-spacing: 0.5em; }
+  0%   { opacity: 0; transform: scale(1.16); }
   60%  { opacity: 1; transform: scale(1); }
-  100% { opacity: 1; transform: scale(1); letter-spacing: 0.35em; }
+  100% { opacity: 1; transform: scale(1); }
 }
 @keyframes fxSkillSweep {
   0%   { opacity: 0.9; transform: translateX(-70%); }
