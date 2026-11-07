@@ -858,6 +858,14 @@ const App: React.FC = () => {
   }, []);
 
   const updatePlayer = (id: number, updates: Partial<Player>) => {
+    // 董白「黠慧」：体力值减少后，解除对获得的黑色牌的使用/打出/弃置限制
+    if (updates.hp != null) {
+      const before = playersRef.current.find(p => p.id === id);
+      if (before && updates.hp < before.hp && xiaohuiLockRef.current[id]?.length) {
+        delete xiaohuiLockRef.current[id];
+        addLog(`【黠慧】${before.hero.name} 体力值减少，被禁用的黑色牌恢复使用`, 'info');
+      }
+    }
     setPlayers(prev => {
       const updated = prev.map(p => p.id === id ? { ...p, ...updates } : p);
       // 更新ref中的最新状态
@@ -929,6 +937,20 @@ const App: React.FC = () => {
   };
   const skillsOn = (id: number) => !isSkillSealed(id)
     && !(playersRef.current.find(p => p.id === id)?.generalRemoved);
+
+  // 董白「黠慧」：其他角色获得董白的黑色牌后，在其体力值减少前不能使用、打出、弃置这些牌
+  const xiaohuiLockRef = useRef<Record<number, string[]>>({}); // 角色 id → 被锁定的牌 id
+  const xiaohuiLocked = (playerId: number, cardId: string) => (xiaohuiLockRef.current[playerId] ?? []).includes(cardId);
+  const lockXiaohuiCards = (ownerId: number, receiverId: number, cards: Card[]) => {
+    const owner = playersRef.current.find(p => p.id === ownerId);
+    if (!owner || owner.isDead || owner.hero.name !== '董白' || !skillsOn(ownerId)) return;
+    const black = cards.filter(c => c.suit === Suit.SPADE || c.suit === Suit.CLUB);
+    if (!black.length) return;
+    xiaohuiLockRef.current[receiverId] = [...(xiaohuiLockRef.current[receiverId] ?? []), ...black.map(c => c.id)];
+    const who = playersRef.current.find(p => p.id === receiverId)?.hero.name ?? '';
+    addLog(`【黠慧】${who} 获得的黑色牌【${black.map(c => c.name).join('、')}】在其体力减少前不能使用、打出、弃置`, 'skill');
+    showSkillBanner('董白', '黠慧');
+  };
 
   // ══ 通用机制：武将牌明置 / 暗置 / 移除，以及临时技能授予 ══
   // 供「闺秀 / 存嗣」等技能复用：状态可查询、事件进战报、技能授予可到期回归
@@ -1434,6 +1456,11 @@ const App: React.FC = () => {
     if (!meta) return false;
     const player = getPlayer(playerId);
     if (!player) return false;
+    // 董白「黠慧」：体力未减少时，获得的黑色牌不能使用（装备牌同样受限）
+    if (xiaohuiLocked(playerId, card.id)) {
+      addLog(`【黠慧】${player.hero.name} 获得的黑色牌【${card.name}】在体力减少前不能使用`, 'warning');
+      return false;
+    }
     // 孙鲁育「魅步」止息：使用装备牌同样计入"至多使用 X 张牌"
     const zx = zhixiRef.current;
     if (zx && zx.id === playerId && zx.used >= zx.limit) {
@@ -1932,6 +1959,12 @@ const App: React.FC = () => {
     // 「约俭」已在结算前获得该牌：从此处跳过，避免同一张牌既入手又进弃牌堆
     const cardsToDiscard = cardsToDiscardIn.filter(c => {
       if (yuejianGainedRef.current.has(c.id)) { yuejianGainedRef.current.delete(c.id); return false; }
+      // 董白「黠慧」：他人获得的黑色牌在体力减少前不能弃置
+      if (xiaohuiLocked(playerId, c.id)) {
+        const owner = getPlayer(playerId);
+        addLog(`【黠慧】${owner?.hero.name ?? ''} 不能弃置获得的黑色牌【${c.name}】（体力未减少）`, 'warning');
+        return false;
+      }
       return true;
     });
     if (!cardsToDiscard.length) return;
@@ -3098,8 +3131,6 @@ const App: React.FC = () => {
             if (!own) break;
             const colorSame = shown.some(c => isRed(c) === isRed(own));
             const rankSame = shown.some(c => c.rank === own.rank);
-            // AI 规避：颜色与点数都不同会让手牌上限 -1，宁可不发动
-            if (!colorSame && !rankSame) break;
             updatePlayer(me.id, {
               zhongjianCount: (me.zhongjianCount ?? 0) + 1,
               zhongjianLimit: rankSame ? 2 : (me.zhongjianLimit ?? 1),
@@ -3107,10 +3138,18 @@ const App: React.FC = () => {
             addLog(`【忠鉴】辛宪英展示【${own.name}】(${own.suit}${own.rank})，${target.hero.name} 展示 ${shown.map(c => `【${c.name}】(${c.suit}${c.rank})`).join('、')}`, 'skill');
             showSkillBanner('辛宪英', '忠鉴');
             if (rankSame) addLog('【忠鉴】双方展示牌点数相同，本回合「忠鉴」改为限两次', 'skill');
-            if (colorSame) {
+            if (rankSame) {
               const victimCard = [...shown].sort((a, b) => b.value - a.value)[0];
               discardCards(target.id, [victimCard]);
-              addLog(`【忠鉴】双方展示牌颜色相同，辛宪英弃置 ${target.hero.name} 的【${victimCard.name}】`, 'info');
+              addLog(`【忠鉴】双方展示牌点数相同，辛宪英弃置 ${target.hero.name} 的【${victimCard.name}】`, 'info');
+            }
+            if (colorSame) {
+              drawCards(me.id, 1);
+              addLog('【忠鉴】双方展示牌颜色相同，辛宪英摸一张牌', 'success');
+            }
+            if (!colorSame && !rankSame) {
+              updatePlayer(me.id, { maxHp: me.maxHp - 1 });
+              addLog('【忠鉴】双方展示牌颜色与点数都不同，辛宪英减1点体力上限', 'danger');
             }
             await delay(350);
             guard++;
@@ -3130,6 +3169,7 @@ const App: React.FC = () => {
               lianzhuUsedRef.current = true;
               mutateHand(me.id, h => h.filter(c => c.id !== card.id));
               mutateHand(target.id, h => [...h, card]);
+              lockXiaohuiCards(me.id, target.id, [card]);
               addLog(`【连诛】董白展示并交给 ${target.hero.name} 【${card.name}】`, 'skill');
               showSkillBanner('董白', '连诛');
               await delay(400);
@@ -4201,6 +4241,13 @@ const App: React.FC = () => {
         setTimeout(() => { clickGuard.current = false; }, 120);
         return;
       }
+
+      // 董白「黠慧」：体力未减少时，从董白处获得的黑色牌不能打出
+      if (card && xiaohuiLocked(me.id, card.id)) {
+        addLog(`「黠慧」：你获得的黑色牌【${card.name}】在体力减少前不能打出`, 'warning');
+        setTimeout(() => { clickGuard.current = false; }, 120);
+        return;
+      }
       
       // 检查是否使用了无懈可击（仅无懈响应阶段可打出）
       if (card.name === CardName.WUXIE && neededCard === CardName.WUXIE && responder.hand.some(c => c.name === CardName.WUXIE)) {
@@ -5009,6 +5056,12 @@ const App: React.FC = () => {
     const card = me.hand.find(c => c.id === selectedCardIds[0]);
 
     if (!target || !card || target.isDead) return;
+    // 董白「黠慧」：体力未减少时，获得的黑色牌不能使用
+    if (xiaohuiLocked(me.id, card.id)) {
+      addLog(`【黠慧】你获得的黑色牌【${card.name}】在体力减少前不能使用`, 'warning');
+      setTimeout(() => { clickGuard.current = false; }, 200);
+      return;
+    }
     // 孙鲁育「魅步」止息：本回合使用牌已达上限
     {
       const zx = zhixiRef.current;
@@ -5200,6 +5253,11 @@ const App: React.FC = () => {
     const me = players.find(p => p.isHuman) || players[0];
     const card = me.hand.find(c => c.id === selectedCardIds[0]);
     if (!card) return;
+    // 董白「黠慧」：体力未减少时，获得的黑色牌不能使用
+    if (xiaohuiLocked(me.id, card.id)) {
+      addLog(`【黠慧】你获得的黑色牌【${card.name}】在体力减少前不能使用`, 'warning');
+      return;
+    }
     // 孙鲁育「魅步」止息：本回合使用牌已达上限
     {
       const zx = zhixiRef.current;
@@ -5636,6 +5694,11 @@ const App: React.FC = () => {
   };
 
   const resolveCardEffect = async (source: Player, targets: Player[], card: Card) => {
+    // 董白「黠慧」：他人获得的黑色牌在体力减少前不能使用
+    if (xiaohuiLocked(source.id, card.id)) {
+      addLog(`【黠慧】${source.hero.name} 不能使用获得的黑色牌【${card.name}】（体力未减少）`, 'warning');
+      return;
+    }
     if (fxFly && targets.length > 0) spawnCardFlight(card, source.id, targets[0].id);
     setIsProcessing(p => p + 1);
     // 孙鲁育「魅步」止息：统计本回合已使用的牌数（打出响应不经过此处，不受限制）
@@ -6357,6 +6420,7 @@ const App: React.FC = () => {
               });
               updatePlayer(target.id, { equipment: nextEquip });
               mutateHand(source.id, hand => [...hand, stolenEquip]);
+              lockXiaohuiCards(target.id, source.id, [stolenEquip]);
               onEquipLost(target.id, stolenEquip.name);
               triggerXiaoji(target.id);
               addLog(`${source.hero.name} 顺手牵走了 ${target.hero.name} 的装备【${stolenEquip.name}】`, 'chat');
@@ -6368,6 +6432,7 @@ const App: React.FC = () => {
               // 从目标手牌中移除、加入自己手牌（基于最新 state，避免旧闭包导致卡牌复活）
               mutateHand(target.id, hand => hand.filter(c => c.id !== stolenCard.id));
               mutateHand(source.id, hand => [...hand, stolenCard]);
+              lockXiaohuiCards(target.id, source.id, [stolenCard]);
 
               addLog(`${source.hero.name} 从 ${target.hero.name} 那里偷到了【${stolenCard.name}】`, 'chat');
               triggerWanwei(target.id, [stolenCard.name]);
@@ -6949,6 +7014,16 @@ const App: React.FC = () => {
         await delay(1000); 
         let hasCard = responder.hand.some(c => c.name === neededCard);
         let cardToPlay = responder.hand.find(c => c.name === neededCard);
+        // 董白「黠慧」：体力未减少时，获得的黑色牌不能打出
+        if (cardToPlay && xiaohuiLocked(responder.id, cardToPlay.id)) {
+          addLog(`【黠慧】${responder.hero.name} 不能打出获得的黑色牌【${cardToPlay.name}】（体力未减少）`, 'warning');
+          showSkillBanner('董白', '黠慧');
+          if (neededCard === CardName.WUXIE) return false;
+          cardToPlay = undefined;
+          await delay(300);
+          await takeDamage(responderId, sourceId, 1, triggerCard);
+          return false;
+        }
         let isUsingSkill = false;
         
         // 检查是否为无懈可击判定
