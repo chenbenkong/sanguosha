@@ -4204,6 +4204,9 @@ const App: React.FC = () => {
           } else {
             addLog(`${me.hero.name} 打出了【${card.name}】`, 'info');
           }
+
+          // 鲍三娘「姝勇」：打出【杀】同样触发（决斗/南蛮/借刀等响应）
+          if (neededCard === CardName.SHA) void triggerShuyong(me.id);
           
           if (humanReactionResolver.current) {
             humanReactionResolver.current({ played: true, isWuxie: false });
@@ -5767,16 +5770,7 @@ const App: React.FC = () => {
 
       // 鲍三娘「姝勇」：使用【杀】时，获得一名其他角色区域内的一张牌，然后其摸一张牌
       if (source.hero.name === '鲍三娘' && card.name === CardName.SHA && skillsOn(source.id)) {
-        const victim = targets.find(t => t.id !== source.id && !t.isDead && t.hand.length > 0);
-        if (victim) {
-          const stolen = [...victim.hand].sort((a, b) => a.value - b.value)[0];
-          mutateHand(victim.id, h => h.filter(c => c.id !== stolen.id));
-          mutateHand(source.id, h => [...h, stolen]);
-          addLog(`【姝勇】鲍三娘获得 ${victim.hero.name} 的【${stolen.name}】，其摸一张牌`, 'skill');
-          showSkillBanner('鲍三娘', '姝勇');
-          drawCards(victim.id, 1);
-          await delay(300);
-        }
+        await triggerShuyong(source.id, targets.find(t => t.id !== source.id)?.id);
       }
 
       // 鲍三娘「镇南」：非【杀】的多目标牌在此结算；多目标【杀】在 slashTargets 确定后结算
@@ -6971,6 +6965,9 @@ const App: React.FC = () => {
           } else {
             addLog(`${responder.hero.name} 打出了【${neededCard}】`, 'info');
           }
+
+          // 鲍三娘「姝勇」：打出【杀】同样触发（决斗/南蛮/借刀等响应）
+          if (neededCard === CardName.SHA) await triggerShuyong(responder.id, sourceId);
           
           
           
@@ -7485,6 +7482,55 @@ const App: React.FC = () => {
     showSkillBanner('鲍三娘', '镇南');
     await delay(300);
     await takeDamage(srcNow.id, bao.id, 1, card);
+  };
+
+  // 鲍三娘「姝勇」：使用或打出【杀】时，可获得一名其他角色区域内
+  // （手牌 / 装备区 / 判定区）的一张牌，然后其摸一张牌。
+  const triggerShuyong = async (ownerId: number, preferredVictimId?: number) => {
+    const bao = getPlayer(ownerId);
+    if (!bao || bao.isDead || bao.hero.name !== '鲍三娘' || !skillsOn(ownerId)) return;
+    type ZoneEntry = { card: Card; zone: 'hand' | 'equip' | 'judge'; slot?: string };
+    const zonesOf = (p: Player): ZoneEntry[] => {
+      const entries: ZoneEntry[] = [];
+      p.hand.forEach(c => entries.push({ card: c, zone: 'hand' }));
+      Object.entries(p.equipment ?? {}).forEach(([slot, c]) => {
+        if (c) entries.push({ card: c as Card, zone: 'equip', slot });
+      });
+      (p.judgeZone ?? []).forEach(c => entries.push({ card: c, zone: 'judge' }));
+      return entries;
+    };
+    const pool = playersRef.current.filter(p => !p.isDead && p.id !== ownerId && zonesOf(p).length > 0);
+    if (pool.length === 0) return;
+    const victim = (preferredVictimId != null ? pool.find(p => p.id === preferredVictimId) : undefined)
+      ?? [...pool].sort((a, b) => b.hand.length - a.hand.length)[0];
+    const entries = zonesOf(victim);
+    const handEntries = entries.filter(e => e.zone === 'hand');
+    const entry = handEntries.sort((a, b) => a.card.value - b.card.value)[0]
+      ?? entries.find(e => e.zone === 'equip')
+      ?? entries[0];
+    if (!entry) return;
+    if (entry.zone === 'hand') {
+      mutateHand(victim.id, h => h.filter(c => c.id !== entry.card.id));
+    } else if (entry.zone === 'equip') {
+      const nextEquip = { ...(victim.equipment ?? {}) };
+      if (entry.slot) delete nextEquip[entry.slot as keyof typeof nextEquip];
+      updatePlayer(victim.id, { equipment: nextEquip });
+      onEquipLost(victim.id, entry.card.name);
+    } else {
+      const zone = (victim.judgeZone ?? []).filter(c => c.id !== entry.card.id);
+      updatePlayer(victim.id, {
+        judgeZone: zone,
+        isLeBuSiShu: zone.some(c => c.name === CardName.LESI),
+        isBingLiangCunDuan: zone.some(c => c.name === CardName.BINGLIANG),
+        isShandian: zone.some(c => c.name === CardName.SHANDIAN),
+      });
+    }
+    mutateHand(ownerId, h => [...h, entry.card]);
+    const zoneLabel = entry.zone === 'hand' ? '手牌' : entry.zone === 'equip' ? '装备区' : '判定区';
+    addLog(`【姝勇】鲍三娘获得 ${victim.hero.name} ${zoneLabel}的【${entry.card.name}】，其摸一张牌`, 'skill');
+    showSkillBanner('鲍三娘', '姝勇');
+    drawCards(victim.id, 1);
+    await delay(300);
   };
 
   // 王异「贞烈」：成为【杀】或非延时锦囊目标时，失去1点体力弃其一张手牌，令此牌无效
