@@ -7046,8 +7046,11 @@ const App: React.FC = () => {
       const isWuxieCheck = neededCard === CardName.WUXIE;
       
       // 检查是否为吕布的无双技能
+      // 官方「无双」：仅【杀】需两张【闪】、仅【决斗】需两张【杀】；【南蛮入侵】【万箭齐发】不双牌
       const isLubuWushuang = source.hero.name === '吕布';
-      const needTwoCards = isLubuWushuang && !isSecondReaction && (neededCard === CardName.SHAN || neededCard === CardName.SHA);
+      const needTwoCards = isLubuWushuang && !isSecondReaction
+        && ((triggerCard.name === CardName.SHA && neededCard === CardName.SHAN)
+          || (triggerCard.name === CardName.JUEDOU && neededCard === CardName.SHA));
       const wushuangCardName = neededCard === CardName.SHAN ? '闪' : '杀';
 
       // 八卦阵：需要【闪】时自动判定，红色视为打出【闪】（青釭剑无视防具）
