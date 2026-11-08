@@ -1416,10 +1416,19 @@ const App: React.FC = () => {
   const recoverHp = (playerId: number, amount: number) => {
     const p = getPlayer(playerId);
     if (!p || p.isDead || amount <= 0) return 0;
-    const next = Math.min(p.maxHp, p.hp + amount);
-    const gained = next - p.hp;
+    const gained = Math.min(p.maxHp, p.hp + amount) - p.hp;
     if (gained <= 0) return 0;
-    updatePlayer(playerId, { hp: next });
+    // 按 prev 的当前体力累加回复量，而不是用读到的旧 hp 写绝对值：
+    // 同一批连续回复（如濒死连吃两颗桃）时，第二次不能覆盖第一次。
+    const applyHeal = (x: Player): Player => x.id === playerId && !x.isDead
+      ? { ...x, hp: Math.min(x.maxHp, x.hp + gained) }
+      : x;
+    playersRef.current = playersRef.current.map(applyHeal);
+    setPlayers(prev => {
+      const updated = prev.map(applyHeal);
+      playersRef.current = updated;
+      return updated;
+    });
     const healed = getPlayer(playerId);
     if (healed && healed.hero.name === '甘夫人' && skillsOn(healed.id)) {
       // 官方：每回复 1 点体力，可令一名「其他角色」（不限友方）摸一张牌
@@ -1782,8 +1791,10 @@ const App: React.FC = () => {
         __devDeckOnly?: (names: string[]) => void;
         __devUseCard?: (sourceId: number, targetId: number, names: string[]) => Promise<void>;
         __devLogs?: () => string[];
+        __devDiscard?: () => Array<{ id: string; name: string; suit: string }>;
       };
       devWin.__devLogs = () => logsRef.current.map(l => l.text);
+      devWin.__devDiscard = () => discardPileRef.current.map(c => ({ id: c.id, name: c.name, suit: c.suit }));
       devWin.__devState = () => playersRef.current.map(p => ({
         id: p.id,
         name: p.hero.name,
@@ -3550,7 +3561,7 @@ const App: React.FC = () => {
               showSkillBanner('孙鲁育', '穆穆');
               await delay(300);
             }
-          } else if (!currentPlayer.equipment?.armor) {
+          } else if (!getPlayer(currentPlayer.id)?.equipment?.armor) {
             const armorOwner = playersRef.current.find(p => !p.isDead && p.id !== currentPlayer.id
               && (p.equipment?.armor as Card | undefined) && isAlly(currentPlayer, p));
             if (armorOwner?.equipment?.armor) {
@@ -3559,7 +3570,7 @@ const App: React.FC = () => {
               delete nextEquip.armor;
               updatePlayer(armorOwner.id, { equipment: nextEquip });
               updatePlayer(currentPlayer.id, {
-                equipment: { ...(currentPlayer.equipment ?? {}), armor },
+                equipment: { ...(getPlayer(currentPlayer.id)?.equipment ?? {}), armor },
               });
               addLog(`孙鲁育发动「穆穆」，获得 ${armorOwner.hero.name} 的【${armor.name}】，本回合不能使用或打出【杀】`, 'skill');
               showSkillBanner('孙鲁育', '穆穆');
@@ -7340,13 +7351,13 @@ const App: React.FC = () => {
         // 目标展示一张手牌
         const shownCard = target.hand[Math.floor(Math.random() * target.hand.length)];
         addLog(`${target.hero.name} 展示了手牌【${shownCard.name}】(${shownCard.suit})`, 'info');
-        // 检查源玩家是否有同花色手牌
-        const sameSuitCard = source.hand.find(c => c.suit === shownCard.suit);
+        // 检查源玩家是否有同花色手牌（必须读当前手牌：source 是出牌前快照，已包含刚打出的【火攻】）
+        // 且排除刚打出的这张【火攻】本身：它已在弃牌堆，不能再被选作弃置的同花色牌
+        const liveSrc = getPlayer(source.id) ?? source;
+        const sameSuitCard = liveSrc.hand.find(c => c.suit === shownCard.suit && c.id !== card.id);
         if (sameSuitCard) {
-          // 弃置同花色手牌并造成伤害
-          updatePlayer(source.id, {
-            hand: source.hand.filter(c => c.id !== sameSuitCard.id)
-          });
+          // 弃置同花色手牌并造成伤害（用函数式移除，不能整手牌写回出牌前快照，否则会复制回已打出的牌）
+          mutateHand(source.id, h => h.filter(c => c.id !== sameSuitCard.id));
           setDiscardPile(prev => [...prev, sameSuitCard]);
           addLog(`${source.hero.name} 弃置了【${sameSuitCard.name}】(${sameSuitCard.suit})，对 ${target.hero.name} 造成1点火焰伤害！`, 'danger');
           // 属性伤害统一由 takeDamage 处理（含藤甲加伤与铁索传导）
