@@ -8652,13 +8652,54 @@ const App: React.FC = () => {
     if (!owner || owner.isDead || owner.hero.name !== '关银屏' || xuejiUsedRef.current) return;
     const lost = owner.maxHp - owner.hp;
     if (lost <= 0) return;
-    const cost = owner.hand.find(c => c.suit === Suit.HEART || c.suit === Suit.DIAMOND);
-    if (!cost) return;
-    const victims = playersRef.current
-      .filter(p => !p.isDead && p.id !== ownerId && canReach(owner, p) && isEnemy(owner, p))
-      .sort((a, b) => a.hp - b.hp || a.hand.length - b.hand.length)
-      .slice(0, lost);
-    if (victims.length === 0) return;
+    const redCards = owner.hand.filter(c => c.suit === Suit.HEART || c.suit === Suit.DIAMOND);
+    if (redCards.length === 0) return;
+    // 官方：攻击范围内至多 X 名「其他角色」，不限敌我
+    const candidates = playersRef.current.filter(p => !p.isDead && p.id !== ownerId && canReach(owner, p));
+    if (candidates.length === 0) return;
+    const maxVictims = Math.min(lost, candidates.length);
+
+    let cost = redCards[0];
+    let victims: Player[] = [];
+    if (owner.isHuman && !isAiTakeover) {
+      // 人类：先选弃置的红色牌，再选至多 X 名范围内的任意其他角色
+      if (redCards.length > 1) {
+        const pickCard = await requestSkillChoice({
+          skill: '血祭',
+          owner: owner.hero.name,
+          title: '选择要弃置的红色牌',
+          mode: 'card',
+          cards: redCards,
+          min: 1,
+          max: 1,
+          cancelLabel: '不发动',
+        });
+        if (!pickCard || pickCard.kind === 'cancel' || pickCard.kind === 'timeout') return;
+        if (pickCard.kind === 'card' && pickCard.ids.length) {
+          cost = redCards.find(c => c.id === pickCard.ids[0]) ?? redCards[0];
+        }
+      }
+      const pickTargets = await requestSkillChoice({
+        skill: '血祭',
+        owner: owner.hero.name,
+        title: `选择至多 ${maxVictims} 名攻击范围内的角色（已损失体力 ${lost}）`,
+        hint: '可指定任意其他角色，不限敌我；伤害结算后目标各摸一张牌',
+        mode: 'target',
+        targets: candidates.map(p => ({ id: p.id, name: p.hero.name, sub: `体力 ${p.hp}/${p.maxHp}` })),
+        min: 1,
+        max: maxVictims,
+        cancelLabel: '不发动',
+      });
+      if (!pickTargets || pickTargets.kind === 'cancel' || pickTargets.kind === 'timeout') return;
+      victims = candidates.filter(p => pickTargets.kind === 'target' && pickTargets.ids.includes(p.id));
+      if (victims.length === 0) return;
+    } else {
+      victims = candidates
+        .filter(p => isEnemy(owner, p))
+        .sort((a, b) => a.hp - b.hp || a.hand.length - b.hand.length)
+        .slice(0, maxVictims);
+      if (victims.length === 0) return;
+    }
     xuejiUsedRef.current = true;
     setHasUsedXueji(true);
     discardCards(ownerId, [cost]);
@@ -8669,7 +8710,10 @@ const App: React.FC = () => {
       if (getPlayer(t.id)?.isDead) continue;
       await takeDamage(t.id, ownerId, 1);
       const after = getPlayer(t.id);
-      if (after && !after.isDead) drawCards(t.id, 1);
+      if (after && !after.isDead) {
+        drawCards(t.id, 1);
+        addLog(`「血祭」${after.hero.name} 摸一张牌`, 'info');
+      }
     }
   };
 
@@ -10176,7 +10220,7 @@ const App: React.FC = () => {
                   return (
                     <button
                       key={t.id}
-                      onClick={() => toggleSkillChoiceItem(String(t.id), true)}
+                      onClick={() => toggleSkillChoiceItem(String(t.id), (skillChoice.max ?? 1) <= 1)}
                       className={`btn-ink min-h-[44px] px-3 py-2 rounded-lg text-sm ${on ? 'ring-2 ring-[#e8cf94]' : ''}`}
                     >
                       <span className="font-bold">{t.name}</span>
