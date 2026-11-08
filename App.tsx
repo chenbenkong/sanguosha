@@ -1747,7 +1747,7 @@ const App: React.FC = () => {
       const devWin = window as unknown as {
         __devState?: () => Array<{ id: number; name: string; hp: number; maxHp: number; identity: string; isHuman: boolean; hand: string[]; equip: string[]; sealed: boolean; judge: string[] }>;
         __devPatch?: (spec: Array<{ id: number; hp?: number; maxHp?: number; hand?: string[]; equip?: string[]; marks?: number }>) => void;
-        __devDamage?: (victimId: number, sourceId: number, amount: number, nature?: 'fire' | 'thunder') => void;
+        __devDamage?: (victimId: number, sourceId: number, amount: number, nature?: 'fire' | 'thunder', cardName?: string) => void;
         __devKill?: (victimId: number, killerId?: number) => void;
         __devIdentity?: (spec: Array<{ id: number; identity: string }>) => void;
         __devTrick?: (spec: Array<{ id: number; cards: string[] }>) => void;
@@ -1808,8 +1808,21 @@ const App: React.FC = () => {
         setDeck(pool);
         setPlayers(next);
       };
-      devWin.__devDamage = (victimId, sourceId, amount, nature) => {
-        void takeDamage(victimId, sourceId, amount, undefined, nature);
+      devWin.__devDamage = (victimId, sourceId, amount, nature, cardName) => {
+        let card: Card | undefined;
+        if (cardName) {
+          const base = playersRef.current.find(p => p.id === victimId)?.hand[0];
+          card = {
+            ...(base ?? { id: '', name: cardName as CardName, type: CardType.SCROLL, suit: Suit.SPADE, rank: '2', value: 0, description: '', imageColor: '' }),
+            id: `devdmg-${Date.now()}`,
+            name: cardName as CardName,
+            suit: Suit.SPADE,
+            rank: '2',
+            value: 0,
+            description: '开发态构造伤害牌',
+          } as Card;
+        }
+        void takeDamage(victimId, sourceId, amount, card, nature);
       };
       devWin.__devKill = (victimId, killerId) => {
         void handleDeath(victimId, killerId);
@@ -8794,17 +8807,38 @@ const App: React.FC = () => {
         if (act === 'skip') {
           addLog('【抵诽】张昌蒲放弃发动', 'info');
         } else {
+          let playerDecided = pick?.kind === 'choose';
           if (act === 'draw') {
             drawCards(victimId, 1);
           } else {
-            const low = [...zcpVictim.hand].sort((a, b) => rankValue(a.rank) - rankValue(b.rank))[0];
+            let chosenCard: Card | undefined;
+            const handNow = getPlayer(victimId)?.hand ?? [];
+            if (zcpVictim.isHuman && !isAiTakeover) {
+              const cardPick = await requestSkillChoice({
+                skill: '抵诽',
+                owner: '张昌蒲',
+                title: '「抵诽」：选择弃置一张手牌',
+                mode: 'card',
+                cards: handNow,
+                min: 1,
+                max: 1,
+                cancelLabel: '自动弃置点数最小的一张',
+              }, true);
+              if (cardPick && cardPick.kind === 'card' && cardPick.ids.length === 1) {
+                chosenCard = handNow.find(c => c.id === cardPick.ids[0]);
+              }
+              playerDecided = !!chosenCard;
+            }
+            const low = chosenCard ?? [...zcpVictim.hand].sort((a, b) => rankValue(a.rank) - rankValue(b.rank))[0];
             discardCards(victimId, [low]);
           }
-          const shown = (getPlayer(victimId)?.hand ?? []).map(c => `【${c.name}】`).join('');
-          addLog(`【抵诽】张昌蒲${act === 'draw' ? '摸一张牌' : '弃置一张牌'}，展示手牌：${shown || '（无）'}${pick && pick.kind === 'choose' ? '（玩家选择）' : '（自动）'}`, 'skill');
+          await delay(0);
+          const handForLog = getPlayer(victimId)?.hand ?? [];
+          const shown = handForLog.map(c => `【${c.name}】`).join('');
+          addLog(`【抵诽】张昌蒲${act === 'draw' ? '摸一张牌' : '弃置一张牌'}，展示手牌：${shown || '（无）'}${playerDecided ? '（玩家选择）' : '（自动）'}`, 'skill');
           showSkillBanner('张昌蒲', '抵诽');
           const zcpAfter = getPlayer(victimId);
-          if (zcpAfter && !zcpAfter.isDead && !zcpAfter.hand.some(c => c.suit === damageCard.suit)) {
+          if (zcpAfter && !zcpAfter.isDead && !handForLog.some(c => c.suit === damageCard.suit)) {
             recoverHp(victimId, 1);
             addLog(`【抵诽】张昌蒲手牌均无${damageCard.suit}花色，回复1点体力`, 'skill');
           }
