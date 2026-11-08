@@ -438,6 +438,9 @@ const App: React.FC = () => {
   const [guohuanghouLevel, setGuohuanghouLevel] = useState<number>(1);
   const guohuanghouLevelRef = useRef<Record<number, number>>({});
   const jiaozhaoUsedRef = useRef<boolean>(false);
+  // 矫诏：声明后保留展示牌，本回合由玩家决定何时当声明牌使用（不可指定自己）
+  const [jiaozhaoPending, setJiaozhaoPending] = useState<{ ownerId: number; cardId: string; declared: CardName; level: number } | null>(null);
+  const jiaozhaoPendingRef = useRef<{ ownerId: number; cardId: string; declared: CardName; level: number } | null>(null);
   // 何太后「戚乱」：本回合内何太后击杀数
   const hetaishouKillsRef = useRef<number>(0);
 
@@ -1913,6 +1916,8 @@ const App: React.FC = () => {
     qingchengUsedRef.current = false;
     setHasUsedJiaozhao(false);
     jiaozhaoUsedRef.current = false;
+    jiaozhaoPendingRef.current = null;
+    setJiaozhaoPending(null);
     setGuohuanghouLevel(1);
     guohuanghouLevelRef.current = {};
     zoushiRevealedRef.current = new Set();
@@ -2463,6 +2468,8 @@ const App: React.FC = () => {
         }
         jiaozhaoUsedRef.current = false;
         setHasUsedJiaozhao(false);
+        jiaozhaoPendingRef.current = null;
+        setJiaozhaoPending(null);
         // 「本回合」类禁【杀】效果在新回合开始时清零
         mumuNoSlashRef.current = null;
         zhixiRef.current = null;
@@ -4770,19 +4777,82 @@ const App: React.FC = () => {
     return true;
   };
 
-  // 郭皇后「矫诏」：展示一张手牌，声称为指定牌使用（Lv1 基本牌；Lv2 可含普通锦囊；Lv3 不受限）
+  // 郭皇后「矫诏」：展示一张手牌，由距离最近的角色声明牌名（Lv3 自己声明）。
+  // Lv1 基本牌；Lv2+ 基本牌或普通锦囊；本回合可将展示牌当声明牌使用，不能指定自己。
+  const clearJiaozhaoPending = () => {
+    jiaozhaoPendingRef.current = null;
+    setJiaozhaoPending(null);
+  };
+
+  const buildJiaozhaoCard = (shown: Card, declared: CardName, ownerId: number): Card => ({
+    ...shown,
+    id: `jiaozhao-${ownerId}-${Date.now()}`,
+    name: declared,
+    type: declared === CardName.SHA
+      ? CardType.BASIC
+      : ([CardName.SHUNSHOU, CardName.GUOHE, CardName.JUEDOU, CardName.NANMAN, CardName.WANJIAN] as CardName[]).includes(declared)
+        ? CardType.SCROLL
+        : shown.type,
+    description: `矫诏：将【${shown.name}】当【${declared}】使用`,
+  });
+
   const resolveJiaozhao = async (ownerId: number) => {
     const owner = getPlayer(ownerId);
     if (!owner || jiaozhaoUsedRef.current || owner.hand.length === 0) return false;
     const level = guohuanghouLevelRef.current[ownerId] ?? 1;
-    const shown = [...owner.hand].sort((a, b) => {
+    // 展示手牌：人类自行选择，AI 优先基本牌
+    let shown = [...owner.hand].sort((a, b) => {
       const ai = a.type === CardType.BASIC ? 1 : 0;
       const bi = b.type === CardType.BASIC ? 1 : 0;
       return ai - bi || a.value - b.value;
     })[0];
+    if (owner.isHuman && !isAiTakeover) {
+      const pick = await requestSkillChoice({
+        skill: '矫诏',
+        owner: owner.hero.name,
+        title: '选择要展示的手牌',
+        hint: level >= 3
+          ? '本回合可将此牌当声明的基本牌或普通锦囊使用（不能对自己使用）'
+          : '展示后由距离你最近的角色声明牌名',
+        mode: 'card',
+        cards: owner.hand,
+        min: 1,
+        max: 1,
+        cancelLabel: '不发动',
+      });
+      if (!pick || pick.kind === 'cancel' || pick.kind === 'timeout') return false;
+      if (pick.kind === 'card' && pick.ids.length) {
+        shown = owner.hand.find(c => c.id === pick.ids[0]) ?? shown;
+      }
+    }
+    // 声明者：Lv1/Lv2 为距离最近的其他角色（并列时由郭皇后指定/AI 取座位序）；Lv3 为郭皇后自己
+    let declarer: Player = owner;
+    if (level < 3) {
+      const others = playersRef.current.filter(p => !p.isDead && p.id !== ownerId);
+      if (others.length === 0) return false;
+      const minDist = Math.min(...others.map(p => getDistance(ownerId, p.id)));
+      const nearest = others.filter(p => getDistance(ownerId, p.id) === minDist)
+        .sort((a, b) => a.id - b.id);
+      declarer = nearest[0];
+      if (nearest.length > 1 && owner.isHuman && !isAiTakeover) {
+        const pick = await requestSkillChoice({
+          skill: '矫诏',
+          owner: owner.hero.name,
+          title: `距离 ${minDist} 的角色有 ${nearest.length} 名，选择由谁声明`,
+          mode: 'target',
+          targets: nearest.map(p => ({ id: p.id, name: p.hero.name, sub: `距离 ${minDist}` })),
+          min: 1,
+          max: 1,
+          cancelLabel: '按座位顺序自动',
+        });
+        if (pick && pick.kind === 'target' && pick.ids.length) {
+          declarer = nearest.find(p => p.id === pick.ids[0]) ?? nearest[0];
+        }
+      }
+    }
     const foes = playersRef.current.filter(p => !p.isDead && p.id !== ownerId && isEnemy(owner, p));
     const foesWithCards = foes.filter(p => p.hand.length > 0 || Object.values(p.equipment ?? {}).some(Boolean));
-    // 可声明牌名：Lv1 基本牌；Lv2+ 基本牌或普通锦囊（仅纳入引擎已实现、且可指向其他角色的牌名）
+    // 可声明牌名：Lv1 基本牌；Lv2+ 基本牌或普通锦囊（仅纳入引擎已实现、可主动使用的牌名）
     const basicNames: CardName[] = [CardName.SHA];
     const scrollNames: CardName[] = [CardName.GUOHE, CardName.SHUNSHOU, CardName.JUEDOU, CardName.NANMAN, CardName.WANJIAN];
     const declarable: CardName[] = level >= 2 ? [...basicNames, ...scrollNames] : basicNames;
@@ -4792,22 +4862,19 @@ const App: React.FC = () => {
     else if (level >= 2 && foes.length >= 2) aiDeclared = CardName.NANMAN;
     else if (level >= 2 && foes.length > 0) aiDeclared = CardName.JUEDOU;
     let declared: CardName = aiDeclared;
-    if (owner.isHuman && !isAiTakeover) {
+    if (declarer.isHuman && !isAiTakeover && declarable.length > 1) {
       const r = await requestSkillChoice({
         skill: '矫诏',
-        owner: owner.hero.name,
-        title: `展示【${shown.name}】，选择本回合要声明的牌名`,
-        hint: level >= 2
-          ? '声明后本阶段将按声明的牌名结算，不能选择自己为目标'
-          : 'Lv1 只能声明基本牌；受伤后可提升等级（Lv2 起可声明普通锦囊）',
+        owner: declarer.hero.name,
+        title: `${owner.hero.name} 发动「矫诏」，请声明一种牌名`,
+        hint: level >= 2 ? '可声明基本牌或普通锦囊；展示牌本回合将按此牌名结算' : '只能声明基本牌',
         mode: 'choose',
         choices: declarable.map(n => ({ id: n, label: `【${n}】` })),
         cancelLabel: `按 AI 推荐（${aiDeclared}）`,
       });
       if (r && r.kind === 'choose' && declarable.includes(r.id as CardName)) declared = r.id as CardName;
     }
-    discardCards(ownerId, [shown]);
-    addLog(`郭皇后发动「矫诏」(Lv${level})，展示【${shown.name}】并声称为【${declared}】`, 'skill');
+    addLog(`郭皇后发动「矫诏」(Lv${level})，展示【${shown.name}】，由 ${declarer.hero.name} 声明为【${declared}】`, 'skill');
     showSkillBanner('郭皇后', '矫诏');
     jiaozhaoUsedRef.current = true;
     setHasUsedJiaozhao(true);
@@ -4815,17 +4882,18 @@ const App: React.FC = () => {
     await delay(450);
     const me = getPlayer(ownerId);
     if (!me) return false;
-    const virtual: Card = {
-      ...shown,
-      id: `jiaozhao-${ownerId}-${Date.now()}`,
-      name: declared,
-      type: declared === CardName.SHA
-        ? CardType.BASIC
-        : ([CardName.SHUNSHOU, CardName.GUOHE, CardName.JUEDOU, CardName.NANMAN, CardName.WANJIAN] as CardName[]).includes(declared)
-          ? CardType.SCROLL
-          : shown.type,
-      description: `矫诏：将【${shown.name}】当【${declared}】使用`,
-    };
+
+    // 人类郭皇后：保留展示牌，本回合由玩家决定何时使用
+    if (owner.isHuman && !isAiTakeover) {
+      jiaozhaoPendingRef.current = { ownerId, cardId: shown.id, declared, level };
+      setJiaozhaoPending({ ownerId, cardId: shown.id, declared, level });
+      addLog(`【矫诏】本回合可将【${shown.name}】当【${declared}】使用（不能指定自己）`, 'info');
+      return true;
+    }
+
+    // AI：当场按声明的牌名使用（原「即时结算」路径，供 AI 使用）
+    discardCards(ownerId, [shown]);
+    const virtual = buildJiaozhaoCard(shown, declared, ownerId);
     if (([CardName.NANMAN, CardName.WANJIAN] as CardName[]).includes(declared)) {
       const targets = playersRef.current.filter(p => !p.isDead && p.id !== ownerId);
       if (targets.length) await resolveCardEffect(me, targets, virtual);
@@ -4835,6 +4903,62 @@ const App: React.FC = () => {
       else addLog(`「矫诏」没有合法的【${declared}】目标`, 'info');
     }
     return true;
+  };
+
+  // 人类郭皇后使用「矫诏」：选择合法目标后弃置展示牌，按声明牌名结算
+  const resolveJiaozhaoUse = async () => {
+    const pending = jiaozhaoPendingRef.current;
+    if (!pending) return;
+    const owner = getPlayer(pending.ownerId);
+    if (!owner || owner.isDead) { clearJiaozhaoPending(); return; }
+    const shown = owner.hand.find(c => c.id === pending.cardId);
+    if (!shown) {
+      addLog('【矫诏】展示的牌已不在手中，效果结束', 'warning');
+      clearJiaozhaoPending();
+      return;
+    }
+    const declared = pending.declared;
+    const virtual = buildJiaozhaoCard(shown, declared, owner.id);
+    const isGroup = declared === CardName.NANMAN || declared === CardName.WANJIAN;
+    const others = playersRef.current.filter(p => !p.isDead && p.id !== owner.id);
+    if (others.length === 0) { addLog('「矫诏」没有合法的目标', 'warning'); return; }
+    if (!isGroup && declared === CardName.SHA && !canPlaySlash(owner, virtual)) {
+      addLog('「矫诏」本回合【杀】已达使用上限，无法再当【杀】使用', 'warning');
+      return;
+    }
+    let candidates = others;
+    if (declared === CardName.SHA) candidates = others.filter(p => canReach(owner, p));
+    else if (declared === CardName.SHUNSHOU) candidates = others.filter(p => getDistance(owner.id, p.id) <= 1);
+    else if (declared === CardName.GUOHE) {
+      candidates = others.filter(p => p.hand.length > 0 || Object.values(p.equipment ?? {}).some(Boolean) || (p.judgeZone ?? []).length > 0);
+    }
+    let targets: Player[] = [];
+    if (isGroup) {
+      targets = others;
+    } else {
+      if (candidates.length === 0) {
+        addLog(`「矫诏」没有合法的【${declared}】目标`, 'warning');
+        return;
+      }
+      const pick = await requestSkillChoice({
+        skill: '矫诏',
+        owner: owner.hero.name,
+        title: `选择【${declared}】的目标（不能指定自己）`,
+        mode: 'target',
+        targets: candidates.map(p => ({ id: p.id, name: p.hero.name, sub: `体力 ${p.hp}/${p.maxHp}` })),
+        min: 1,
+        max: 1,
+        cancelLabel: '暂不使用',
+      });
+      if (!pick || pick.kind === 'cancel' || pick.kind === 'timeout') return;
+      const target = candidates.find(p => pick.kind === 'target' && pick.ids[0] === p.id);
+      if (!target) return;
+      targets = [target];
+    }
+    discardCards(owner.id, [shown]);
+    clearJiaozhaoPending();
+    addLog(`郭皇后使用「矫诏」，将【${shown.name}】当【${declared}】对 ${targets.map(t => t.hero.name).join('、')} 使用`, 'skill');
+    await resolveCardEffect(owner, targets, virtual);
   };
 
   const handleTargetClick = async (targetId: number) => {
@@ -12469,6 +12593,15 @@ const App: React.FC = () => {
                            className="skill-btn text-base"
                          >
                            矫诏 Lv{guohuanghouLevel}
+                         </button>
+                       )}
+                       {players[0].hero.name === '郭皇后' && jiaozhaoPending && (
+                         <button
+                           disabled={!!isProcessing || !!dyingState}
+                           onClick={() => { void resolveJiaozhaoUse(); }}
+                           className="skill-btn text-base"
+                         >
+                           使用矫诏【{jiaozhaoPending.declared}】
                          </button>
                        )}
 
