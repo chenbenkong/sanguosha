@@ -7866,7 +7866,7 @@ const App: React.FC = () => {
   // 黄盖「苦肉」：失去1点体力，摸两张牌
   const resolveKurou = async (playerId: number) => {
     const p = getPlayer(playerId);
-    if (!p || p.isDead || p.hero.name !== '黄盖' || p.hp <= 1) return;
+    if (!p || p.isDead || p.hero.name !== '黄盖') return;
     setIsProcessing(v => v + 1);
     try {
       updatePlayer(playerId, { hp: p.hp - 1 });
@@ -12429,7 +12429,7 @@ const App: React.FC = () => {
                        )}
 
                        {/* 黄盖「苦肉」 */}
-                       {players[0].hero.name === '黄盖' && players[0].hp > 1 && (
+                       {players[0].hero.name === '黄盖' && (
                          <button
                            disabled={!!isProcessing || !!dyingState}
                            onClick={() => { void resolveKurou(players[0].id); }}
