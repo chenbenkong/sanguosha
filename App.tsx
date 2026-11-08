@@ -1106,7 +1106,8 @@ const App: React.FC = () => {
   // 「芳踪」双向目标限制：每帧刷新规则闭包，确保读到最新状态
   targetLegalityRulesRef.current = [(src, tgt, card) => {
     if (src.id === tgt.id) return null;
-    const isDamage = card.name === CardName.SHA || card.name === CardName.JUEDOU || card.name === CardName.HUOGONG;
+    const isDamage = card.name === CardName.SHA || card.name === CardName.JUEDOU || card.name === CardName.HUOGONG
+      || card.name === CardName.NANMAN || card.name === CardName.WANJIAN;
     if (!isDamage) return null;
     const active = (p: Player) => p.hero.name === '花鬘' && !p.isDead && skillsOn(p.id)
       && fangzongDisabledTurnRef.current !== turnCountRef.current;
