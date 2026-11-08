@@ -10,7 +10,7 @@ import { HeroDetailModal } from './src/components/HeroDetailModal';
 import RulesDialog from './src/components/RulesDialog';
 import { GameSave, SAVE_VERSION, readSave, writeSave, clearSave, consumeSaveRejected, isSaveFinished } from './src/game/save';
 import { shuffle, rankValue, wuguKeepPriority } from './src/game/utils';
-import { IconSpeaker, IconSun, IconMoon, IconBolt, IconBook, IconDice, IconMotion, IconArrowLeft, ThemeIcon } from './src/components/Icons';
+import { IconSpeaker, IconSun, IconMoon, IconBolt, IconBook, IconDice, IconMotion, IconArrowLeft, ThemeIcon, IconEye } from './src/components/Icons';
 import { useLayoutProfile } from './src/hooks/useLayoutProfile';
 import GameOverScreen from './src/components/GameOverScreen';
 import { useTheme } from './src/contexts/ThemeContext';
@@ -51,6 +51,19 @@ const FX_LABEL: Record<FxLevel, string> = {
 };
 const FX_TAG: Record<FxLevel, string> = { classic: '典', pure: '净', subtle: '克', full: '全' };
 const FX_ORDER: FxLevel[] = ['classic', 'pure', 'subtle', 'full'];
+
+// 对局界面可收起/隐藏的固定显示项（持久化到 localStorage）
+type UiRegion = 'controls' | 'objective' | 'phase' | 'log' | 'order';
+const UI_REGION_ITEMS: { key: UiRegion; label: string }[] = [
+  { key: 'controls', label: '设置栏' },
+  { key: 'objective', label: '身份目标' },
+  { key: 'phase', label: '阶段指示' },
+  { key: 'log', label: '战报' },
+  { key: 'order', label: '出牌顺序' },
+];
+// 对局 BGM：auto = 随存活人数在战场/决战间切换；home = 始终用首页曲；battle = 始终战场曲
+type BgmPref = 'auto' | 'home' | 'battle';
+const BGM_PREF_LABEL: Record<BgmPref, string> = { auto: '随人数', home: '首页曲', battle: '战场曲' };
 
 // 战报仅依赖 logs 自身：独立 memo，避免读秒/动画等高频状态带动 40 行战报一起重渲染。
 // 只在 logs 引用变化（新增一条战报）时更新，内容、条数、字号与原实现完全一致。
@@ -512,6 +525,32 @@ const App: React.FC = () => {
     setOrderCollapsed(v);
     try { localStorage.setItem('sgs-order-collapsed', v ? '1' : '0'); } catch { /* ignore */ }
   };
+  // 界面显隐：设置栏 / 身份目标 / 阶段指示 / 战报 / 出牌顺序，逐项开关并持久化
+  const [uiHidden, setUiHidden] = useState<Record<UiRegion, boolean>>(() => {
+    const empty: Record<UiRegion, boolean> = { controls: false, objective: false, phase: false, log: false, order: false };
+    try {
+      const raw = localStorage.getItem('sgs-ui-hidden-v1');
+      if (!raw) return empty;
+      return { ...empty, ...(JSON.parse(raw) as Partial<Record<UiRegion, boolean>>) };
+    } catch { return empty; }
+  });
+  const toggleUiRegion = (key: UiRegion) => setUiHidden(prev => {
+    const next = { ...prev, [key]: !prev[key] };
+    try { localStorage.setItem('sgs-ui-hidden-v1', JSON.stringify(next)); } catch { /* ignore */ }
+    return next;
+  });
+  const [showUiMenu, setShowUiMenu] = useState<boolean>(false);
+  // 对局音乐偏好：默认「随人数」保持原有战场/决战分段；可改为始终首页曲或始终战场曲
+  const [bgmPref, setBgmPref] = useState<BgmPref>(() => {
+    try {
+      const v = localStorage.getItem('sgs-bgm-pref');
+      return v === 'home' || v === 'battle' ? v : 'auto';
+    } catch { return 'auto'; }
+  });
+  const chooseBgmPref = (v: BgmPref) => {
+    setBgmPref(v);
+    try { localStorage.setItem('sgs-bgm-pref', v); } catch { /* ignore */ }
+  };
 
   // 玩法说明弹窗（首页）
   const [showRules, setShowRules] = useState<boolean>(false);
@@ -551,7 +590,7 @@ const App: React.FC = () => {
   const [damageNumber, setDamageNumber] = useState<{ targetId: number, amount: number, id: string } | null>(null);
   const [healAnimTarget, setHealAnimTarget] = useState<number | null>(null);
   const [healNumber, setHealNumber] = useState<{ targetId: number, amount: number, id: string } | null>(null);
-  const [visualCard, setVisualCard] = useState<{ card: Card, playerName: string } | null>(null);
+  const [visualCard, setVisualCard] = useState<{ card: Card, playerName: string, verb?: string } | null>(null);
   // 出牌飞行（仅「完整」档）：牌从出牌者座位飞向目标座位
   const [flightFx, setFlightFx] = useState<{ card: Card, id: number, x0: number, y0: number, x1: number, y1: number } | null>(null);
   const flightTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -674,7 +713,7 @@ const App: React.FC = () => {
 
   // 音效：优先播放角色/卡牌台词，缺失时回退到本地合成音效
   const playSound = (key: string, gender: 'male' | 'female' = 'male') => {
-    if (isMuted) return;
+    if (isMutedRef.current) return;
     if (hasCardVoice(key) && playCardVoice(key, gender)) return;
     const kind = SFX_FOR_NAME[key];
     if (kind) playSfx(kind);
@@ -1555,6 +1594,13 @@ const App: React.FC = () => {
   }, [getPlayer, updatePlayer]);
 
   // 装备牌上装：同槽位旧装备进入弃牌堆
+  // 出牌展示：卡面翻入 + 语音/音效；装备牌也复用它，避免装备时无声无动画
+  const showCardVisual = (card: Card, playerName: string, duration: number = 1200, gender: 'male' | 'female' = 'male', verb: string = '打出') => {
+    setVisualCard({ card, playerName, verb });
+    playSound(card.name, gender);
+    setTimeout(() => setVisualCard(null), duration / speedRef.current);
+  };
+
   const equipCard = useCallback((playerId: number, card: Card) => {
     const meta = EQUIP_META[card.name];
     if (!meta) return false;
@@ -1586,7 +1632,9 @@ const App: React.FC = () => {
       onEquipLost(playerId, prev.name);
       triggerXiaoji(playerId);
     }
-    playSound(card.name, player.hero.gender);
+    // 与普通出牌一致：卡面翻入动画 + 语音；没有装备台词时用统一「装备」音效兜底
+    showCardVisual(card, player.hero.name, 1200, player.hero.gender, '装备');
+    if (!hasCardVoice(card.name) && !isMutedRef.current) playSfx('clash');
     addLog(`${player.hero.name} 装备了【${card.name}】${meta.range ? `（攻击范围 ${meta.range}）` : ''}`, 'success');
 
     // 诸葛果「祈禳」（原版）：装备牌置入装备区后，从牌堆获得一张锦囊牌；没有则摸一张
@@ -1624,10 +1672,12 @@ const App: React.FC = () => {
       playBgm('start');
     } else if (screen === 'game') {
       const alive = players.filter(p => !p.isDead).length;
-      playBgm(alive <= 2 ? 'climax' : 'battle');
+      // 首页曲原本只在首页播放；新增偏好后可带进对局（默认仍按原设计分段）
+      const autoMode: 'battle' | 'climax' = alive <= 2 ? 'climax' : 'battle';
+      playBgm(bgmPref === 'home' ? 'start' : bgmPref === 'battle' ? 'battle' : autoMode);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [screen, players]);
+  }, [screen, players, bgmPref]);
 
   // 切换静音状态
   const toggleMute = () => {
@@ -6189,14 +6239,6 @@ const App: React.FC = () => {
     }
   };
 
-  const showCardVisual = (card: Card, playerName: string, duration: number = 1200, gender: 'male' | 'female' = 'male') => {
-    setVisualCard({ card, playerName });
-    // Play sound based on card name
-    playSound(card.name, gender);
-    // 减少显示时间，从2秒减少到1.2秒
-    setTimeout(() => setVisualCard(null), duration / speedRef.current);
-  };
-
   // 出牌飞行（完整档）：实测两座位中心（扣除根节点缩放），走一段二次曲线到目标
   const spawnCardFlight = (card: Card, fromId: number, toId: number) => {
     const root = document.querySelector('[data-seat-stagger]') as HTMLElement | null;
@@ -10685,7 +10727,7 @@ const App: React.FC = () => {
               {/* 卡牌名称标签 */}
               <div className="absolute -bottom-10 left-1/2 -translate-x-1/2 whitespace-nowrap">
                 <div className="card-plate px-5 py-1.5 rounded-lg font-ancient text-lg">
-                  {visualCard.playerName} 打出
+                  {visualCard.playerName} {visualCard.verb ?? '打出'}
                 </div>
               </div>
             </div>
@@ -11681,7 +11723,7 @@ const App: React.FC = () => {
       </div>
 
       {/* 左上身份目标条：对齐官方参考图左上角的「主×1 忠×1 反×2 内×1」与目标提示 */}
-      <div className="hidden md:flex objective-strip absolute top-2 left-[150px] z-[225] items-center gap-2">
+      <div className={`objective-strip absolute top-2 left-[150px] z-[225] items-center gap-2 ${uiHidden.objective ? 'hidden' : 'hidden md:flex'}`}>
         <span className="objective-seats">
           {([
             [Identity.ZHUGONG, '主'],
@@ -11704,7 +11746,7 @@ const App: React.FC = () => {
       </div>
 
       {/* 手机端紧凑阶段指示：放在顶部控制区中间的空档，避免压住牌桌与战报 */}
-      <div className="md:hidden absolute top-2 left-[156px] z-[230]">
+      <div className={`${uiHidden.phase ? 'hidden' : 'md:hidden'} absolute top-2 left-[156px] z-[230]`}>
         <div className="ui-panel relative overflow-hidden flex items-center gap-1.5 h-10 px-2.5 whitespace-nowrap">
           <span className={`text-[11px] font-bold font-ancient tracking-[0.12em] ${theme === 'dark' ? 'text-[#e8cf94]' : 'text-[#6b4a1a]'}`}>
             {phase.replace('回合', '').replace('阶段', '')}
@@ -11725,38 +11767,122 @@ const App: React.FC = () => {
         </div>
       </div>
 
+      {/* 界面显隐菜单：固定定位挂在根层，避免被牌桌/出牌顺序条的层叠上下文遮挡 */}
+      {showUiMenu && (
+        <>
+          <div className="fixed inset-0 z-[380]" onClick={() => setShowUiMenu(false)} aria-hidden="true" />
+          <div
+            role="dialog"
+            aria-label="界面显示设置"
+            className={`fixed right-3 top-14 z-[390] w-48 rounded-lg border p-2 shadow-xl ${theme === 'dark' ? 'bg-[#1b1511]/95 border-[#8b7355]/50 text-[#e6d8bd]' : 'bg-[#faf6ee]/95 border-[#c4a77d]/70 text-[#4a3a22]'}`}
+          >
+            <div className="text-[11px] tracking-[0.25em] opacity-70 px-1 pb-1">界面显示</div>
+            {UI_REGION_ITEMS.map(item => {
+              const shown = !uiHidden[item.key];
+              return (
+                <button
+                  key={item.key}
+                  type="button"
+                  role="switch"
+                  aria-checked={shown}
+                  onClick={() => toggleUiRegion(item.key)}
+                  className="w-full flex items-center justify-between gap-2 px-2 py-1.5 rounded text-[12px] hover:bg-black/10"
+                >
+                  <span>{item.label}</span>
+                  <span className={`text-[10px] px-1.5 py-0.5 rounded border ${shown ? 'border-[#c8a45c]/70 text-[#c8a45c]' : 'border-current opacity-50'}`}>
+                    {shown ? '显示' : '隐藏'}
+                  </span>
+                </button>
+              );
+            })}
+            <div className={`h-px my-1.5 ${theme === 'dark' ? 'bg-[#8b7355]/40' : 'bg-[#c4a77d]/50'}`} />
+            <div className="text-[11px] tracking-[0.25em] opacity-70 px-1 pb-1">游戏速度</div>
+            <div className="flex gap-1 px-1 pb-1">
+              {([1, 2, 3] as const).map(v => (
+                <button
+                  key={v}
+                  type="button"
+                  onClick={() => setSpeedLevel(v)}
+                  aria-pressed={speedLevel === v}
+                  className={`flex-1 px-1 py-1 rounded text-[11px] border tabular-nums ${speedLevel === v ? 'border-[#c8a45c]/80 text-[#c8a45c]' : 'border-transparent opacity-60 hover:opacity-100'}`}
+                >
+                  ×{v}
+                </button>
+              ))}
+            </div>
+            <div className={`h-px my-1.5 ${theme === 'dark' ? 'bg-[#8b7355]/40' : 'bg-[#c4a77d]/50'}`} />
+            <div className="text-[11px] tracking-[0.25em] opacity-70 px-1 pb-1">对局音乐</div>
+            <div className="flex gap-1 px-1">
+              {(['auto', 'home', 'battle'] as BgmPref[]).map(v => (
+                <button
+                  key={v}
+                  type="button"
+                  onClick={() => chooseBgmPref(v)}
+                  aria-pressed={bgmPref === v}
+                  className={`flex-1 px-1 py-1 rounded text-[11px] border ${bgmPref === v ? 'border-[#c8a45c]/80 text-[#c8a45c]' : 'border-transparent opacity-60 hover:opacity-100'}`}
+                >
+                  {BGM_PREF_LABEL[v]}
+                </button>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
+
       {/* 顶部工具栏：桌面端不占竖向高度，座位环绝对定位覆盖牌桌舞台 */}
       <div className="flex-none md:h-0 z-10 relative md:static">
         {/* 顶部装饰条 */}
         <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-transparent via-yellow-700/50 to-transparent"></div>
 
-        {/* 右上角控制组：帮助 / 速度 / 主题 / 静音 */}
+        {/* 右上角控制组：帮助 / 速度 / 主题 / 静音 / 动效 / 特效，以及始终可见的「界面」显隐入口 */}
         <div data-region="top-controls" className="absolute top-2 right-3 z-50 flex items-center gap-2">
-          <button
-            onClick={() => setShowRules(true)}
-            className="ui-icon-btn font-bold"
-            title="玩法说明与新手教学"
-            aria-label="玩法说明与新手教学"
-          >
-            <span className="text-base leading-none">?</span>
-          </button>
-          <button
-            onClick={() => setSpeedLevel(speedLevel === 1 ? 2 : speedLevel === 2 ? 3 : 1)}
-            className="ui-icon-btn font-bold text-sm tracking-wider"
-            title="切换游戏速度"
-            aria-label={`切换游戏速度，当前 ${speedLevel} 倍`}
-          >
-            <IconBolt />
-            <span className="tabular-nums">×{speedLevel}</span>
-          </button>
-          <button
-            onClick={toggleTheme}
-            className="ui-icon-btn game-settings-hide"
-            title={theme === 'dark' ? '切换到白天模式' : '切换到黑夜模式'}
-            aria-label={theme === 'dark' ? '切换到白天模式' : '切换到黑夜模式'}
-          >
-            <ThemeIcon theme={theme} />
-          </button>
+          {!uiHidden.controls && (
+            <>
+              <button
+                onClick={() => setShowRules(true)}
+                className="ui-icon-btn font-bold"
+                title="玩法说明与新手教学"
+                aria-label="玩法说明与新手教学"
+              >
+                <span className="text-base leading-none">?</span>
+              </button>
+              <button
+                onClick={() => setSpeedLevel(speedLevel === 1 ? 2 : speedLevel === 2 ? 3 : 1)}
+                className="ui-icon-btn game-settings-hide font-bold text-sm tracking-wider"
+                title="切换游戏速度"
+                aria-label={`切换游戏速度，当前 ${speedLevel} 倍`}
+              >
+                <IconBolt />
+                <span className="tabular-nums">×{speedLevel}</span>
+              </button>
+              <button
+                onClick={toggleTheme}
+                className="ui-icon-btn game-settings-hide"
+                title={theme === 'dark' ? '切换到白天模式' : '切换到黑夜模式'}
+                aria-label={theme === 'dark' ? '切换到白天模式' : '切换到黑夜模式'}
+              >
+                <ThemeIcon theme={theme} />
+              </button>
+              <button
+                onClick={toggleMotion}
+                className="ui-icon-btn game-settings-hide"
+                title={motionOn ? '关闭动效' : '开启动效'}
+                aria-label={motionOn ? '关闭动效' : '开启动效'}
+              >
+                <IconMotion off={!motionOn} />
+              </button>
+              <button
+                onClick={cycleFx}
+                className="ui-icon-btn game-settings-hide flex-col !gap-0.5"
+                title={`${FX_LABEL[fxLevel]}（点击切换）`}
+                aria-label={`特效强度：${FX_LABEL[fxLevel]}，点击切换`}
+              >
+                <span className="text-[12px] leading-none font-bold">特效</span>
+                <span className="text-[10px] leading-none opacity-75">{FX_TAG[fxLevel]}</span>
+              </button>
+            </>
+          )}
+          {/* 静音始终可见：收起设置栏后仍能随时开关声音 */}
           <button
             onClick={toggleMute}
             className="ui-icon-btn"
@@ -11766,21 +11892,15 @@ const App: React.FC = () => {
             <IconSpeaker muted={isMuted} />
           </button>
           <button
-            onClick={toggleMotion}
-            className="ui-icon-btn game-settings-hide"
-            title={motionOn ? '关闭动效' : '开启动效'}
-            aria-label={motionOn ? '关闭动效' : '开启动效'}
+            type="button"
+            onClick={() => setShowUiMenu(v => !v)}
+            className="ui-icon-btn"
+            title="界面显示设置"
+            aria-label="界面显示设置"
+            aria-expanded={showUiMenu}
+            aria-haspopup="dialog"
           >
-            <IconMotion off={!motionOn} />
-          </button>
-          <button
-            onClick={cycleFx}
-            className="ui-icon-btn game-settings-hide flex-col !gap-0.5"
-            title={`${FX_LABEL[fxLevel]}（点击切换）`}
-            aria-label={`特效强度：${FX_LABEL[fxLevel]}，点击切换`}
-          >
-            <span className="text-[12px] leading-none font-bold">特效</span>
-            <span className="text-[10px] leading-none opacity-75">{FX_TAG[fxLevel]}</span>
+            <IconEye off={uiHidden.controls || uiHidden.objective || uiHidden.phase || uiHidden.log || uiHidden.order} />
           </button>
         </div>
 
@@ -12055,7 +12175,7 @@ const App: React.FC = () => {
       <div data-region="field" className="flex-1 relative flex items-center justify-center w-full">
         
         {/* Logs - 战况记录：可折叠侧栏（桌面端） */}
-        <div data-region="log" className={`absolute left-2 hidden md:flex z-30 transition-[width] duration-200 ${logCollapsed ? 'log-collapsed w-10' : 'w-[340px]'}`}>
+        <div data-region="log" className={`absolute left-2 ${uiHidden.log ? 'hidden' : 'hidden md:flex'} z-30 transition-[width] duration-200 ${logCollapsed ? 'log-collapsed w-10' : 'w-[340px]'}`}>
           {logCollapsed ? (
             <button
               onClick={() => setLogCollapsed(false)}
@@ -12145,7 +12265,7 @@ const App: React.FC = () => {
         </div>
 
         {/* Phase Indicator - 五阶段进度轨（底部居中，紧邻手牌条上方） */}
-        <div className={`phase-panel hidden md:flex ui-panel absolute left-1/2 -translate-x-1/2 top-[63%] px-5 py-2.5 z-30 flex-col items-center ${theme === 'dark' ? 'shadow-[0_6px_24px_rgba(0,0,0,0.55)]' : ''}`}>
+        <div className={`phase-panel ${uiHidden.phase ? 'hidden' : 'hidden md:flex'} ui-panel absolute left-1/2 -translate-x-1/2 top-[63%] px-5 py-2.5 z-30 flex-col items-center ${theme === 'dark' ? 'shadow-[0_6px_24px_rgba(0,0,0,0.55)]' : ''}`}>
           <div className={`text-[15px] mb-1.5 tracking-[0.2em] ${theme === 'dark' ? 'text-[#9a8b74]' : 'text-[#8a7a60]'}`}>
             当前阶段 · <span className="text-[#e8cf94]">{getPlayer(turnIndex)?.hero.name}</span>
           </div>
@@ -12201,7 +12321,7 @@ const App: React.FC = () => {
 
         {/* Center Decks - 牌堆和弃牌堆 - 原版三国杀风格 */}
         {/* 出牌顺序：右侧竖向顺序条（桌面）；手机端折叠为一条横排 */}
-        <div data-region="turn-rail" data-count={players.length} data-collapsed={orderCollapsed ? 'true' : 'false'} className="hidden md:flex flex-col">
+        <div data-region="turn-rail" data-count={players.length} data-collapsed={orderCollapsed ? 'true' : 'false'} className={`${uiHidden.order ? 'hidden' : 'hidden md:flex'} flex-col`}>
           {orderCollapsed ? (
             <button
               type="button"
@@ -12246,7 +12366,7 @@ const App: React.FC = () => {
             </>
           )}
         </div>
-        <div data-region="turn-strip" data-collapsed={orderCollapsed ? 'true' : 'false'} className="md:hidden flex items-center gap-1">
+        <div data-region="turn-strip" data-collapsed={orderCollapsed ? 'true' : 'false'} className={`${uiHidden.order ? 'hidden' : 'md:hidden flex'} items-center gap-1`}>
           {orderCollapsed ? (
             <button
               type="button"
@@ -13506,7 +13626,7 @@ const App: React.FC = () => {
            )}
            <div className="hand-tray" aria-hidden="true" />
            {/* 手机端最近战报：塞在手牌上方的留白里，不压中央卡池 */}
-           <div className="mobile-log md:hidden">
+           <div className={`mobile-log ${uiHidden.log ? 'hidden' : 'md:hidden'}`}>
              {logs.slice(-1).map(log => (
                <div key={log.id} className="mobile-log-line">{log.text}</div>
              ))}

@@ -58,6 +58,15 @@ export const IconMotion: React.FC<{ off?: boolean }> = ({ off }) => (
   </svg>
 );
 
+/** 界面显隐：眼睛图标；关闭时加斜杠 */
+export const IconEye: React.FC<{ off?: boolean }> = ({ off }) => (
+  <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M2.6 12s3.4-6 9.4-6 9.4 6 9.4 6-3.4 6-9.4 6-9.4-6-9.4-6z" />
+    <circle cx="12" cy="12" r="2.7" />
+    {off && <path d="M3 21L21 3" strokeWidth="2" />}
+  </svg>
+);
+
 export const IconArrowLeft: React.FC = () => (
   <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
     <path d="M19 12H5M11 6l-6 6 6 6" />
