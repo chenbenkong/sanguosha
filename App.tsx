@@ -748,7 +748,7 @@ const App: React.FC = () => {
     owner: string;
     title: string;
     hint?: string;
-    mode: 'choose' | 'card' | 'target';
+    mode: 'choose' | 'multi' | 'card' | 'target';
     choices?: { id: string; label: string; desc?: string }[];
     cards?: Card[];
     targets?: { id: number; name: string; sub?: string }[];
@@ -758,6 +758,7 @@ const App: React.FC = () => {
   };
   type SkillChoiceResult =
     | { kind: 'choose'; id: string }
+    | { kind: 'multi'; ids: string[] }
     | { kind: 'card'; ids: string[] }
     | { kind: 'target'; ids: number[] }
     | { kind: 'cancel' }
@@ -825,6 +826,7 @@ const App: React.FC = () => {
   const submitSkillChoice = () => {
     if (!skillChoice || !skillChoiceValid) return;
     if (skillChoice.mode === 'card') resolveSkillChoice({ kind: 'card', ids: skillChoiceSel });
+    else if (skillChoice.mode === 'multi') resolveSkillChoice({ kind: 'multi', ids: skillChoiceSel });
     else if (skillChoice.mode === 'target') resolveSkillChoice({ kind: 'target', ids: skillChoiceSel.map(Number) });
   };
 
@@ -6083,24 +6085,59 @@ const App: React.FC = () => {
         return;
       }
 
-      // 曹婴「凌人」：出牌阶段限一次，使用【杀】或伤害类锦囊指定目标后，猜测其手牌类别
-      // 猜对至少 1 项则此伤害 +1；至少 2 项摸两张牌；3 项获得「奸雄」「行殇」直到下回合开始
+      // 曹婴「凌人」：出牌阶段限一次，使用【杀】或伤害类锦囊指定目标后，公开猜测其手牌类别，
+      // 再亮出目标手牌核对（不读取真实手牌来“猜”）。猜中至少 1 项此伤害 +1；2 项摸两张牌；3 项获得「奸雄」「行殇」
       const lingrenCards: CardName[] = [CardName.SHA, CardName.JUEDOU, CardName.HUOGONG, CardName.NANMAN, CardName.WANJIAN];
       if (source.hero.name === '曹婴' && skillsOn(source.id) && !lingrenUsedRef.current
           && targets.length > 0 && lingrenCards.includes(card.name)) {
         const tgt = targets.find(t => t.id !== source.id && !t.isDead);
         if (tgt) {
           lingrenUsedRef.current = true;
-          const cats = { 基本牌: false, 锦囊牌: false, 装备牌: false };
-          for (const c of tgt.hand) {
-            if (c.type === CardType.BASIC) cats['基本牌'] = true;
-            else if (c.type === CardType.SCROLL) cats['锦囊牌'] = true;
-            else if (c.type === CardType.EQUIPMENT) cats['装备牌'] = true;
+          // 猜测阶段：玩家/托管由玩家选，AI 按公开信息（手牌数）推测，均不看手牌明细
+          let guessIds: string[] = [];
+          const guessChoices = [
+            { id: '基本牌', label: '基本牌' },
+            { id: '锦囊牌', label: '锦囊牌' },
+            { id: '装备牌', label: '装备牌' },
+          ];
+          const pick = await requestSkillChoice({
+            skill: '凌人',
+            owner: source.hero.name,
+            title: `猜测 ${tgt.hero.name} 的手牌类别（可多选）`,
+            hint: '猜测后公开目标手牌并核对，猜错不会获得效果',
+            mode: 'multi',
+            choices: guessChoices,
+            min: 1,
+            max: 3,
+            cancelLabel: '不猜测',
+          });
+          if (pick && pick.kind === 'multi') {
+            guessIds = pick.ids;
+          } else if (pick && pick.kind === 'cancel') {
+            lingrenUsedRef.current = false; // 不猜测：本轮不发动，牌照常结算
+            guessIds = [];
+          } else {
+            // AI / 托管：公开信息推断（手牌越厚越可能含装备）
+            guessIds = ['基本牌', '锦囊牌'];
+            if (tgt.hand.length >= 4) guessIds.push('装备牌');
           }
-          const guessed = (Object.keys(cats) as (keyof typeof cats)[]).filter(k => cats[k]);
-          const correct = guessed.length;
-          addLog(`【凌人】曹婴猜测 ${tgt.hero.name} 的手牌：${guessed.join('、') || '无'}（猜对 ${correct} 项）`, 'skill');
+          if (guessIds.length > 0) {
+          // 核对阶段：亮出目标手牌类别
+          const actual: string[] = [];
+          for (const c of tgt.hand) {
+            const cat = c.type === CardType.BASIC ? '基本牌' : (c.type === CardType.SCROLL ? '锦囊牌' : (c.type === CardType.EQUIPMENT ? '装备牌' : ''));
+            if (cat && !actual.includes(cat)) actual.push(cat);
+          }
+          const correct = guessIds.filter(g => actual.includes(g)).length;
+          const wrong = guessIds.filter(g => !actual.includes(g));
+          const missed = actual.filter(a => !guessIds.includes(a));
+          addLog(`【凌人】曹婴猜测 ${tgt.hero.name} 的手牌：${guessIds.join('、')}`, 'skill');
           showSkillBanner('曹婴', '凌人');
+          await delay(250);
+          addLog(`【凌人】${tgt.hero.name} 亮出手牌：${actual.join('、') || '无'}`, 'chat');
+          if (wrong.length) addLog(`【凌人】猜错：${wrong.join('、')}（其手中并无此类牌）`, 'warning');
+          if (missed.length) addLog(`【凌人】漏猜：${missed.join('、')}`, 'info');
+          addLog(`【凌人】猜中 ${correct} 项`, 'skill');
           lingrenBoostRef.current[card.id] = { targetId: tgt.id, bonus: correct > 0 ? 1 : 0 };
           await delay(350);
           if (correct >= 2) {
@@ -6110,6 +6147,7 @@ const App: React.FC = () => {
           if (correct >= 3) {
             updatePlayer(source.id, { hasJianxiong: true, hasXingshang: true });
             addLog('【凌人】猜中三项，曹婴获得「奸雄」「行殇」直到下回合开始', 'skill');
+          }
           }
         }
       }
@@ -10083,6 +10121,28 @@ const App: React.FC = () => {
               </div>
             )}
 
+            {skillChoice.mode === 'multi' && (
+              <>
+                <div className="grid grid-cols-3 gap-2">
+                  {skillChoice.choices?.map(ch => {
+                    const on = skillChoiceSel.includes(ch.id);
+                    return (
+                      <button
+                        key={ch.id}
+                        onClick={() => toggleSkillChoiceItem(ch.id, false)}
+                        className={`btn-ink min-h-[44px] px-3 py-2 rounded-lg text-sm ${on ? 'ring-2 ring-[#e8cf94]' : ''}`}
+                      >
+                        <span className="font-bold">{ch.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+                <p className="modal-text-dim text-xs text-center mt-2">
+                  已选 {skillChoiceSel.length} 项，需 {skillChoice.min ?? 1}–{skillChoice.max ?? 3} 项
+                </p>
+              </>
+            )}
+
             {skillChoice.mode === 'card' && (
               <>
                 <div className="flex flex-wrap gap-2 justify-center max-h-[46vh] overflow-y-auto p-1 scrollbar-thin">
@@ -10133,13 +10193,13 @@ const App: React.FC = () => {
               >
                 {skillChoice.cancelLabel || '取消'}
               </button>
-              {(skillChoice.mode === 'card' || skillChoice.mode === 'target') && (
+              {(skillChoice.mode === 'card' || skillChoice.mode === 'target' || skillChoice.mode === 'multi') && (
                 <button
                   onClick={submitSkillChoice}
                   disabled={!skillChoiceValid}
                   className="btn-ink min-h-[44px] px-5 rounded-lg text-sm font-bold disabled:opacity-40"
                 >
-                  {skillChoice.mode === 'card' ? '确认选择' : '确认目标'}
+                  {skillChoice.mode === 'card' ? '确认选择' : (skillChoice.mode === 'multi' ? '确认猜测' : '确认目标')}
                 </button>
               )}
             </div>
