@@ -3240,30 +3240,50 @@ const App: React.FC = () => {
         // 若因此进入濒死，脱离濒死后救援者可获得「武圣」「当先」
         if (currentPlayer.hero.name === '鲍三娘' && skillsOn(currentPlayer.id) && !currentPlayer.xushenUsed) {
           const males = playersRef.current.filter(o => !o.isDead && o.id !== currentPlayer.id && o.hero.gender === 'male').length;
-          const canBeSaved = playersRef.current.some(p => !p.isDead && p.id !== currentPlayer.id
+          // 防自杀保护：只有「友方且持有【桃】/【酒】」才算真正可救（敌方/内奸即便有桃也不会救）
+          const willingSavior = playersRef.current.some(p => !p.isDead && p.id !== currentPlayer.id
+            && isAlly(currentPlayer, p)
             && (p.hand.some(c => c.name === CardName.TAO) || p.hand.some(c => c.name === CardName.JIU)));
-          if (males > 0 && (currentPlayer.hp >= males + 1 || (currentPlayer.hp === males && canBeSaved))) {
-            const nextHp = currentPlayer.hp - males;
-            updatePlayer(currentPlayer.id, { xushenUsed: true, hp: nextHp });
-            addLog(`【许身】鲍三娘失去 ${males} 点体力（存活男性角色数），当前体力 ${Math.max(0, nextHp)}/${currentPlayer.maxHp}`, 'skill');
-            showSkillBanner('鲍三娘', '许身');
-            if (nextHp <= 0) {
-              xushenDyingRef.current = { id: currentPlayer.id };
-              addLog(`【许身】鲍三娘因此进入濒死状态`, 'danger');
-              // 让体力变更先提交，避免 askForPeaches 读到旧体力而静默跳过濒死流程
-              // （delay 受速度倍率压缩，3x 下 200ms 仅 ~67ms，这里改为轮询 ref 直到体力真正落库）
-              for (let wait = 0; wait < 12 && (getPlayer(currentPlayer.id)?.hp ?? 0) > 0; wait++) {
-                await delay(150);
-              }
-              const saved = await askForPeaches(currentPlayer.id);
-              if (!saved) {
-                addLog(`鲍三娘 未能得到救援，死亡！`, 'danger');
-                await handleDeath(currentPlayer.id);
-                setPhase(GamePhase.END);
-                return;
-              }
+          const lethal = currentPlayer.hp === males;
+          if (DEV_BUILD && males > 0 && lethal && !willingSavior) {
+            addLog(`【许身】防自杀保护：体力 ${currentPlayer.hp} 将因失去 ${males} 点体力进入濒死，且无友方可救，自动不发动`, 'info');
+          }
+          if (males > 0 && (currentPlayer.hp >= males + 1 || (lethal && willingSavior))) {
+            let go = true;
+            if (currentPlayer.isHuman && !isAiTakeover) {
+              const pick = await requestSkillChoice({
+                skill: '许身', owner: '鲍三娘',
+                title: `是否发动「许身」失去 ${males} 点体力？${lethal ? '（将进入濒死，由友方救援）' : ''}`,
+                mode: 'choose',
+                choices: [{ id: 'yes', label: `发动许身（失去 ${males} 点体力${lethal ? '，进入濒死' : ''}）` }],
+                cancelLabel: '不发动',
+              }, true);
+              go = !!(pick && pick.kind === 'choose' && pick.id === 'yes');
+              if (!go) addLog('【许身】鲍三娘选择不发动', 'info');
             }
-            await delay(400);
+            if (go) {
+              const nextHp = currentPlayer.hp - males;
+              updatePlayer(currentPlayer.id, { xushenUsed: true, hp: nextHp });
+              addLog(`【许身】鲍三娘失去 ${males} 点体力（存活男性角色数），当前体力 ${Math.max(0, nextHp)}/${currentPlayer.maxHp}`, 'skill');
+              showSkillBanner('鲍三娘', '许身');
+              if (nextHp <= 0) {
+                xushenDyingRef.current = { id: currentPlayer.id };
+                addLog(`【许身】鲍三娘因此进入濒死状态`, 'danger');
+                // 让体力变更先提交，避免 askForPeaches 读到旧体力而静默跳过濒死流程
+                // （delay 受速度倍率压缩，3x 下 200ms 仅 ~67ms，这里改为轮询 ref 直到体力真正落库）
+                for (let wait = 0; wait < 12 && (getPlayer(currentPlayer.id)?.hp ?? 0) > 0; wait++) {
+                  await delay(150);
+                }
+                const saved = await askForPeaches(currentPlayer.id);
+                if (!saved) {
+                  addLog(`鲍三娘 未能得到救援，死亡！`, 'danger');
+                  await handleDeath(currentPlayer.id);
+                  setPhase(GamePhase.END);
+                  return;
+                }
+              }
+              await delay(400);
+            }
           }
         }
 
