@@ -3481,22 +3481,78 @@ const App: React.FC = () => {
           }
         }
 
-        // 徐氏「问卦」：其他角色的出牌阶段开始时，可以交给徐氏一张牌，徐氏置于牌堆底，双方各摸一张
+        // 徐氏「问卦」：所有角色出牌阶段限一次，可交给徐氏一张牌；徐氏将其置于牌堆顶或牌堆底，双方从另一端各摸一张
         const xushi = playersRef.current.find(p => !p.isDead && p.id !== currentPlayer.id
           && p.hero.name === '徐氏' && skillsOn(p.id));
-        if (xushi && isAlly(currentPlayer, xushi) && currentPlayer.hand.length > 0) {
-          const gift = [...currentPlayer.hand].sort((a, b) => a.value - b.value)[0];
-          mutateHand(currentPlayer.id, h => h.filter(c => c.id !== gift.id));
-          setDeck(prev => {
-            const next = [...prev, gift];
-            deckRef.current = next;
-            return next;
-          });
-          addLog(`【问卦】${currentPlayer.hero.name} 交给徐氏【${gift.name}】，徐氏将其置于牌堆底`, 'skill');
-          showSkillBanner('徐氏', '问卦');
-          drawCards(xushi.id, 1);
-          drawCards(currentPlayer.id, 1);
-          await delay(350);
+        if (xushi && currentPlayer.hand.length > 0) {
+          let gift: Card | null = null;
+          if (currentPlayer.isHuman && !isAiTakeover) {
+            // 人类给牌者：自选一张交给徐氏，或放弃
+            const pick = await requestSkillChoice({
+              skill: '问卦',
+              owner: '徐氏',
+              title: '是否交给徐氏一张牌？（徐氏置于牌堆顶/底，你与其从另一端各摸一张）',
+              mode: 'card',
+              cards: currentPlayer.hand,
+              min: 1,
+              max: 1,
+              cancelLabel: '不发动',
+            }, true);
+            if (pick && pick.kind === 'card') gift = currentPlayer.hand.find(c => c.id === pick.ids[0]) ?? null;
+          } else if (isAlly(currentPlayer, xushi)) {
+            // AI 给牌者：仍是友方才愿意交出最便宜的一张
+            gift = [...currentPlayer.hand].sort((a, b) => a.value - b.value)[0];
+          }
+          if (gift) {
+            const giftCard = gift;
+            mutateHand(currentPlayer.id, h => h.filter(c => c.id !== giftCard.id));
+            let placeTop = false;
+            if (xushi.isHuman && !isAiTakeover) {
+              const pick = await requestSkillChoice({
+                skill: '问卦',
+                owner: '徐氏',
+                title: `【问卦】将 ${currentPlayer.hero.name} 的【${giftCard.name}】置于牌堆顶还是牌堆底？`,
+                mode: 'choose',
+                choices: [
+                  { id: 'top', label: '置于牌堆顶（双方从牌堆底各摸一张）' },
+                  { id: 'bottom', label: '置于牌堆底（双方从牌堆顶各摸一张）' },
+                ],
+                cancelLabel: '置于牌堆底',
+              }, true);
+              placeTop = !!(pick && pick.kind === 'choose' && pick.id === 'top');
+            }
+            if (placeTop) {
+              setDeck(prev => {
+                const next = [giftCard, ...prev];
+                deckRef.current = next;
+                return next;
+              });
+            } else {
+              setDeck(prev => {
+                const next = [...prev, giftCard];
+                deckRef.current = next;
+                return next;
+              });
+            }
+            addLog(`【问卦】${currentPlayer.hero.name} 交给徐氏【${giftCard.name}】，徐氏将其置于牌堆${placeTop ? '顶' : '底'}`, 'skill');
+            showSkillBanner('徐氏', '问卦');
+            if (placeTop) {
+              // 置于牌堆顶：双方从牌堆底各摸一张
+              for (const pid of [xushi.id, currentPlayer.id]) {
+                const now = deckRef.current;
+                const bottom = now[now.length - 1];
+                if (!bottom) break;
+                const next = now.slice(0, -1);
+                setDeck(next);
+                deckRef.current = next;
+                mutateHand(pid, h => [...h, bottom]);
+              }
+            } else {
+              drawCards(xushi.id, 1);
+              drawCards(currentPlayer.id, 1);
+            }
+            await delay(350);
+          }
         }
 
         // 何太后「鸩毒」：其他角色出牌阶段开始时，弃一张手牌令其视为使用【酒】，然后对其造成1点伤害
