@@ -6454,8 +6454,8 @@ const App: React.FC = () => {
               const payer = getPlayer(source.id);
               const payCard = payer?.hand.find(c => c.name === declared);
               const gainable = effectiveTarget.hand.length > 0;
-              // 简化：使用者手牌充裕（≥4）且曹节有牌可被获得时才支付
-              const pay = !!payCard && gainable && (payer?.hand.length ?? 0) >= 4;
+              // 官方无「手牌数」门槛：只要能弃置声明的牌且曹节有牌可被获得，即可支付
+              const pay = !!payCard && gainable;
               if (pay && payCard && payer) {
                 discardCards(payer.id, [payCard]);
                 const gained = effectiveTarget.hand[Math.floor(Math.random() * effectiveTarget.hand.length)];
@@ -6465,7 +6465,7 @@ const App: React.FC = () => {
                 showSkillBanner(effectiveTarget.hero.name, '守玺');
                 await delay(450);
               } else {
-                addLog(`${effectiveTarget.hero.name} 发动「守玺」声明【${declared}】，${source.hero.name} 未支付（手牌中无【${declared}】或不足4张），此【杀】无效`, 'skill');
+                addLog(`${effectiveTarget.hero.name} 发动「守玺」声明【${declared}】，${source.hero.name} 未支付（手牌中无【${declared}】或无可获得之牌），此【杀】无效`, 'skill');
                 showSkillBanner(effectiveTarget.hero.name, '守玺');
                 await delay(450);
                 continue;
