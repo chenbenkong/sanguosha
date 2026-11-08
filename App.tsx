@@ -902,19 +902,32 @@ const App: React.FC = () => {
     });
   };
 
+  // 函数式更新：修改依赖当前字段的内容（如装备区增删）时，直接在 prev 上算，避免读旧快照写回覆盖并发改动
+  const updatePlayerWith = (id: number, fn: (p: Player) => Partial<Player>) => {
+    setPlayers(prev => {
+      const updated = prev.map(p => p.id === id ? { ...p, ...fn(p) } : p);
+      playersRef.current = updated;
+      return updated;
+    });
+  };
+
   // 延时锦囊进入判定区：按进入先后顺序追加，并同步旧的状态布尔（座位徽标与既有技能仍读这些布尔）
+  // 必须基于 setPlayers 的 prev 计算：判定阶段同帧内可能连续挂/判多张，读 playersRef 快照再整体写回会互相覆盖
   const addDelayedTrick = (playerId: number, card: Card) => {
-    const p = playersRef.current.find(x => x.id === playerId);
-    if (!p) return;
-    const zone = [...(p.judgeZone ?? []), card];
-    playersRef.current = playersRef.current.map(x => x.id === playerId ? {
-      ...x,
-      judgeZone: zone,
-      isLeBuSiShu: zone.some(c => c.name === CardName.LESI),
-      isBingLiangCunDuan: zone.some(c => c.name === CardName.BINGLIANG),
-      isShandian: zone.some(c => c.name === CardName.SHANDIAN),
-    } : x);
-    setPlayers(playersRef.current);
+    setPlayers(prev => {
+      const target = prev.find(x => x.id === playerId);
+      if (!target) return prev;
+      const zone = [...(target.judgeZone ?? []).filter(c => c.id !== card.id), card];
+      const updated = prev.map(x => x.id === playerId ? {
+        ...x,
+        judgeZone: zone,
+        isLeBuSiShu: zone.some(c => c.name === CardName.LESI),
+        isBingLiangCunDuan: zone.some(c => c.name === CardName.BINGLIANG),
+        isShandian: zone.some(c => c.name === CardName.SHANDIAN),
+      } : x);
+      playersRef.current = updated;
+      return updated;
+    });
     // 延时锦囊实际停留在判定区：从弃牌堆移出，避免同一张牌同时存在于两处
     if (discardPileRef.current.some(c => c.id === card.id)) {
       const newDiscard = discardPileRef.current.filter(c => c.id !== card.id);
@@ -925,18 +938,21 @@ const App: React.FC = () => {
 
   // 判定完成：从判定区移除该牌并置入弃牌堆，同步旧布尔
   const removeDelayedTrick = (playerId: number, card: Card) => {
-    const p = playersRef.current.find(x => x.id === playerId);
-    if (!p) return;
-    const zone = (p.judgeZone ?? []).filter(c => c.id !== card.id);
-    playersRef.current = playersRef.current.map(x => x.id === playerId ? {
-      ...x,
-      judgeZone: zone,
-      isLeBuSiShu: zone.some(c => c.name === CardName.LESI),
-      isBingLiangCunDuan: zone.some(c => c.name === CardName.BINGLIANG),
-      isShandian: zone.some(c => c.name === CardName.SHANDIAN),
-    } : x);
-    setPlayers(playersRef.current);
-    const newDiscard = [...discardPileRef.current, card];
+    setPlayers(prev => {
+      const target = prev.find(x => x.id === playerId);
+      if (!target) return prev;
+      const zone = (target.judgeZone ?? []).filter(c => c.id !== card.id);
+      const updated = prev.map(x => x.id === playerId ? {
+        ...x,
+        judgeZone: zone,
+        isLeBuSiShu: zone.some(c => c.name === CardName.LESI),
+        isBingLiangCunDuan: zone.some(c => c.name === CardName.BINGLIANG),
+        isShandian: zone.some(c => c.name === CardName.SHANDIAN),
+      } : x);
+      playersRef.current = updated;
+      return updated;
+    });
+    const newDiscard = [...discardPileRef.current.filter(c => c.id !== card.id), card];
     discardPileRef.current = newDiscard;
     setDiscardPile(newDiscard);
   };
@@ -1556,11 +1572,10 @@ const App: React.FC = () => {
       return false;
     }
     const slot = meta.slot;
-    const prev = player.equipment?.[slot];
-    const nextEquipment = { ...(player.equipment ?? {}), [slot]: card };
+    const prev = getPlayer(playerId)?.equipment?.[slot];
 
     mutateHand(playerId, hand => hand.filter(c => c.id !== card.id));
-    updatePlayer(playerId, { equipment: nextEquipment });
+    updatePlayerWith(playerId, p => ({ equipment: { ...(p.equipment ?? {}), [slot]: card } }));
     if (prev) {
       setDiscardPile(pile => {
         const next = [...pile, prev];
@@ -2591,7 +2606,7 @@ const App: React.FC = () => {
               : (pick.kind === 'card' ? p.hand.filter(c => pick.ids.includes(c.id)) : []);
             if (picked.length > 0) {
               mutateHand(p.id, h => h.filter(c => !picked.some(x => x.id === c.id)));
-              updatePlayer(p.id, { placedCards: [...(p.placedCards ?? []), ...picked] });
+              updatePlayerWith(p.id, cur => ({ placedCards: [...(cur.placedCards ?? []), ...picked] }));
               addLog(`【箜声】周妃将 ${picked.length} 张牌置于武将牌上${pick && pick.kind === 'card' ? '（玩家选择）' : '（自动）'}`, 'skill');
               showSkillBanner('周妃', '箜声');
               const myHandAfter = p.hand.length - picked.length;
@@ -3554,9 +3569,11 @@ const App: React.FC = () => {
             const slot = EQUIP_META[pick.card.name]?.slot;
             const owner = getPlayer(pick.ownerId);
             if (slot && owner) {
-              const nextEquip = { ...(owner.equipment ?? {}) };
-              delete nextEquip[slot];
-              updatePlayer(owner.id, { equipment: nextEquip });
+              updatePlayerWith(owner.id, p => {
+                const nextEquip = { ...(p.equipment ?? {}) };
+                delete nextEquip[slot];
+                return { equipment: nextEquip };
+              });
               addLog(`孙鲁育发动「穆穆」，弃置 ${pick.owner} 的【${pick.card.name}】`, 'skill');
               showSkillBanner('孙鲁育', '穆穆');
               await delay(300);
@@ -3566,12 +3583,14 @@ const App: React.FC = () => {
               && (p.equipment?.armor as Card | undefined) && isAlly(currentPlayer, p));
             if (armorOwner?.equipment?.armor) {
               const armor = armorOwner.equipment.armor;
-              const nextEquip = { ...(armorOwner.equipment ?? {}) };
-              delete nextEquip.armor;
-              updatePlayer(armorOwner.id, { equipment: nextEquip });
-              updatePlayer(currentPlayer.id, {
-                equipment: { ...(getPlayer(currentPlayer.id)?.equipment ?? {}), armor },
+              updatePlayerWith(armorOwner.id, p => {
+                const nextEquip = { ...(p.equipment ?? {}) };
+                delete nextEquip.armor;
+                return { equipment: nextEquip };
               });
+              updatePlayerWith(currentPlayer.id, p => ({
+                equipment: { ...(p.equipment ?? {}), armor },
+              }));
               addLog(`孙鲁育发动「穆穆」，获得 ${armorOwner.hero.name} 的【${armor.name}】，本回合不能使用或打出【杀】`, 'skill');
               showSkillBanner('孙鲁育', '穆穆');
               // 禁【杀】实际生效：本回合该角色不能使用或打出【杀】
@@ -4156,14 +4175,18 @@ const App: React.FC = () => {
               : null;
             const slot = pick ? EQUIP_META[pick.name]?.slot : undefined;
             if (pick && slot) {
-              const nextEq = { ...(ender2.equipment ?? {}) };
-              delete nextEq[slot];
-              updatePlayer(ender2.id, { equipment: nextEq });
-              if (cfr.equipment?.[slot]) {
+              // 装备区增删基于实时 state 计算：避免「结束阶段其它结算已改过装备」时用快照整体写回
+              updatePlayerWith(ender2.id, p => {
+                const nextEq = { ...(p.equipment ?? {}) };
+                delete nextEq[slot];
+                return { equipment: nextEq };
+              });
+              const cfrLive = getPlayer(cfr.id);
+              if (cfrLive?.equipment?.[slot]) {
                 mutateHand(cfr.id, h => [...h, pick]);
                 addLog(`【窃听】蔡夫人已有同部位装备，改为获得 ${ender2.hero.name} 的【${pick.name}】到手牌`, 'skill');
               } else {
-                updatePlayer(cfr.id, { equipment: { ...(cfr.equipment ?? {}), [slot]: pick } });
+                updatePlayerWith(cfr.id, p => ({ equipment: { ...(p.equipment ?? {}), [slot]: pick } }));
                 addLog(`【窃听】蔡夫人获得 ${ender2.hero.name} 装备区的【${pick.name}】`, 'skill');
               }
               showSkillBanner('蔡夫人', '窃听');
@@ -5001,10 +5024,18 @@ const App: React.FC = () => {
       addLog(`「甘露」：${a.hero.name} 与 ${b.hero.name} 装备数差超过已损体力（${lost}），无法交换`, 'info');
       return false;
     }
-    const ea = a.equipment ?? {};
-    const eb = b.equipment ?? {};
-    updatePlayer(aId, { equipment: { ...eb } });
-    updatePlayer(bId, { equipment: { ...ea } });
+    // 交换必须一次 setPlayers 原子完成：分两次写回时，第二个人可能拿着已被并发改动过的快照覆盖第一个人
+    setPlayers(prev => {
+      const pa = prev.find(p => p.id === aId);
+      const pb = prev.find(p => p.id === bId);
+      if (!pa || !pb) return prev;
+      const updated = prev.map(p =>
+        p.id === aId ? { ...p, equipment: { ...(pb.equipment ?? {}) } }
+          : p.id === bId ? { ...p, equipment: { ...(pa.equipment ?? {}) } }
+            : p);
+      playersRef.current = updated;
+      return updated;
+    });
     addLog(`吴国太发动「甘露」，交换 ${a.hero.name} 与 ${b.hero.name} 的装备区`, 'skill');
     showSkillBanner('吴国太', '甘露');
     ganluUsedRef.current = true;
@@ -5059,19 +5090,20 @@ const App: React.FC = () => {
     }
     if (!owner.hand.some(c => c.id === cost.id)) {
       // 代价来自装备区：移出槽位、置入弃牌堆，并触发「枭姬」
-      const slot = (Object.keys(eq) as EquipmentSlot[])
-        .find(k => (eq as Record<string, Card | undefined>)[k]?.id === cost.id);
-      if (slot) {
-        const nextEq = { ...eq };
-        delete nextEq[slot];
-        updatePlayer(ownerId, { equipment: nextEq });
-        setDiscardPile(prev => {
-          const next = [...prev, cost];
-          discardPileRef.current = next;
-          return next;
-        });
-        triggerXiaoji(ownerId);
-      }
+      // 人手选择期间有 await，必须按牌 id 在实时装备区里找槽位删，不能拿选择前的快照整体写回
+      updatePlayerWith(ownerId, p => {
+        const nextEq = { ...(p.equipment ?? {}) };
+        const slot = (Object.keys(nextEq) as EquipmentSlot[])
+          .find(k => (nextEq as Record<string, Card | undefined>)[k]?.id === cost.id);
+        if (slot) delete nextEq[slot];
+        return { equipment: nextEq };
+      });
+      setDiscardPile(prev => {
+        const next = [...prev, cost];
+        discardPileRef.current = next;
+        return next;
+      });
+      triggerXiaoji(ownerId);
     } else {
       discardCards(ownerId, [cost]);
     }
@@ -7220,11 +7252,13 @@ const App: React.FC = () => {
 
             if (stealEquip) {
               const stolenEquip = equipCards[Math.floor(Math.random() * equipCards.length)];
-              const nextEquip = { ...(target.equipment ?? {}) };
-              (Object.keys(nextEquip) as Array<keyof typeof nextEquip>).forEach(k => {
-                if (nextEquip[k]?.id === stolenEquip.id) delete nextEquip[k];
+              updatePlayerWith(target.id, p => {
+                const nextEquip = { ...(p.equipment ?? {}) };
+                (Object.keys(nextEquip) as Array<keyof typeof nextEquip>).forEach(k => {
+                  if (nextEquip[k]?.id === stolenEquip.id) delete nextEquip[k];
+                });
+                return { equipment: nextEquip };
               });
-              updatePlayer(target.id, { equipment: nextEquip });
               mutateHand(source.id, hand => [...hand, stolenEquip]);
               lockXiaohuiCards(target.id, source.id, [stolenEquip]);
               onEquipLost(target.id, stolenEquip.name);
@@ -7289,11 +7323,13 @@ const App: React.FC = () => {
             const shouldEquip = equipCards.length > 0 && (target.hand.length === 0 || Math.random() < 0.35);
             if (shouldEquip) {
               const brokenEquip = equipCards[Math.floor(Math.random() * equipCards.length)];
-              const nextEquip = { ...(target.equipment ?? {}) };
-              (Object.keys(nextEquip) as Array<keyof typeof nextEquip>).forEach(k => {
-                if (nextEquip[k]?.id === brokenEquip.id) delete nextEquip[k];
+              updatePlayerWith(target.id, p => {
+                const nextEquip = { ...(p.equipment ?? {}) };
+                (Object.keys(nextEquip) as Array<keyof typeof nextEquip>).forEach(k => {
+                  if (nextEquip[k]?.id === brokenEquip.id) delete nextEquip[k];
+                });
+                return { equipment: nextEquip };
               });
-              updatePlayer(target.id, { equipment: nextEquip });
               setDiscardPile(prev => {
                 const newPile = [...prev, brokenEquip];
                 discardPileRef.current = newPile;
@@ -7566,12 +7602,14 @@ const App: React.FC = () => {
           // 受害者通过响应流程打出【闪】（人类玩家会收到响应弹窗）
           await triggerReaction(victim.id, target.id, CardName.SHAN, card);
         } else {
-          // 无【杀】：将武器牌交给使用者
-          const weapon = target.equipment?.weapon;
+          // 无【杀】：将武器牌交给使用者（响应流程是异步的，必须读实时装备区，不能用目标快照）
+          const weapon = getPlayer(target.id)?.equipment?.weapon;
           if (weapon) {
-            const nextEquip = { ...(target.equipment ?? {}) };
-            delete nextEquip.weapon;
-            updatePlayer(target.id, { equipment: nextEquip });
+            updatePlayerWith(target.id, p => {
+              const nextEquip = { ...(p.equipment ?? {}) };
+              delete nextEquip.weapon;
+              return { equipment: nextEquip };
+            });
             mutateHand(source.id, hand => [...hand, weapon]);
             triggerXiaoji(target.id);
             addLog(`${target.hero.name} 无法使用【杀】，将【${weapon.name}】交给了 ${source.hero.name}`, 'info');
@@ -8561,17 +8599,21 @@ const App: React.FC = () => {
     if (entry.zone === 'hand') {
       mutateHand(victim.id, h => h.filter(c => c.id !== entry.card.id));
     } else if (entry.zone === 'equip') {
-      const nextEquip = { ...(victim.equipment ?? {}) };
-      if (entry.slot) delete nextEquip[entry.slot as keyof typeof nextEquip];
-      updatePlayer(victim.id, { equipment: nextEquip });
+      updatePlayerWith(victim.id, p => {
+        const nextEquip = { ...(p.equipment ?? {}) };
+        if (entry.slot) delete nextEquip[entry.slot as keyof typeof nextEquip];
+        return { equipment: nextEquip };
+      });
       onEquipLost(victim.id, entry.card.name);
     } else {
-      const zone = (victim.judgeZone ?? []).filter(c => c.id !== entry.card.id);
-      updatePlayer(victim.id, {
-        judgeZone: zone,
-        isLeBuSiShu: zone.some(c => c.name === CardName.LESI),
-        isBingLiangCunDuan: zone.some(c => c.name === CardName.BINGLIANG),
-        isShandian: zone.some(c => c.name === CardName.SHANDIAN),
+      updatePlayerWith(victim.id, p => {
+        const zone = (p.judgeZone ?? []).filter(c => c.id !== entry.card.id);
+        return {
+          judgeZone: zone,
+          isLeBuSiShu: zone.some(c => c.name === CardName.LESI),
+          isBingLiangCunDuan: zone.some(c => c.name === CardName.BINGLIANG),
+          isShandian: zone.some(c => c.name === CardName.SHANDIAN),
+        };
       });
     }
     mutateHand(ownerId, h => [...h, entry.card]);
@@ -8816,9 +8858,13 @@ const App: React.FC = () => {
             && (jjVictim.hp - finalAmount <= 1 || finalAmount >= 2)) {
           const cost = equipCards[0];
           const slot = EQUIP_META[cost.name]?.slot;
-          const eq = { ...(jjVictim.equipment ?? {}) };
-          if (slot) delete eq[slot];
-          updatePlayer(victimId, { equipment: eq });
+          if (slot) {
+            updatePlayerWith(victimId, p => {
+              const eq = { ...(p.equipment ?? {}) };
+              delete eq[slot];
+              return { equipment: eq };
+            });
+          }
           setDiscardPile(prev => {
             const next = [...prev, cost];
             discardPileRef.current = next;
@@ -8898,9 +8944,12 @@ const App: React.FC = () => {
           const equipGive = equipEntries.filter(e => give.some(c => c.id === e.card.id));
           mutateHand(czy.id, h => h.filter(c => !handGive.some(g => g.id === c.id)));
           if (equipGive.length > 0) {
-            const nextEq = { ...eq };
-            for (const e of equipGive) delete nextEq[e.slot];
-            updatePlayer(czy.id, { equipment: nextEq });
+            // 玩家选牌期间有 await，按槽位在实时装备区删除，避免覆盖期间的其他装备变动
+            updatePlayerWith(czy.id, p => {
+              const nextEq = { ...(p.equipment ?? {}) };
+              for (const e of equipGive) delete nextEq[e.slot];
+              return { equipment: nextEq };
+            });
           }
           mutateHand(victimId, h => [...h, ...give]);
           addLog(`【舍裔】蔡贞姬将 ${give.length} 张牌交给 ${v.hero.name}（手牌 ${handGive.length} / 装备 ${equipGive.length}），防止此伤害${pick && pick.kind === 'card' ? '（玩家选择）' : '（自动）'}`, 'skill');
@@ -9149,9 +9198,11 @@ const App: React.FC = () => {
         const slot = v?.equipment?.horsePlus ? 'horsePlus' as const : v?.equipment?.horseMinus ? 'horseMinus' as const : null;
         if (v && slot) {
           const horse = v.equipment![slot]!;
-          const nextEquip = { ...(v.equipment ?? {}) };
-          delete nextEquip[slot];
-          updatePlayer(victimId, { equipment: nextEquip });
+          updatePlayerWith(victimId, p => {
+            const nextEquip = { ...(p.equipment ?? {}) };
+            delete nextEquip[slot];
+            return { equipment: nextEquip };
+          });
           setDiscardPile(prev => {
             const next = [...prev, horse];
             discardPileRef.current = next;
