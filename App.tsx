@@ -1395,14 +1395,39 @@ const App: React.FC = () => {
     updatePlayer(playerId, { hp: next });
     const healed = getPlayer(playerId);
     if (healed && healed.hero.name === '甘夫人' && skillsOn(healed.id)) {
-      const allies = playersRef.current
-        .filter(a => !a.isDead && a.id !== healed.id && isAlly(healed, a))
-        .sort((a, b) => a.hand.length - b.hand.length);
-      const pick = allies[0];
-      if (pick) {
-        drawCards(pick.id, gained);
-        addLog(`甘夫人发动「淑慎」，令 ${pick.hero.name} 摸 ${gained} 张牌`, 'skill');
-        showSkillBanner('甘夫人', '淑慎');
+      // 官方：每回复 1 点体力，可令一名「其他角色」（不限友方）摸一张牌
+      const othersBase = playersRef.current.filter(a => !a.isDead && a.id !== playerId);
+      if (othersBase.length > 0) {
+        if (healed.isHuman && !isAiTakeover) {
+          // 人类：逐点弹窗自选目标；recoverHp 为同步函数，这里异步补结算，不阻塞主流程
+          void (async () => {
+            for (let i = 0; i < gained; i++) {
+              const cur = getPlayer(playerId);
+              if (!cur || cur.isDead) return;
+              const pool = playersRef.current.filter(a => !a.isDead && a.id !== playerId);
+              if (!pool.length) return;
+              const pick = await requestSkillChoice({
+                skill: '淑慎',
+                owner: '甘夫人',
+                title: `「淑慎」：选择令一名其他角色摸一张牌（${i + 1}/${gained}）`,
+                mode: 'choose',
+                choices: pool.map(a => ({ id: String(a.id), label: a.hero.name, desc: `${a.hp}/${a.maxHp} 手牌${a.hand.length}` })),
+                cancelLabel: '放弃本次',
+              }, true);
+              if (!pick || pick.kind !== 'choose') return;
+              const tid = Number(pick.id);
+              drawCards(tid, 1);
+              addLog(`甘夫人发动「淑慎」，令 ${getPlayer(tid)?.hero.name ?? '角色'} 摸一张牌`, 'skill');
+              showSkillBanner('甘夫人', '淑慎');
+              await delay(250);
+            }
+          })();
+        } else {
+          const pick = othersBase.slice().sort((a, b) => a.hand.length - b.hand.length)[0];
+          drawCards(pick.id, gained);
+          addLog(`甘夫人发动「淑慎」，令 ${pick.hero.name} 摸 ${gained} 张牌`, 'skill');
+          showSkillBanner('甘夫人', '淑慎');
+        }
       }
     }
     return gained;
