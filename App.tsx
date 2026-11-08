@@ -2028,11 +2028,10 @@ const App: React.FC = () => {
     // 张琪瑛「法箓」：因弃置移至弃牌堆后按花色获得标记
     if (before) grantZhangMarks(before, cardsToDiscard);
 
-    // 陆逊「连营」/ 卞夫人「挽危」：失去最后一张手牌后摸一张
-    if (lostAllHand && before && !before.isDead && (before.hero.name === '陆逊' || before.hero.name === '卞夫人')) {
-      const sk = before.hero.name === '卞夫人' ? '挽危' : '连营';
-      addLog(`${before.hero.name} 发动「${sk}」，摸一张牌`, 'skill');
-      showSkillBanner(before.hero.name, sk);
+    // 陆逊「连营」：失去最后一张手牌后摸一张
+    if (lostAllHand && before && !before.isDead && before.hero.name === '陆逊') {
+      addLog(`${before.hero.name} 发动「连营」，摸一张牌`, 'skill');
+      showSkillBanner(before.hero.name, '连营');
       drawCards(playerId, 1);
     }
 
