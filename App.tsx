@@ -327,6 +327,9 @@ const App: React.FC = () => {
   const slashUsageRef = useRef<Record<number, number>>({});
   // 张星彩「枪舞」：出牌阶段限一次的判定结果（点数），以及本回合是否已发动
   const qiangwuUsedRef = useRef<boolean>(false);
+  // 刘备「仁德」：本回合累计给出的牌数与是否已触发回血
+  const rendeGivenRef = useRef<number>(0);
+  const rendeHealedRef = useRef<boolean>(false);
   const qiangwuPointRef = useRef<number | null>(null);
   const [qiangwuPoint, setQiangwuPoint] = useState<number | null>(null);
   const [hasUsedQiangwu, setHasUsedQiangwu] = useState<boolean>(false);
@@ -2348,6 +2351,8 @@ const App: React.FC = () => {
         setIsRendeMode(false);
         setRendeSelectedCardIds([]);
         setRendeSelectedTarget(null);
+        rendeGivenRef.current = 0;
+        rendeHealedRef.current = false;
         // 重置孙尚香结姻
         setIsJieyinMode(false);
         setJieyinTarget(null);
@@ -11890,16 +11895,20 @@ const App: React.FC = () => {
                             addLog(`${me.hero.name} 使用技能「仁德」，将 ${cardsToGive.length} 张牌交给了 ${target.hero.name}！`, 'skill');
                             showSkillBanner(me.hero.name, '仁德');
 
-                            // 如果给出了2张或更多牌，回复1点体力
-                            if (cardsToGive.length >= 2 && me.hp < me.maxHp) {
-                              // 触发治疗动画
-                              setHealAnimTarget(me.id);
-                              setHealNumber({ targetId: me.id, amount: 1, id: Date.now().toString() });
-                              setTimeout(() => setHealAnimTarget(null), 600);
-                              setTimeout(() => setHealNumber(null), 1000);
+                            // 官方「仁德」：出牌阶段内累计给出的牌首次达到 2 张时回复 1 点体力（每阶段一次）
+                            rendeGivenRef.current += cardsToGive.length;
+                            if (!rendeHealedRef.current && rendeGivenRef.current >= 2) {
+                              rendeHealedRef.current = true;
+                              if (me.hp < me.maxHp) {
+                                // 触发治疗动画
+                                setHealAnimTarget(me.id);
+                                setHealNumber({ targetId: me.id, amount: 1, id: Date.now().toString() });
+                                setTimeout(() => setHealAnimTarget(null), 600);
+                                setTimeout(() => setHealNumber(null), 1000);
 
-                              updatePlayer(me.id, { hp: me.hp + 1 });
-                              addLog(`${me.hero.name} 使用「仁德」给出了${cardsToGive.length}张牌，回复1点体力！`, 'skill');
+                                updatePlayer(me.id, { hp: me.hp + 1 });
+                                addLog(`${me.hero.name} 使用「仁德」本阶段累计给出${rendeGivenRef.current}张牌，回复1点体力！`, 'skill');
+                              }
                             }
                           }
                           
