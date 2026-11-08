@@ -8271,23 +8271,15 @@ const App: React.FC = () => {
 
       // 小乔「天香」：弃一张红桃手牌，将伤害转移给伤害来源
       if (victim.hero.name === '小乔' && sourceId !== victimId && skillsOn(victimId)) {
-        const heartCard = victim.hand.find(c => c.suit === Suit.HEART || c.suit === Suit.DIAMOND);
+        const heartCard = victim.hand.find(c => c.suit === Suit.HEART);
         if (heartCard) {
           discardCards(victimId, [heartCard]);
-          addLog(`${victim.hero.name} 发动「天香」，弃置【${heartCard.name}】将伤害转移`, 'skill');
+          addLog(`${victim.hero.name} 发动「天香」，弃置【${heartCard.name}】将伤害转移给 ${getPlayer(sourceId)?.hero.name ?? ''}`, 'skill');
           showSkillBanner(victim.hero.name, '天香');
           await delay(400);
           const receiver = getPlayer(sourceId);
           if (receiver && !receiver.isDead) {
             await takeDamage(sourceId, sourceId, finalAmount, damageCard, dmgNature === 'normal' ? undefined : dmgNature);
-            const after = getPlayer(sourceId);
-            if (after && !after.isDead) {
-              const lost = Math.min(5, after.maxHp - after.hp);
-              if (lost > 0) {
-                drawCards(after.id, lost);
-                addLog(`${after.hero.name} 因「天香」摸 ${lost} 张牌`, 'info');
-              }
-            }
           }
           return;
         }
