@@ -335,6 +335,8 @@ const App: React.FC = () => {
   const [hasUsedQiangwu, setHasUsedQiangwu] = useState<boolean>(false);
   // 孙寒华「妙剑」：出牌阶段限一次（人类按钮 / AI 自动共用一个 ref）
   const [hasUsedMiaoJian, setHasUsedMiaoJian] = useState<boolean>(false);
+  // 孙寒华「冲虚」：出牌阶段限一次（人类按钮 / AI 自动共用一个 ref）
+  const [hasUsedChongxu, setHasUsedChongxu] = useState<boolean>(false);
   // 卞夫人「挽危」：每回合限一次
   const wanweiUsedRef = useRef<boolean>(false);
   // 本轮补齐的第二技能状态
@@ -1753,6 +1755,7 @@ const App: React.FC = () => {
         __devKill?: (victimId: number, killerId?: number) => void;
         __devIdentity?: (spec: Array<{ id: number; identity: string }>) => void;
         __devTrick?: (spec: Array<{ id: number; cards: string[] }>) => void;
+        __devDeckTop?: (names: string[]) => void;
         __devLogs?: () => string[];
       };
       devWin.__devLogs = () => logsRef.current.map(l => l.text);
@@ -1813,6 +1816,26 @@ const App: React.FC = () => {
         deckRef.current = pool;
         setDeck(pool);
         setPlayers(next);
+      };
+      // 仅测试用：把指定牌名压到牌堆顶（names[0] 先被翻开），用于给「集灵」构造确定分数
+      devWin.__devDeckTop = (names) => {
+        const pool = [...deckRef.current];
+        const made = [...names].reverse().map((nm, i): Card => {
+          let name = nm as CardName;
+          let suit: Suit = Suit.HEART;
+          if (nm.startsWith('黑')) { name = nm.slice(1) as CardName; suit = Suit.SPADE; }
+          else if (nm.startsWith('♦')) { name = nm.slice(1) as CardName; suit = Suit.DIAMOND; }
+          const idx = pool.findIndex(c => c.name === name);
+          if (idx >= 0) {
+            const found = pool.splice(idx, 1)[0];
+            return { ...found, suit };
+          }
+          const base = pool[0] ?? playersRef.current[0]?.hand[0];
+          return { ...(base as Card), id: `devtop-${i}-${Date.now()}`, name, suit, description: `开发态构造：${nm}` };
+        });
+        pool.push(...made);
+        deckRef.current = pool;
+        setDeck(pool);
       };
       devWin.__devDamage = (victimId, sourceId, amount, nature, cardName) => {
         let card: Card | undefined;
@@ -2392,6 +2415,7 @@ const App: React.FC = () => {
     setQiangwuPoint(null);
     setHasUsedQiangwu(false);
     setHasUsedMiaoJian(false); // 重置「妙剑」人类按钮状态
+    setHasUsedChongxu(false); // 重置「冲虚」人类按钮状态
     wanweiUsedRef.current = false; // 重置「挽危」
         xuejiUsedRef.current = false; // 重置「血祭」
         setHasUsedXueji(false);
@@ -3096,26 +3120,34 @@ const App: React.FC = () => {
           }
         }
 
-        // 孙寒华「冲虚」：出牌阶段限一次，集灵获得分数，用于升级妙剑/莲华或摸牌
-        if (currentPlayer.hero.name === '孙寒华' && skillsOn(currentPlayer.id) && !chongxuUsedRef.current) {
+        // 孙寒华「冲虚」：出牌阶段限一次，集灵获得真实分数（至多5分），再用分数升级妙剑/莲华或摸牌（人类由按钮自选）
+        if (currentPlayer.hero.name === '孙寒华' && skillsOn(currentPlayer.id) && !chongxuUsedRef.current
+            && !(currentPlayer.isHuman && !isAiTakeover)) {
           chongxuUsedRef.current = true;
           const p = getPlayer(currentPlayer.id);
           if (p) {
-            let score = 1; // 简化：每次集灵获得 1 分
-            addLog(`孙寒华发动「冲虚」，集灵获得 ${score} 分`, 'skill');
-            showSkillBanner('孙寒华', '冲虚');
-            await delay(400);
-            if ((p.miaoJianLevel ?? 1) < 3) {
-              updatePlayer(p.id, { miaoJianLevel: (p.miaoJianLevel ?? 1) + 1 });
-              addLog(`孙寒华用分数升级「妙剑」至 ${(p.miaoJianLevel ?? 1) + 1} 级`, 'skill');
-            } else if ((p.lianHuaLevel ?? 1) < 3) {
-              updatePlayer(p.id, { lianHuaLevel: (p.lianHuaLevel ?? 1) + 1 });
-              addLog(`孙寒华用分数升级「莲华」至 ${(p.lianHuaLevel ?? 1) + 1} 级`, 'skill');
-            } else {
-              drawCards(p.id, score);
-              addLog(`孙寒华用分数摸 ${score} 张牌`, 'skill');
+            let left = await performJiling(p.id);
+            let mj = p.miaoJianLevel ?? 1;
+            let lh = p.lianHuaLevel ?? 1;
+            // 升级妙剑需 3 分 / 升级莲华需 3 分 / 摸一张牌需 2 分（可重复）
+            while (true) {
+              if (left >= 3 && mj < 3) {
+                left -= 3; mj += 1;
+                updatePlayer(p.id, { miaoJianLevel: mj });
+                addLog(`孙寒华将 3 分用于升级「妙剑」：${mj - 1} → ${mj} 级（剩余 ${left} 分）`, 'skill');
+              } else if (left >= 3 && lh < 3) {
+                left -= 3; lh += 1;
+                updatePlayer(p.id, { lianHuaLevel: lh });
+                addLog(`孙寒华将 3 分用于升级「莲华」：${lh - 1} → ${lh} 级（剩余 ${left} 分）`, 'skill');
+              } else if (left >= 2) {
+                left -= 2;
+                drawCards(p.id, 1);
+                addLog(`孙寒华将 2 分用于摸一张牌（剩余 ${left} 分）`, 'skill');
+              } else {
+                break;
+              }
+              await delay(400);
             }
-            await delay(400);
           }
         }
 
@@ -7459,6 +7491,39 @@ const App: React.FC = () => {
 
   // 「止息」闸门需要在 cpuAI 内遮蔽同名函数，这里保留一份本名别名供其内部调用
   const resolveCardEffectBase = resolveCardEffect;
+
+  // 孙寒华「集灵」：连翻 5 张牌，红牌（莲花）+1 分、黑牌（天雷）-1 分，分数区间 0～5
+  const performJiling = async (playerId: number): Promise<number> => {
+    let score = 0;
+    const parts: string[] = [];
+    const flipped: Card[] = [];
+    for (let i = 0; i < 5; i++) {
+      let pool = [...deckRef.current];
+      if (pool.length === 0) {
+        pool = shuffle([...discardPileRef.current]);
+        discardPileRef.current = [];
+        setDiscardPile([]);
+        addLog('牌堆已洗切', 'info');
+      }
+      if (pool.length === 0) break;
+      const card = pool.pop() as Card;
+      deckRef.current = pool;
+      setDeck(pool);
+      flipped.push(card);
+      const isRed = card.suit === Suit.HEART || card.suit === Suit.DIAMOND;
+      score = Math.max(0, Math.min(5, score + (isRed ? 1 : -1)));
+      parts.push(`${isRed ? '莲花' : '天雷'}【${card.name}】${isRed ? '+1' : '-1'}`);
+      await delay(320);
+    }
+    if (flipped.length) {
+      const dp = [...discardPileRef.current, ...flipped];
+      discardPileRef.current = dp;
+      setDiscardPile(dp);
+    }
+    addLog(`${getPlayer(playerId)?.hero.name ?? '孙寒华'}「集灵」：${parts.join('，')}，最终 ${score} 分`, 'skill');
+    showSkillBanner(getPlayer(playerId)?.hero.name ?? '孙寒华', '冲虚');
+    return score;
+  };
 
   const triggerReaction = async (responderId: number, sourceId: number, neededCard: CardName, triggerCard: Card, isSecondReaction: boolean = false) => {
     setIsProcessing(p => p + 1);
@@ -12535,6 +12600,55 @@ const App: React.FC = () => {
                         title="出牌阶段限一次：将某花色的所有手牌交给一名其他角色，然后对其造成1点伤害"
                       >
                         严教
+                      </button>
+                    )}
+
+                    {/* 孙寒华「冲虚」：出牌阶段限一次，人类自选集灵分数的用途 */}
+                    {players[0].hero.name === '孙寒华' && !hasUsedChongxu && (
+                      <button
+                        onClick={async () => {
+                          const m = playersRef.current.find(p => p.isHuman) || playersRef.current[0];
+                          if (!m) return;
+                          chongxuUsedRef.current = true;
+                          setHasUsedChongxu(true);
+                          let left = await performJiling(m.id);
+                          let mj = m.miaoJianLevel ?? 1;
+                          let lh = m.lianHuaLevel ?? 1;
+                          // 升级需 3 分、摸牌需 2 分（可重复）；分数不足或两项满级时自动结束
+                          while (left >= 2) {
+                            const opts: Array<{ id: string; label: string; desc?: string }> = [];
+                            if (left >= 3 && mj < 3) opts.push({ id: 'mj', label: '升级「妙剑」（3分）', desc: `${mj} → ${mj + 1} 级` });
+                            if (left >= 3 && lh < 3) opts.push({ id: 'lh', label: '升级「莲华」（3分）', desc: `${lh} → ${lh + 1} 级` });
+                            opts.push({ id: 'draw', label: '摸一张牌（2分，可重复）', desc: `当前 ${left} 分` });
+                            const r = await requestSkillChoice({
+                              skill: '冲虚',
+                              owner: m.hero.name,
+                              title: `集灵获得 ${left} 分，选择用途`,
+                              mode: 'choose',
+                              choices: opts,
+                              cancelLabel: '结束集灵',
+                            }, true);
+                            if (!r || r.kind !== 'choose') break;
+                            if (r.id === 'mj') {
+                              left -= 3; mj += 1;
+                              updatePlayer(m.id, { miaoJianLevel: mj });
+                              addLog(`孙寒华将 3 分用于升级「妙剑」：${mj - 1} → ${mj} 级（剩余 ${left} 分）`, 'skill');
+                            } else if (r.id === 'lh') {
+                              left -= 3; lh += 1;
+                              updatePlayer(m.id, { lianHuaLevel: lh });
+                              addLog(`孙寒华将 3 分用于升级「莲华」：${lh - 1} → ${lh} 级（剩余 ${left} 分）`, 'skill');
+                            } else if (r.id === 'draw') {
+                              left -= 2;
+                              drawCards(m.id, 1);
+                              addLog(`孙寒华将 2 分用于摸一张牌（剩余 ${left} 分）`, 'skill');
+                            }
+                            await delay(300);
+                          }
+                        }}
+                        className="skill-btn text-base"
+                        title="出牌阶段限一次：集灵获得分数（至多5分），可用分数升级妙剑/莲华（各3分）或摸牌（2分）"
+                      >
+                        冲虚
                       </button>
                     )}
 
