@@ -3850,12 +3850,14 @@ const App: React.FC = () => {
           drawCards(endingPlayer.id, 1);
         }
 
-        // 曹婴「伏间」：结束阶段观看一名其他角色 X 张手牌（X 为全场手牌数最少者）
+        // 曹婴「伏间」（锁定技）：结束阶段若全场角色均有手牌，随机观看一名其他角色 X 张手牌（X 为全场最少手牌数）
         if (endingPlayer && !endingPlayer.isDead && endingPlayer.hero.name === '曹婴' && skillsOn(endingPlayer.id)) {
-          const others = playersRef.current.filter(p => !p.isDead && p.id !== endingPlayer.id && p.hand.length > 0);
-          if (others.length > 0) {
-            const x = Math.min(...others.map(p => p.hand.length));
-            const viewed = others.slice().sort((a, b) => a.hand.length - b.hand.length)[0];
+          const alive = playersRef.current.filter(p => !p.isDead);
+          const allHaveHand = alive.every(p => p.hand.length > 0);
+          const others = alive.filter(p => p.id !== endingPlayer.id);
+          if (allHaveHand && others.length > 0) {
+            const x = Math.min(...alive.map(p => p.hand.length));
+            const viewed = others[Math.floor(Math.random() * others.length)];
             const cards = viewed.hand.slice(0, x).map(c => `【${c.name}】`).join('、');
             addLog(`【伏间】曹婴观看 ${viewed.hero.name} 的 ${x} 张手牌：${cards}`, 'skill');
             showSkillBanner('曹婴', '伏间');
