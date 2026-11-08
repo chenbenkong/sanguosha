@@ -381,7 +381,8 @@ const App: React.FC = () => {
   const judgeSkipRef = useRef<{ draw: boolean; action: boolean }>({ draw: false, action: false });
   const doutuDistanceRef = useRef<Record<number, number>>({}); // 「惴恐」没赢：到伏皇后距离视为 1
   const yuejianCountRef = useRef<number>(0); // 卞夫人「约俭」本回合已发动次数（上限 2）
-  const yuejianGainedRef = useRef<Set<string>>(new Set()); // 已被「约俭」获得的牌：结算后不再重复置入弃牌堆
+  // 卞夫人「约俭」：待置入弃牌堆的牌（牌 id → 卞夫人 id），真正进弃牌堆时才展示手牌判定
+  const yuejianPendingRef = useRef<Map<string, number>>(new Map());
   // 孙鲁育「穆穆」：获得防具后，本回合该角色不能使用或打出【杀】
   const mumuNoSlashRef = useRef<number | null>(null);
   // 孙鲁育「魅步」：止息（至多使用 X 张牌，使用锦囊后结束出牌阶段）与本回合与孙鲁育距离视为 1
@@ -1757,6 +1758,7 @@ const App: React.FC = () => {
         __devTrick?: (spec: Array<{ id: number; cards: string[] }>) => void;
         __devDeckTop?: (names: string[]) => void;
         __devDeckOnly?: (names: string[]) => void;
+        __devUseCard?: (sourceId: number, targetId: number, names: string[]) => Promise<void>;
         __devLogs?: () => string[];
       };
       devWin.__devLogs = () => logsRef.current.map(l => l.text);
@@ -1783,6 +1785,7 @@ const App: React.FC = () => {
           if (nm.startsWith('火')) { name = nm.slice(1) as CardName; attribute = 'fire'; }
           else if (nm.startsWith('黑')) { name = nm.slice(1) as CardName; suit = Suit.SPADE; }
           else if (nm.startsWith('♦')) { name = nm.slice(1) as CardName; suit = Suit.DIAMOND; }
+          else if (nm.startsWith('♣')) { name = nm.slice(1) as CardName; suit = Suit.CLUB; }
           const idx = pool.findIndex(c => c.name === name);
           if (idx >= 0) {
             const found = pool.splice(idx, 1)[0];
@@ -1913,6 +1916,18 @@ const App: React.FC = () => {
         setPlayers(next);
         deckRef.current = pool;
         setDeck(pool);
+      };
+      // 仅测试用：让来源角色对目标使用一张已在手牌中的指定牌（走真实 resolveCardEffect 流程）
+      devWin.__devUseCard = async (sourceId, targetId, names) => {
+        const src = getPlayer(sourceId);
+        const tgt = getPlayer(targetId);
+        if (!src || !tgt || !names.length) return;
+        const card = src.hand.find(c => c.name === (names[0] as CardName));
+        if (!card) {
+          addLog(`【开发态】${src.hero.name} 手牌中没有【${names[0]}】`, 'warning');
+          return;
+        }
+        await resolveCardEffect(src, [tgt], card);
       };
     }
 
@@ -2077,9 +2092,7 @@ const App: React.FC = () => {
   // --- Core Game Functions ---
 
   const discardCards = (playerId: number, cardsToDiscardIn: Card[]) => {
-    // 「约俭」已在结算前获得该牌：从此处跳过，避免同一张牌既入手又进弃牌堆
     const cardsToDiscard = cardsToDiscardIn.filter(c => {
-      if (yuejianGainedRef.current.has(c.id)) { yuejianGainedRef.current.delete(c.id); return false; }
       // 董白「黠慧」：他人获得的黑色牌在体力减少前不能弃置
       if (xiaohuiLocked(playerId, c.id)) {
         const owner = getPlayer(playerId);
@@ -6296,6 +6309,28 @@ const App: React.FC = () => {
 
   const playCard = (playerId: number, card: Card) => {
     usedTypesRef.current.add(card.type); // 蔡贞姬「天音」：记录本回合使用过的牌类型
+    // 卞夫人「约俭」：牌**置入弃牌堆**的这一刻才展示手牌并判定花色（每回合限两次）
+    const yjBfId = yuejianPendingRef.current.get(card.id);
+    if (yjBfId !== undefined) {
+      yuejianPendingRef.current.delete(card.id);
+      const bf = getPlayer(yjBfId);
+      if (bf && !bf.isDead && skillsOn(bf.id) && yuejianCountRef.current < 2) {
+        const shown = bf.hand.map(c => `${c.suit}【${c.name}】`).join(' ');
+        addLog(`【约俭】卞夫人展示手牌：${shown || '（无）'}`, 'skill');
+        yuejianCountRef.current += 1;
+        const sameSuit = bf.hand.some(c => c.suit === card.suit);
+        if (!sameSuit) {
+          mutateHand(playerId, h => h.filter(c => c.id !== card.id));
+          mutateHand(bf.id, h => [...h, card]);
+          addLog(`【约俭】卞夫人手牌均无 ${card.suit} 花色，获得置入弃牌堆的【${card.name}】`, 'skill');
+          showSkillBanner('卞夫人', '约俭');
+          showCardVisual(card, getPlayer(playerId)?.hero.name || '', 1200, getPlayer(playerId)?.hero.gender);
+          return;
+        }
+        addLog(`【约俭】卞夫人手牌中有 ${card.suit} 花色，未获得【${card.name}】`, 'info');
+        showSkillBanner('卞夫人', '约俭');
+      }
+    }
     discardCards(playerId, [card]);
     showCardVisual(card, getPlayer(playerId)?.hero.name || '', 1200, getPlayer(playerId)?.hero.gender);
   };
@@ -6336,7 +6371,8 @@ const App: React.FC = () => {
         if (!targets.length) return;
       }
 
-      // 卞夫人「约俭」：其他角色对你使用的牌置入弃牌堆时，展示手牌，若无同花色牌则获得之（每回合限两次）
+      // 卞夫人「约俭」：其他角色对你使用的牌，等它置入弃牌堆时才展示手牌并判定（每回合限两次）
+      // 此处只登记候选并询问是否发动；真正的获得在 playCard（置弃牌堆那一刻）里执行
       {
         const bf = playersRef.current.find(p => !p.isDead && p.hero.name === '卞夫人' && skillsOn(p.id));
         // 基本牌 / 锦囊使用后进入弃牌堆；装备牌进入装备区，不触发
@@ -6344,19 +6380,22 @@ const App: React.FC = () => {
         const inHand = source.hand.some(c => c.id === card.id); // 仅处理真实手牌（排除虚拟牌）
         if (bf && bf.id !== source.id && targets.some(t => t.id === bf.id)
             && yuejianCountRef.current < 2 && willDiscard && inHand) {
-          const shown = bf.hand.map(c => `${c.suit}【${c.name}】`).join(' ');
-          addLog(`【约俭】卞夫人展示手牌：${shown || '（无）'}`, 'skill');
-          if (!bf.hand.some(c => c.suit === card.suit)) {
-            yuejianCountRef.current += 1;
-            yuejianGainedRef.current.add(card.id);
-            setTimeout(() => { yuejianGainedRef.current.delete(card.id); }, 5000); // 兜底清理，避免标记残留
-            mutateHand(source.id, h => h.filter(c => c.id !== card.id)); // 使用的牌离开使用者手牌
-            mutateHand(bf.id, h => [...h, card]);
-            addLog(`【约俭】卞夫人手牌均无 ${card.suit} 花色，获得置入弃牌堆的【${card.name}】`, 'skill');
-            showSkillBanner('卞夫人', '约俭');
-            await delay(300);
+          if (bf.isHuman && !isAiTakeover) {
+            const pick = await requestSkillChoice({
+              skill: '约俭',
+              owner: '卞夫人',
+              title: `其他角色的【${card.name}】将置入弃牌堆，是否展示手牌发动「约俭」？`,
+              mode: 'choose',
+              choices: [{ id: 'yes', label: '发动约俭（展示手牌）' }],
+              cancelLabel: '不发动',
+            }, true);
+            if (pick && pick.kind === 'choose' && pick.id === 'yes') {
+              yuejianPendingRef.current.set(card.id, bf.id);
+            } else {
+              addLog('【约俭】卞夫人选择不发动', 'info');
+            }
           } else {
-            addLog(`【约俭】卞夫人手牌中有 ${card.suit} 花色，未获得【${card.name}】`, 'info');
+            yuejianPendingRef.current.set(card.id, bf.id);
           }
         }
       }
