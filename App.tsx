@@ -394,6 +394,8 @@ const App: React.FC = () => {
   const [isJieyinMode, setIsJieyinMode] = useState<boolean>(false);
   const [jieyinTarget, setJieyinTarget] = useState<number | null>(null);
   const [hasUsedJieyin, setHasUsedJieyin] = useState<boolean>(false);
+  // 张昌蒲「严教」：出牌阶段限一次，人类通过技能按钮发起（选花色 + 选目标）
+  const [hasUsedYanjiao, setHasUsedYanjiao] = useState<boolean>(false);
   // 刘备「激将」：主动使用【杀】时令其他蜀势力角色打出一张【杀】
   const [isJijiangMode, setIsJijiangMode] = useState<boolean>(false);
 
@@ -1894,6 +1896,7 @@ const App: React.FC = () => {
     setIsJieyinMode(false);
     setJieyinTarget(null);
     setHasUsedJieyin(false);
+    setHasUsedYanjiao(false);
     setIsQixiMode(false);
     setIsZhangbaMode(false);
     setZhangbaPending(null);
@@ -2365,6 +2368,8 @@ const App: React.FC = () => {
         setIsJieyinMode(false);
         setJieyinTarget(null);
         setHasUsedJieyin(false);
+        // 重置张昌蒲严教
+        setHasUsedYanjiao(false);
         // 重置甘宁奇袭
         setIsQixiMode(false);
         // 重置本轮新增技能状态
@@ -2983,25 +2988,21 @@ const App: React.FC = () => {
           }
         }
 
-        // 张昌蒲「严教」：将某花色的所有手牌交给一名敌方角色，然后对其造成1点伤害，下回合摸回等量牌
-        if (currentPlayer.hero.name === '张昌蒲' && skillsOn(currentPlayer.id) && !yanjiaoUsedRef.current) {
+        // 张昌蒲「严教」：出牌阶段限一次，可将手牌中某花色的所有牌交给一名其他角色，然后对其造成1点伤害；
+        // 下回合开始时摸回等量牌。人类由技能按钮发起（自选花色与目标），这里只处理 AI / 托管。
+        if (currentPlayer.hero.name === '张昌蒲' && skillsOn(currentPlayer.id) && !yanjiaoUsedRef.current
+            && !(currentPlayer.isHuman && !isAiTakeover)) {
           const p = getPlayer(currentPlayer.id);
           if (p && p.hand.length > 0) {
             const suits = [Suit.SPADE, Suit.HEART, Suit.CLUB, Suit.DIAMOND];
             const best = suits.map(s => ({ s, n: p.hand.filter(c => c.suit === s).length }))
               .sort((a, b) => b.n - a.n)[0];
-            const enemies = playersRef.current.filter(o => !o.isDead && o.id !== p.id && isEnemy(p, o));
-            if (best.n > 0 && enemies.length > 0) {
-              const target = enemies.sort((a, b) => a.hp - b.hp)[0];
-              const cards = p.hand.filter(c => c.suit === best.s);
-              yanjiaoUsedRef.current = true;
-              mutateHand(p.id, h => h.filter(c => c.suit !== best.s));
-              mutateHand(target.id, h => [...h, ...cards]);
-              updatePlayer(p.id, { yanjiaoCount: cards.length });
-              addLog(`【严教】张昌蒲将 ${cards.length} 张${best.s}牌交给 ${target.hero.name}，并对其造成1点伤害`, 'skill');
-              showSkillBanner('张昌蒲', '严教');
-              await delay(300);
-              await takeDamage(target.id, p.id, 1, undefined, undefined);
+            // 官方目标为「一名其他角色」：AI 优先打敌方，无敌方时也可给任意其他角色
+            const others = playersRef.current.filter(o => !o.isDead && o.id !== p.id);
+            if (best.n > 0 && others.length > 0) {
+              const enemyList = others.filter(o => isEnemy(p, o));
+              const target = (enemyList.length ? enemyList : others).sort((a, b) => a.hp - b.hp)[0];
+              await doYanjiao(p.id, target.id, best.s);
               await delay(300);
             }
           }
@@ -8201,6 +8202,27 @@ const App: React.FC = () => {
     return true;
   };
 
+  // 张昌蒲「严教」：把指定花色的全部手牌交给一名其他角色，然后对其造成 1 点伤害；
+  // 下回合开始时按交出数量摸回（yanjiaoCount 在回合开始结算）。
+  const doYanjiao = async (ownerId: number, targetId: number, suit: Suit) => {
+    const owner = getPlayer(ownerId);
+    const target = getPlayer(targetId);
+    if (!owner || !target || target.isDead || targetId === ownerId) return false;
+    if (yanjiaoUsedRef.current) return false;
+    const cards = owner.hand.filter(c => c.suit === suit);
+    if (!cards.length) return false;
+    yanjiaoUsedRef.current = true;
+    setHasUsedYanjiao(true);
+    mutateHand(ownerId, h => h.filter(c => c.suit !== suit));
+    mutateHand(targetId, h => [...h, ...cards]);
+    updatePlayer(ownerId, { yanjiaoCount: (owner.yanjiaoCount ?? 0) + cards.length });
+    addLog(`【严教】${owner.hero.name} 将 ${cards.length} 张${suit}牌交给 ${target.hero.name}，并对其造成1点伤害`, 'skill');
+    showSkillBanner(owner.hero.name, '严教');
+    await delay(300);
+    await takeDamage(targetId, ownerId, 1, undefined, undefined);
+    return true;
+  };
+
   const takeDamage = async (
     victimId: number,
     sourceId: number,
@@ -12216,6 +12238,46 @@ const App: React.FC = () => {
                       <span className="px-2 py-1 rounded border border-[#d4af37]/50 text-[#f0d38a] text-sm font-ancient whitespace-nowrap">
                         枪舞 · 判定 {qiangwuPoint}
                       </span>
+                    )}
+
+                    {/* 张昌蒲「严教」：出牌阶段限一次，人类自选花色与目标 */}
+                    {players[0].hero.name === '张昌蒲' && !hasUsedYanjiao && players[0].hand.length > 0 && (
+                      <button
+                        onClick={async () => {
+                          const me = players.find(p => p.isHuman) || players[0];
+                          const suits = [Suit.SPADE, Suit.HEART, Suit.CLUB, Suit.DIAMOND]
+                            .filter(s => me.hand.some(c => c.suit === s));
+                          if (!suits.length) return;
+                          const r = await requestSkillChoice({
+                            skill: '严教',
+                            owner: me.hero.name,
+                            title: '选择要交出的花色（该花色的所有手牌）',
+                            mode: 'choose',
+                            choices: suits.map(s => ({ id: s, label: `全部 ${s} 牌（${me.hand.filter(c => c.suit === s).length} 张）` })),
+                            cancelLabel: '取消严教',
+                          });
+                          if (!r || r.kind !== 'choose') return;
+                          const others = playersRef.current.filter(p => !p.isDead && p.id !== me.id);
+                          if (!others.length) {
+                            addLog('【严教】没有其他角色可交给', 'warning');
+                            return;
+                          }
+                          const r2 = await requestSkillChoice({
+                            skill: '严教',
+                            owner: me.hero.name,
+                            title: '选择交给的角色',
+                            mode: 'choose',
+                            choices: others.map(p => ({ id: String(p.id), label: p.hero.name, desc: `${p.hp}/${p.maxHp}` })),
+                            cancelLabel: '取消严教',
+                          });
+                          if (!r2 || r2.kind !== 'choose') return;
+                          await doYanjiao(me.id, Number(r2.id), r.id as Suit);
+                        }}
+                        className="skill-btn text-base"
+                        title="出牌阶段限一次：将某花色的所有手牌交给一名其他角色，然后对其造成1点伤害"
+                      >
+                        严教
+                      </button>
                     )}
 
                     {/* Sun Quan's Zhiheng Skill Button */}
