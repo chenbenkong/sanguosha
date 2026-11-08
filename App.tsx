@@ -1061,9 +1061,20 @@ const App: React.FC = () => {
   const revokeSkill = (id: number, skillName: string, reason: string) => {
     const p = getPlayer(id);
     if (!p || !(p.grantedSkills ?? []).includes(skillName)) return false;
-    const until = { ...(p.grantedSkillUntil ?? {}) };
-    delete until[skillName];
-    updatePlayer(id, { grantedSkills: (p.grantedSkills ?? []).filter(s => s !== skillName), grantedSkillUntil: until });
+    // 同 grantSkill：按 prev 逐个剔除并同步写回 playersRef，
+    // 避免同一批连续撤销（如许身到期同时撤「武圣」「当先」）互相覆盖。
+    const applyRevoke = (x: Player): Player => {
+      if (x.id !== id) return x;
+      const until = { ...(x.grantedSkillUntil ?? {}) };
+      delete until[skillName];
+      return { ...x, grantedSkills: (x.grantedSkills ?? []).filter(s => s !== skillName), grantedSkillUntil: until };
+    };
+    playersRef.current = playersRef.current.map(applyRevoke);
+    setPlayers(prev => {
+      const updated = prev.map(applyRevoke);
+      playersRef.current = updated;
+      return updated;
+    });
     addLog(`【技能回归】${p.hero.name} 失去技能「${skillName}」（${reason}）`, 'info');
     return true;
   };
