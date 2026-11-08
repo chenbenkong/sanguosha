@@ -333,6 +333,8 @@ const App: React.FC = () => {
   const qiangwuPointRef = useRef<number | null>(null);
   const [qiangwuPoint, setQiangwuPoint] = useState<number | null>(null);
   const [hasUsedQiangwu, setHasUsedQiangwu] = useState<boolean>(false);
+  // 孙寒华「妙剑」：出牌阶段限一次（人类按钮 / AI 自动共用一个 ref）
+  const [hasUsedMiaoJian, setHasUsedMiaoJian] = useState<boolean>(false);
   // 卞夫人「挽危」：每回合限一次
   const wanweiUsedRef = useRef<boolean>(false);
   // 本轮补齐的第二技能状态
@@ -1745,8 +1747,8 @@ const App: React.FC = () => {
     // __devState 读取当前对局信息；__devPatch 按 id 覆盖体力/手牌/装备，用于构造技能触发场景。
     if (debugDev) {
       const devWin = window as unknown as {
-        __devState?: () => Array<{ id: number; name: string; hp: number; maxHp: number; identity: string; isHuman: boolean; hand: string[]; equip: string[]; sealed: boolean; judge: string[] }>;
-        __devPatch?: (spec: Array<{ id: number; hp?: number; maxHp?: number; hand?: string[]; equip?: string[]; marks?: number }>) => void;
+        __devState?: () => Array<{ id: number; name: string; hp: number; maxHp: number; identity: string; isHuman: boolean; hand: string[]; equip: string[]; sealed: boolean; judge: string[]; miaoJianLevel?: number; lianHuaLevel?: number }>;
+        __devPatch?: (spec: Array<{ id: number; hp?: number; maxHp?: number; hand?: string[]; equip?: string[]; marks?: number; miaoJianLevel?: number; lianHuaLevel?: number }>) => void;
         __devDamage?: (victimId: number, sourceId: number, amount: number, nature?: 'fire' | 'thunder', cardName?: string) => void;
         __devKill?: (victimId: number, killerId?: number) => void;
         __devIdentity?: (spec: Array<{ id: number; identity: string }>) => void;
@@ -1765,6 +1767,8 @@ const App: React.FC = () => {
         equip: Object.values(p.equipment ?? {}).filter((c): c is Card => !!c).map(c => c.name),
         sealed: isSkillSealed(p.id),
         judge: (p.judgeZone ?? []).map(c => c.name),
+        miaoJianLevel: p.miaoJianLevel,
+        lianHuaLevel: p.lianHuaLevel,
       }));
       devWin.__devPatch = (spec) => {
         const pool = [...deckRef.current];
@@ -1791,6 +1795,8 @@ const App: React.FC = () => {
           if (typeof s.hp === 'number') patch.hp = s.hp;
           if (typeof s.maxHp === 'number') patch.maxHp = s.maxHp;
           if (typeof s.marks === 'number') patch.meiyanMarks = s.marks;
+          if (typeof s.miaoJianLevel === 'number') patch.miaoJianLevel = s.miaoJianLevel;
+          if (typeof s.lianHuaLevel === 'number') patch.lianHuaLevel = s.lianHuaLevel;
           if (s.hand) patch.hand = s.hand.map((nm, i) => mkCard(nm, p, i));
           if (s.equip) {
             const eq: Equipment = {};
@@ -2385,6 +2391,7 @@ const App: React.FC = () => {
     qiangwuPointRef.current = null;
     setQiangwuPoint(null);
     setHasUsedQiangwu(false);
+    setHasUsedMiaoJian(false); // 重置「妙剑」人类按钮状态
     wanweiUsedRef.current = false; // 重置「挽危」
         xuejiUsedRef.current = false; // 重置「血祭」
         setHasUsedXueji(false);
@@ -3112,13 +3119,17 @@ const App: React.FC = () => {
           }
         }
 
-        // 孙寒华「妙剑」：出牌阶段限一次，按等级将牌当【无中生有】或【刺杀】使用（刺杀近似普通【杀】）
-        if (currentPlayer.hero.name === '孙寒华' && skillsOn(currentPlayer.id) && !miaoJianUsedRef.current) {
+        // 孙寒华「妙剑」：出牌阶段限一次，按等级将牌当【无中生有】或【刺杀】使用（人类由按钮自选）
+        if (currentPlayer.hero.name === '孙寒华' && skillsOn(currentPlayer.id) && !miaoJianUsedRef.current
+            && !(currentPlayer.isHuman && !isAiTakeover)) {
           miaoJianUsedRef.current = true;
           const p = getPlayer(currentPlayer.id);
           if (p) {
             const lv = p.miaoJianLevel ?? 1;
-            const trick = lv >= 1 ? p.hand.find(c => c.type !== CardType.BASIC) : undefined;
+            // 1 级：仅【杀】可当【刺杀】、仅锦囊牌可当【无中生有】；2 级起：任意基本/非基本牌
+            const trick = lv === 1
+              ? p.hand.find(c => c.type === CardType.SCROLL)
+              : (lv >= 2 ? p.hand.find(c => c.type !== CardType.BASIC) : undefined);
             const slashCard = lv >= 2
               ? p.hand.find(c => c.type === CardType.BASIC)
               : p.hand.find(c => c.name === CardName.SHA);
@@ -3133,11 +3144,11 @@ const App: React.FC = () => {
               await delay(400);
               drawCards(p.id, 2);
             } else if (slashCard) {
-              const foes = playersRef.current.filter(o => !o.isDead && o.id !== p.id && isEnemy(p, o));
+              const foes = playersRef.current.filter(o => !o.isDead && o.id !== p.id && isEnemy(p, o) && canReach(p, o));
               if (foes.length) {
                 const foe = [...foes].sort((a, b) => a.hp - b.hp)[0];
                 mutateHand(p.id, h => h.filter(c => c.id !== slashCard.id));
-                addLog(`孙寒华发动「妙剑」，将【${slashCard.name}】当【刺杀】对 ${foe.hero.name} 使用（近似普通【杀】）`, 'skill');
+                addLog(`孙寒华发动「妙剑」，将【${slashCard.name}】当【刺杀】对 ${foe.hero.name} 使用`, 'skill');
                 showSkillBanner('孙寒华', '妙剑');
                 await delay(400);
                 const meNow = getPlayer(p.id);
@@ -3152,6 +3163,7 @@ const App: React.FC = () => {
                     value: 13,
                     description: '妙剑：视为使用一张【刺杀】',
                     imageColor: 'from-slate-700 to-slate-900',
+                    cisha: true,
                   };
                   await resolveCardEffect(meNow, [foeNow], virtualSlash);
                 }
@@ -6785,9 +6797,51 @@ const App: React.FC = () => {
           }
 
           const hpBefore = getPlayer(effectiveTarget.id)?.hp ?? 0;
+          const handLenBefore = getPlayer(effectiveTarget.id)?.hand.length ?? 0;
           // 用转换后的牌结算（火【杀】造成火焰伤害）
           await triggerReaction(effectiveTarget.id, source.id, CardName.SHAN, slashCard);
-          const hpAfter = getPlayer(effectiveTarget.id)?.hp ?? 0;
+          // 等本次响应（打出【闪】）的手牌移除落到 playersRef，避免读到出闪前的旧手牌
+          for (let k = 0; k < 10; k++) {
+            if ((getPlayer(effectiveTarget.id)?.hand.length ?? 0) < handLenBefore) break;
+            await delay(50);
+          }
+          let hpAfter = getPlayer(effectiveTarget.id)?.hp ?? 0;
+
+          // 【刺杀】：被【闪】抵消后，目标须弃置一张手牌，否则此【刺杀】依然造成伤害
+          if (slashCard.cisha && hpAfter === hpBefore && !getPlayer(effectiveTarget.id)?.isDead) {
+            const t = getPlayer(effectiveTarget.id);
+            if (t && t.hand.length > 0) {
+              let payCard: Card | undefined;
+              if (t.isHuman && !isAiTakeover) {
+                const pr = await requestSkillChoice({
+                  skill: '刺杀',
+                  owner: t.hero.name,
+                  title: '「刺杀」：使用【闪】后须弃置一张手牌，否则仍受到伤害',
+                  mode: 'card',
+                  cards: t.hand,
+                  min: 1,
+                  max: 1,
+                  cancelLabel: '不弃牌（承受伤害）',
+                }, true);
+                if (pr && pr.kind === 'card' && pr.ids.length === 1) {
+                  payCard = t.hand.find(c => c.id === pr.ids[0]);
+                }
+              } else {
+                payCard = [...t.hand].sort((a, b) => a.value - b.value)[0];
+              }
+              if (payCard) {
+                discardCards(t.id, [payCard]);
+                addLog(`【刺杀】${t.hero.name} 使用【闪】后弃置【${payCard.name}】，抵消此【刺杀】`, 'skill');
+              } else {
+                addLog(`【刺杀】${t.hero.name} 未弃置手牌，此【刺杀】依然造成伤害`, 'warning');
+                await takeDamage(t.id, source.id, 1, slashCard);
+              }
+            } else if (t) {
+              addLog(`【刺杀】${t.hero.name} 已无手牌可弃，此【刺杀】依然造成伤害`, 'warning');
+              await takeDamage(t.id, source.id, 1, slashCard);
+            }
+            hpAfter = getPlayer(effectiveTarget.id)?.hp ?? hpAfter;
+          }
 
           // 贯石斧：被【闪】抵消时，可弃两张牌令此【杀】依然造成伤害
           const isGuanshi = source.equipment?.weapon?.name === CardName.GUANSHI;
@@ -12481,6 +12535,87 @@ const App: React.FC = () => {
                         title="出牌阶段限一次：将某花色的所有手牌交给一名其他角色，然后对其造成1点伤害"
                       >
                         严教
+                      </button>
+                    )}
+
+                    {/* 孙寒华「妙剑」：出牌阶段限一次，人类自选转化方式与目标 */}
+                    {players[0].hero.name === '孙寒华' && !hasUsedMiaoJian && (
+                      <button
+                        onClick={async () => {
+                          const m = playersRef.current.find(p => p.isHuman) || playersRef.current[0];
+                          if (!m) return;
+                          const lv = m.miaoJianLevel ?? 1;
+                          const opts: Array<{ id: string; label: string; desc?: string; kind: 'sha' | 'wz'; cardId?: string }> = [];
+                          if (lv >= 3) {
+                            opts.push({ id: 'sha3', label: '视为使用【刺杀】', desc: '被【闪】抵消时目标须弃一张手牌', kind: 'sha' });
+                            opts.push({ id: 'wz3', label: '视为使用【无中生有】', desc: '摸两张牌', kind: 'wz' });
+                          } else {
+                            const shaCards = lv >= 2 ? m.hand.filter(c => c.type === CardType.BASIC) : m.hand.filter(c => c.name === CardName.SHA);
+                            for (const c of shaCards) opts.push({ id: `sha:${c.id}`, label: `将【${c.name}】当【刺杀】使用`, kind: 'sha', cardId: c.id });
+                            const wzCards = lv === 1 ? m.hand.filter(c => c.type === CardType.SCROLL) : m.hand.filter(c => c.type !== CardType.BASIC);
+                            for (const c of wzCards) opts.push({ id: `wz:${c.id}`, label: `将【${c.name}】当【无中生有】使用`, desc: '摸两张牌', kind: 'wz', cardId: c.id });
+                          }
+                          if (!opts.length) { addLog('「妙剑」没有可转化的牌', 'info'); return; }
+                          const r = await requestSkillChoice({
+                            skill: '妙剑',
+                            owner: m.hero.name,
+                            title: '选择「妙剑」的使用方式',
+                            mode: 'choose',
+                            choices: opts.map(o => ({ id: o.id, label: o.label, desc: o.desc })),
+                            cancelLabel: '取消妙剑',
+                          }, true);
+                          if (!r || r.kind !== 'choose') return;
+                          const opt = opts.find(o => o.id === r.id);
+                          if (!opt) return;
+                          const convertName = opt.cardId ? (m.hand.find(c => c.id === opt.cardId)?.name ?? '杀') : '刺杀';
+                          if (opt.kind === 'wz') {
+                            if (opt.cardId) mutateHand(m.id, h => h.filter(c => c.id !== opt.cardId));
+                            setHasUsedMiaoJian(true); miaoJianUsedRef.current = true;
+                            addLog(opt.cardId ? `孙寒华发动「妙剑」，将【${convertName}】当【无中生有】使用` : '孙寒华发动「妙剑」，视为使用一张【无中生有】', 'skill');
+                            showSkillBanner('孙寒华', '妙剑');
+                            await delay(300);
+                            drawCards(m.id, 2);
+                            return;
+                          }
+                          const targets = playersRef.current.filter(o => !o.isDead && o.id !== m.id && canReach(m, o));
+                          if (!targets.length) { addLog('「妙剑」没有距离内的目标', 'info'); return; }
+                          const tr = await requestSkillChoice({
+                            skill: '妙剑',
+                            owner: m.hero.name,
+                            title: '选择【刺杀】的目标',
+                            mode: 'target',
+                            targets: targets.map(o => ({ id: o.id, name: o.hero.name, sub: `${o.hp}/${o.maxHp} 手牌${o.hand.length}` })),
+                            cancelLabel: '取消妙剑',
+                          }, true);
+                          if (!tr || tr.kind !== 'target' || !tr.ids.length) return;
+                          const t = getPlayer(tr.ids[0]);
+                          if (!t) return;
+                          if (opt.cardId) mutateHand(m.id, h => h.filter(c => c.id !== opt.cardId));
+                          setHasUsedMiaoJian(true); miaoJianUsedRef.current = true;
+                          addLog(opt.cardId ? `孙寒华发动「妙剑」，将【${convertName}】当【刺杀】对 ${t.hero.name} 使用` : `孙寒华发动「妙剑」，视为使用一张【刺杀】对 ${t.hero.name}`, 'skill');
+                          showSkillBanner('孙寒华', '妙剑');
+                          await delay(300);
+                          const meNow = getPlayer(m.id);
+                          const tNow = getPlayer(t.id);
+                          if (meNow && tNow) {
+                            const virtualSlash: Card = {
+                              id: `miaojian-${m.id}-${Date.now()}`,
+                              name: CardName.SHA,
+                              type: CardType.BASIC,
+                              suit: Suit.SPADE,
+                              rank: 'K',
+                              value: 13,
+                              description: '妙剑：视为使用一张【刺杀】',
+                              imageColor: 'from-slate-700 to-slate-900',
+                              cisha: true,
+                            };
+                            await resolveCardEffect(meNow, [tNow], virtualSlash);
+                          }
+                        }}
+                        className="skill-btn text-base"
+                        title="出牌阶段限一次：按等级将牌当【刺杀】或【无中生有】使用"
+                      >
+                        妙剑
                       </button>
                     )}
 

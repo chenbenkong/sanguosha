@@ -66,6 +66,8 @@ export interface Card {
   imageColor: string; // CSS class for background gradient
   /** 属性杀：火杀 / 雷杀（普通杀不带此字段） */
   attribute?: 'fire' | 'thunder';
+  /** 【刺杀】：被【闪】抵消时目标须弃一张手牌，否则仍造成伤害 */
+  cisha?: boolean;
 }
 
 export enum Identity {
