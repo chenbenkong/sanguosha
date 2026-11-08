@@ -380,6 +380,12 @@ const App: React.FC = () => {
   // 孙鲁育「魅步」：止息（至多使用 X 张牌，使用锦囊后结束出牌阶段）与本回合与孙鲁育距离视为 1
   const zhixiRef = useRef<{ id: number; limit: number; used: number; trickUsed: boolean } | null>(null);
   const meibuDistanceRef = useRef<Record<number, number>>({}); // 受影响角色 id → 孙鲁育 id（距离视为 1）
+  // 鲍三娘「许身」：因许身进入濒死时记录下来，脱离濒死后可把「武圣」「当先」授予救援者
+  const xushenDyingRef = useRef<{ id: number } | null>(null);
+  // 许身授予的技能持续到救援者下回合结束：记录授予时的回合序号
+  const xushenGrantTurnsRef = useRef<Record<number, number>>({});
+  // 当先：本回合是否已执行过额外（回合开始时）的出牌阶段
+  const dangxianExtraPhaseRef = useRef<{ turn: number; active: boolean } | null>(null);
 
   // 孙尚香「结姻」技能状态
   const [isJieyinMode, setIsJieyinMode] = useState<boolean>(false);
@@ -1012,6 +1018,9 @@ const App: React.FC = () => {
 
   const hasGrantedSkill = (p: Player, skillName: string) =>
     !p.isDead && (p.grantedSkills ?? []).includes(skillName) && skillsOn(p.id);
+
+  // 关羽「武圣」/ 许身授予的「武圣」：红色牌可当【杀】
+  const canUseWusheng = (p: Player) => p.hero.name === '关羽' || hasGrantedSkill(p, '武圣');
 
   const grantSkill = (id: number, skillName: string, sourceSkill: string, durationTurns?: number) => {
     const p = getPlayer(id);
@@ -2725,6 +2734,19 @@ const App: React.FC = () => {
           }
           return;
         }
+        // 当先（许身授予）：回合开始时执行一个额外的出牌阶段
+        {
+          const dxOwner = getPlayer(turnIndex);
+          const already = dangxianExtraPhaseRef.current;
+          if (dxOwner && hasGrantedSkill(dxOwner, '当先') && (!already || already.turn !== turnCountRef.current)) {
+            dangxianExtraPhaseRef.current = { turn: turnCountRef.current, active: true };
+            addLog(`【当先】${dxOwner.hero.name} 执行一个额外的出牌阶段`, 'skill');
+            showSkillBanner(dxOwner.hero.name, '当先');
+            await delay(300);
+            setPhase(GamePhase.ACTION);
+            return;
+          }
+        }
         await delay(800);
         setPhase(GamePhase.JUDGE);
       }
@@ -3063,13 +3085,33 @@ const App: React.FC = () => {
           }
         }
 
-        // 鲍三娘「许身」：限定技，出牌阶段失去等同存活男性角色数的体力（AI 仅在体力充足时使用）
+        // 鲍三娘「许身」：限定技，出牌阶段失去等同存活男性角色数的体力；
+        // 若因此进入濒死，脱离濒死后救援者可获得「武圣」「当先」
         if (currentPlayer.hero.name === '鲍三娘' && skillsOn(currentPlayer.id) && !currentPlayer.xushenUsed) {
           const males = playersRef.current.filter(o => !o.isDead && o.id !== currentPlayer.id && o.hero.gender === 'male').length;
-          if (males > 0 && currentPlayer.hp >= males + 3) {
-            updatePlayer(currentPlayer.id, { xushenUsed: true, hp: currentPlayer.hp - males });
-            addLog(`【许身】鲍三娘失去 ${males} 点体力（存活男性角色数），当前体力 ${currentPlayer.hp - males}/${currentPlayer.maxHp}`, 'skill');
+          const canBeSaved = playersRef.current.some(p => !p.isDead && p.id !== currentPlayer.id
+            && (p.hand.some(c => c.name === CardName.TAO) || p.hand.some(c => c.name === CardName.JIU)));
+          if (males > 0 && (currentPlayer.hp >= males + 1 || (currentPlayer.hp === males && canBeSaved))) {
+            const nextHp = currentPlayer.hp - males;
+            updatePlayer(currentPlayer.id, { xushenUsed: true, hp: nextHp });
+            addLog(`【许身】鲍三娘失去 ${males} 点体力（存活男性角色数），当前体力 ${Math.max(0, nextHp)}/${currentPlayer.maxHp}`, 'skill');
             showSkillBanner('鲍三娘', '许身');
+            if (nextHp <= 0) {
+              xushenDyingRef.current = { id: currentPlayer.id };
+              addLog(`【许身】鲍三娘因此进入濒死状态`, 'danger');
+              // 让体力变更先提交，避免 askForPeaches 读到旧体力而静默跳过濒死流程
+              // （delay 受速度倍率压缩，3x 下 200ms 仅 ~67ms，这里改为轮询 ref 直到体力真正落库）
+              for (let wait = 0; wait < 12 && (getPlayer(currentPlayer.id)?.hp ?? 0) > 0; wait++) {
+                await delay(150);
+              }
+              const saved = await askForPeaches(currentPlayer.id);
+              if (!saved) {
+                addLog(`鲍三娘 未能得到救援，死亡！`, 'danger');
+                await handleDeath(currentPlayer.id);
+                setPhase(GamePhase.END);
+                return;
+              }
+            }
             await delay(400);
           }
         }
@@ -3537,6 +3579,20 @@ const App: React.FC = () => {
       else if (currentPhase === GamePhase.END) {
         dbgMark('end:enter');
         await delay(500);
+
+        // 许身授予的「武圣」「当先」：持续到救援者的下回合结束
+        {
+          const grantedTurn = xushenGrantTurnsRef.current[currentPlayer.id];
+          if (grantedTurn !== undefined && turnCountRef.current > grantedTurn) {
+            delete xushenGrantTurnsRef.current[currentPlayer.id];
+            const stillOwner = getPlayer(currentPlayer.id);
+            if (stillOwner) {
+              revokeSkill(currentPlayer.id, '武圣', '许身到期');
+              revokeSkill(currentPlayer.id, '当先', '许身到期');
+              addLog(`【许身】${stillOwner.hero.name} 的下回合结束，「武圣」「当先」消失`, 'info');
+            }
+          }
+        }
 
         // 王元姬「尚俭」：任一角色结束阶段，若本回合失去的牌数不大于体力值，摸等量牌
         {
@@ -4100,7 +4156,7 @@ const App: React.FC = () => {
     if (!card && responder.hero.name === '赵云') {
       card = responder.hand.find(c => c.name === (needed === CardName.SHAN ? CardName.SHA : CardName.SHAN));
     }
-    if (!card && responder.hero.name === '关羽' && needed === CardName.SHA) {
+    if (!card && canUseWusheng(responder) && needed === CardName.SHA) {
       card = responder.hand.find(c => c.suit === Suit.HEART || c.suit === Suit.DIAMOND);
     }
     if (!card && responder.hero.name === '甄姬' && needed === CardName.SHAN) {
@@ -4342,7 +4398,7 @@ const App: React.FC = () => {
         const isUsingNormalCard = card.name === neededCard;
         const isUsingSkillCard = canUseSkill && card.name === skillCardName;
         // 关羽的「武圣」技能：红色牌可以当杀使用
-        const isUsingWusheng = me.hero.name === '关羽' && [Suit.HEART, Suit.DIAMOND].includes(card.suit) && neededCard === CardName.SHA;
+        const isUsingWusheng = canUseWusheng(me) && [Suit.HEART, Suit.DIAMOND].includes(card.suit) && neededCard === CardName.SHA;
         // 甄姬的「倾国」技能：黑色手牌可以当【闪】使用
         const isUsingQingguo = me.hero.name === '甄姬' && neededCard === CardName.SHAN &&
           (card.suit === Suit.SPADE || card.suit === Suit.CLUB);
@@ -4394,7 +4450,7 @@ const App: React.FC = () => {
     if (phase === GamePhase.ACTION) {
       const me = players.find(p => p.isHuman) || players[0];
       const isZhaoyun = me.hero.name === '赵云';
-      const isGuanyu = me.hero.name === '关羽';
+      const isGuanyu = canUseWusheng(me);
       const isRedCard = [Suit.HEART, Suit.DIAMOND].includes(card.suit); // 红色牌（红桃和方块）
 
       // 丈八蛇矛模式：选两张手牌
@@ -5221,7 +5277,7 @@ const App: React.FC = () => {
     // 【杀】的距离与次数限制（含 龙胆 / 武圣 转化的杀）
     const isSlashLike = card.name === CardName.SHA ||
       (me.hero.name === '赵云' && card.name === CardName.SHAN) ||
-      (me.hero.name === '关羽' && [Suit.HEART, Suit.DIAMOND].includes(card.suit));
+      (canUseWusheng(me) && [Suit.HEART, Suit.DIAMOND].includes(card.suit));
     if (isSlashLike && target.id !== me.id) {
       const reach = getAttackRange(me);
       const dist = getDistance(me.id, target.id);
@@ -5312,7 +5368,7 @@ const App: React.FC = () => {
     
     // 空城 / 谦逊：人类选择目标时直接拦截
     let effectiveCardName = card.name;
-    if (me.hero.name === '关羽' && [Suit.HEART, Suit.DIAMOND].includes(card.suit)) effectiveCardName = CardName.SHA;
+    if (canUseWusheng(me) && [Suit.HEART, Suit.DIAMOND].includes(card.suit)) effectiveCardName = CardName.SHA;
     if (me.hero.name === '赵云' && card.name === CardName.SHAN) effectiveCardName = CardName.SHA;
     const targetProtection = getTargetProtection(target, effectiveCardName);
     if (target.id !== me.id && targetProtection) {
@@ -5344,8 +5400,8 @@ const App: React.FC = () => {
       
       // 处理赵云的「龙胆」技能 - 主动使用
       const isUsingLongdan = me.hero.name === '赵云' && card.name === CardName.SHAN;
-      // 处理关羽的「武圣」技能 - 主动使用
-      const isUsingWusheng = me.hero.name === '关羽' && [Suit.HEART, Suit.DIAMOND].includes(card.suit);
+      // 处理「武圣」（关羽或许身授予）- 主动使用
+      const isUsingWusheng = canUseWusheng(me) && [Suit.HEART, Suit.DIAMOND].includes(card.suit);
       
       setSelectedCardIds([]);
       setIsSelectingTarget(false);
@@ -6953,10 +7009,23 @@ const App: React.FC = () => {
         const humanOwner = playersRef.current.find(p => p.id === source.id && p.isHuman);
         if (humanOwner && !isAiTakeover && phaseLiveRef.current === GamePhase.ACTION) {
           addLog(`【止息】${source.hero.name} 使用锦囊牌后结束出牌阶段`, 'skill');
-          setPhase(GamePhase.DISCARD);
+          leaveActionPhase();
         }
       }
     }
+  };
+
+  // 结束出牌阶段：若是「当先」的额外出牌阶段，则回到正常回合流程（判定阶段），否则进入弃牌阶段
+  const leaveActionPhase = () => {
+    const dx = dangxianExtraPhaseRef.current;
+    if (dx && dx.active) {
+      dx.active = false;
+      const owner = getPlayer(turnIndex);
+      addLog(`【当先】${owner?.hero.name ?? ''} 的额外出牌阶段结束，继续正常回合流程`, 'info');
+      setPhase(GamePhase.JUDGE);
+      return;
+    }
+    setPhase(GamePhase.DISCARD);
   };
 
   // 「止息」闸门需要在 cpuAI 内遮蔽同名函数，这里保留一份本名别名供其内部调用
@@ -7042,7 +7111,7 @@ const App: React.FC = () => {
         let options = [];
         
         // 关羽的「武圣」技能：红色牌可以当杀使用
-        const isGuanyu = responder.hero.name === '关羽';
+        const isGuanyu = canUseWusheng(responder);
         const hasRedCard = responder.hand.some(c => [Suit.HEART, Suit.DIAMOND].includes(c.suit));
         
         if (isWuxieCheck) {
@@ -7241,7 +7310,7 @@ const App: React.FC = () => {
         }
         
         // 检查关羽的武圣技能：红色牌可以当杀使用
-        if (!hasCard && responder.hero.name === '关羽' && neededCard === CardName.SHA) {
+        if (!hasCard && canUseWusheng(responder) && neededCard === CardName.SHA) {
           // 尝试使用红色牌（红桃或方块）当杀
           cardToPlay = responder.hand.find(c => [Suit.HEART, Suit.DIAMOND].includes(c.suit));
           
@@ -7269,8 +7338,8 @@ const App: React.FC = () => {
             addLog(`${responder.hero.name} 使用技能「倾国」，将【${cardToPlay.name}】当【${neededCard}】使用`, 'skill');
             showSkillBanner(responder.hero.name, '倾国');
           } else if (isUsingSkill) {
-            // 区分赵云的龙胆和关羽的武圣
-            if (responder.hero.name === '关羽') {
+            // 区分赵云的龙胆和「武圣」
+            if (canUseWusheng(responder)) {
               addLog(`${responder.hero.name} 使用技能「武圣」，将【${cardToPlay.name}】当【${neededCard}】使用`, 'skill');
               showSkillBanner(responder.hero.name, '武圣');
             } else {
@@ -7307,8 +7376,8 @@ const App: React.FC = () => {
               }
             }
             
-            // 检查关羽的武圣技能（第二张牌）
-            if (!hasSecondCard && responder.hero.name === '关羽' && neededCard === CardName.SHA) {
+            // 检查「武圣」技能（第二张牌）
+            if (!hasSecondCard && canUseWusheng(responder) && neededCard === CardName.SHA) {
               secondCardToPlay = responder.hand.find(c => [Suit.HEART, Suit.DIAMOND].includes(c.suit));
               if (secondCardToPlay) {
                 hasSecondCard = true;
@@ -7319,8 +7388,8 @@ const App: React.FC = () => {
             if (hasSecondCard && secondCardToPlay) {
               playCard(responder.id, secondCardToPlay);
               if (isUsingSecondSkill) {
-                // 区分赵云的龙胆和关羽的武圣
-                if (responder.hero.name === '关羽') {
+                // 区分赵云的龙胆和「武圣」
+                if (canUseWusheng(responder)) {
                   addLog(`${responder.hero.name} 使用技能「武圣」，将【${secondCardToPlay.name}】当【${neededCard}】使用`, 'skill');
                 } else {
                   addLog(`${responder.hero.name} 使用技能「龙胆」，将【${secondCardToPlay.name}】当【${neededCard}】使用`, 'skill');
@@ -7416,6 +7485,22 @@ const App: React.FC = () => {
     return nullified;
   };
 
+  // 许身：鲍三娘因许身进入濒死并被他人用【桃】/【酒】救活后，救援者获得「武圣」「当先」
+  const grantXushenToRescuer = (victimId: number, rescuerId: number) => {
+    const flag = xushenDyingRef.current;
+    if (!flag || flag.id !== victimId) return;
+    const victim = getPlayer(victimId);
+    const rescuer = getPlayer(rescuerId);
+    if (!victim || !rescuer || rescuer.isDead || rescuer.id === victimId) return;
+    if (victim.hero.name !== '鲍三娘') return;
+    xushenDyingRef.current = null;
+    xushenGrantTurnsRef.current[rescuerId] = turnCountRef.current;
+    addLog(`【许身】${rescuer.hero.name} 使鲍三娘脱离濒死，获得「武圣」与「当先」直到其下回合结束`, 'skill');
+    showSkillBanner('鲍三娘', '许身');
+    grantSkill(rescuerId, '武圣', '许身');
+    grantSkill(rescuerId, '当先', '许身');
+  };
+
   const askForPeaches = async (victimId: number): Promise<boolean> => {
     const victim = getPlayer(victimId)!;
     const savedAt = recentlySavedRef.current[victimId];
@@ -7486,6 +7571,7 @@ const App: React.FC = () => {
 
       // 循环询问，直到有人出桃或者所有人都放弃（最多 12 轮兜底，防止状态异常时死循环）
       let rounds = 0;
+      let lastSaviorId: number | null = null;
       while (getPlayer(victimId)?.hp <= 0) {
         if (++rounds > 12) {
           addLog(`求桃轮次异常（${rounds}），按无人救援处理`, 'warning');
@@ -7573,9 +7659,11 @@ const App: React.FC = () => {
                     : { ...saveCard, name: CardName.TAO, type: CardType.BASIC, description: '急救：红色牌当【桃】使用。' };
                   await resolveCardEffect(player, [currentVictim], actualCard);
                   someoneSaved = true;
+                  lastSaviorId = player.id;
 
                   const updatedVictim = getPlayer(victimId)!;
                   if (updatedVictim.hp > 0) {
+                    grantXushenToRescuer(victimId, player.id);
                     recentlySavedRef.current[victimId] = Date.now();
                     addLog(`✅ ${updatedVictim.hero.name} 被救活，脱离了濒死状态！`, 'success');
                     return true;
@@ -7620,9 +7708,11 @@ const App: React.FC = () => {
                 addLog(`🍑 ${player.hero.name} 决定使用【${actualCard.name}】救援 ${victim.hero.name}`, 'success');
                 await resolveCardEffect(player, [currentVictim], actualCard);
                 someoneSaved = true;
+                lastSaviorId = player.id;
 
                 const updatedVictim = getPlayer(victimId)!;
                 if (updatedVictim.hp > 0) {
+                  grantXushenToRescuer(victimId, player.id);
                   recentlySavedRef.current[victimId] = Date.now();
                   addLog(`✅ ${updatedVictim.hero.name} 被救活，脱离了濒死状态！`, 'success');
                   return true;
@@ -7650,7 +7740,15 @@ const App: React.FC = () => {
         await delay(150);
       }
 
+      // 体力更新可能在下一次提交后才可见：以最终体力为准判定是否脱离濒死
       setDyingState(null);
+      const finalHp = getPlayer(victimId)?.hp ?? 0;
+      if (finalHp > 0) {
+        if (lastSaviorId !== null) grantXushenToRescuer(victimId, lastSaviorId);
+        recentlySavedRef.current[victimId] = Date.now();
+        addLog(`✅ ${getPlayer(victimId)?.hero.name ?? victim.hero.name} 被救活，脱离了濒死状态！`, 'success');
+        return true;
+      }
       return false;
     } finally {
       setDyingState(null);
@@ -8738,7 +8836,7 @@ const App: React.FC = () => {
     if (aiPlayer.hero.name === '辛宪英' && aiPlayer.caiShiMode === 'limitOther') {
       addLog('辛宪英受「才识」限制，本回合不能对其他角色使用牌', 'info');
       aiTurnActiveRef.current = false;
-      setPhase(GamePhase.DISCARD);
+      leaveActionPhase();
       return;
     }
 
@@ -8986,7 +9084,7 @@ const App: React.FC = () => {
 
     aiTurnActiveRef.current = false;
     dbgMark(`cpu:setDiscard:${aiPlayer.hero.name}`);
-    setPhase(GamePhase.DISCARD);
+    leaveActionPhase();
   };
 
   const handleAskStrategy = () => {
@@ -9000,7 +9098,7 @@ const App: React.FC = () => {
   const endTurn = () => {
     if (dyingState || isProcessing) return;
     if (phase === GamePhase.ACTION) {
-      setPhase(GamePhase.DISCARD);
+      leaveActionPhase();
     }
   };
 
@@ -9705,7 +9803,7 @@ const App: React.FC = () => {
   const slashLikeActive = !!activeCard && (
     activeCard.name === CardName.SHA ||
     (me.hero.name === '赵云' && activeCard.name === CardName.SHAN) ||
-    (me.hero.name === '关羽' && [Suit.HEART, Suit.DIAMOND].includes(activeCard.suit))
+    (canUseWusheng(me) && [Suit.HEART, Suit.DIAMOND].includes(activeCard.suit))
   );
 
   // --- 对局面板自适应 ---
@@ -10062,8 +10160,8 @@ const App: React.FC = () => {
                    const skillCardName = neededCard === CardName.SHAN ? CardName.SHA : CardName.SHAN;
                    const responder = players.find(p => p.id === pendingReaction.targetId) || me;
                    const hasWuxie = responder.hand.some(c => c.name === CardName.WUXIE);
-                   // 关羽「武圣」：红色牌可当【杀】打出
-                   const canWusheng = me.hero.name === '关羽' && neededCard === CardName.SHA;
+                   // 「武圣」：红色牌可当【杀】打出
+                   const canWusheng = canUseWusheng(me) && neededCard === CardName.SHA;
                    const isWushengCard = (c: Card) => canWusheng && (c.suit === Suit.HEART || c.suit === Suit.DIAMOND);
                    // 甄姬「倾国」：黑色牌可当【闪】打出
                    const canQingguo = me.hero.name === '甄姬' && neededCard === CardName.SHAN;
@@ -10306,7 +10404,7 @@ const App: React.FC = () => {
                            <p>• <span className="text-yellow-400">示例</span>：赵云被【杀】攻击，手牌中只有【杀】，可以将【杀】当【闪】使用来防御</p>
                          </>
                        )}
-                       {me.hero.name === '关羽' && (
+                       {canUseWusheng(me) && (
                          <>
                            <p>• 可以将任意红色牌（红桃、方块）当【杀】使用</p>
                            <p>• 红色牌包括：【桃】、【无中生有】等</p>
@@ -10457,7 +10555,7 @@ const App: React.FC = () => {
                        {me.hand.map((card, index) => {
                          const isRedCard = [Suit.HEART, Suit.DIAMOND].includes(card.suit);
                          const isZhaoyun = me.hero.name === '赵云';
-                         const isGuanyu = me.hero.name === '关羽';
+                         const isGuanyu = canUseWusheng(me);
                          
                          // 获取卡牌效果说明
                          const getCardEffect = () => {
@@ -12490,8 +12588,8 @@ const App: React.FC = () => {
                   const neededCard = pendingReaction.cardName;
                   const canUseSkill = me.hero.name === '赵云';
                   const skillCardName = neededCard === CardName.SHAN ? CardName.SHA : CardName.SHAN;
-                  // 关羽「武圣」：红色牌可当【杀】打出
-                  const isWushengCard = me.hero.name === '关羽' && neededCard === CardName.SHA &&
+                  // 「武圣」：红色牌可当【杀】打出
+                  const isWushengCard = canUseWusheng(me) && neededCard === CardName.SHA &&
                     (card.suit === Suit.HEART || card.suit === Suit.DIAMOND);
                   // 甄姬「倾国」：黑色牌可当【闪】打出
                   const isQingguoCard = me.hero.name === '甄姬' && neededCard === CardName.SHAN &&
