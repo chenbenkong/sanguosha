@@ -1042,7 +1042,18 @@ const App: React.FC = () => {
     if (!p || p.isDead) return false;
     if ((p.grantedSkills ?? []).includes(skillName)) return false;
     const until = durationTurns ? { ...(p.grantedSkillUntil ?? {}), [skillName]: turnCountRef.current + durationTurns } : (p.grantedSkillUntil ?? {});
-    updatePlayer(id, { grantedSkills: [...(p.grantedSkills ?? []), skillName], grantedSkillUntil: until });
+    // 按玩家自身旧值追加，并同步写回 playersRef：
+    // 连续两次授予（如许身同批授予「武圣」「当先」）时，第二次必须能看到第一次的结果，
+    // 否则第二次会用陈旧快照覆盖第一次，导致先授予的技能丢失。
+    const applyGrant = (x: Player): Player => x.id === id
+      ? { ...x, grantedSkills: [...(x.grantedSkills ?? []), skillName], grantedSkillUntil: until }
+      : x;
+    playersRef.current = playersRef.current.map(applyGrant);
+    setPlayers(prev => {
+      const updated = prev.map(applyGrant);
+      playersRef.current = updated;
+      return updated;
+    });
     addLog(`【${sourceSkill}】${p.hero.name} 获得技能「${skillName}」${durationTurns ? `（持续 ${durationTurns} 回合）` : ''}`, 'skill');
     return true;
   };
