@@ -2897,8 +2897,8 @@ const App: React.FC = () => {
           }
         } else {
           let actualDraw = drawCount;
-          // 许褚「裸衣」：手中有杀/决斗时少摸一张，本回合伤害+1
-          if (currentPlayer.hero.name === '许褚' && currentPlayer.hp > 1
+          // 许褚「裸衣」：手中有杀/决斗时少摸一张，本回合伤害+1（官方无体力下限，体力 1 也可发动）
+          if (currentPlayer.hero.name === '许褚'
               && currentPlayer.hand.some(c => c.name === CardName.SHA || c.name === CardName.JUEDOU)) {
             actualDraw = Math.max(0, actualDraw - 1);
             luoyiPlayerRef.current = currentPlayer.id;
