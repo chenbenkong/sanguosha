@@ -1781,7 +1781,8 @@ const App: React.FC = () => {
             return { ...found, suit, attribute: attribute ?? found.attribute };
           }
           const base = owner.hand[0] ?? pool[0];
-          return { ...base, id: `dev-${owner.id}-${i}-${Date.now()}`, name, suit, attribute, description: `开发态构造：${nm}` };
+          const isEquip = !!EQUIP_META[name];
+          return { ...base, id: `dev-${owner.id}-${i}-${Date.now()}`, name, type: isEquip ? CardType.EQUIPMENT : base.type, suit, attribute, description: `开发态构造：${nm}` };
         };
         const next = playersRef.current.map(p => {
           const s = spec.find(x => x.id === p.id);
@@ -4828,22 +4829,66 @@ const App: React.FC = () => {
     return true;
   };
 
-  // 邹氏「倾城」：弃置一张黑色手牌，暗置一名角色的武将牌（弃装备牌可再暗置一人）
+  // 邹氏「倾城」：弃置一张黑色牌（手牌或装备区），暗置一名武将牌明置的角色；
+  // 若弃置的是装备牌，可再暗置一名武将牌明置的其他角色（人类自行选择）
   const resolveQingcheng = async (ownerId: number, targetId: number) => {
     const owner = getPlayer(ownerId);
     const target = getPlayer(targetId);
     if (!owner || !target || target.isDead || targetId === ownerId) return false;
-    const blackCards = owner.hand.filter(c => c.suit === Suit.SPADE || c.suit === Suit.CLUB);
-    if (blackCards.length === 0) {
-      addLog('「倾城」需要弃置一张黑色手牌，当前没有合法牌', 'info');
+    // 本作默认武将牌均明置；已被暗置的角色不能再被「倾城」选中（已暗置才为 false）
+    if (target.generalRevealed === false) {
+      addLog('「倾城」不能选择武将牌已暗置的角色', 'info');
       return false;
     }
-    const cost = [...blackCards].sort((a, b) => {
-      const ai = a.type === CardType.EQUIPMENT ? 0 : 1;
-      const bi = b.type === CardType.EQUIPMENT ? 0 : 1;
-      return ai - bi || a.value - b.value;
-    })[0];
-    discardCards(ownerId, [cost]);
+    const eq = owner.equipment ?? {};
+    const equipCards = (Object.keys(eq) as EquipmentSlot[])
+      .map(k => (eq as Record<string, Card | undefined>)[k])
+      .filter((c): c is Card => !!c && (c.suit === Suit.SPADE || c.suit === Suit.CLUB));
+    const blackCards = [...owner.hand.filter(c => c.suit === Suit.SPADE || c.suit === Suit.CLUB), ...equipCards];
+    if (blackCards.length === 0) {
+      addLog('「倾城」需要弃置一张黑色牌，当前没有合法牌', 'info');
+      return false;
+    }
+    let cost: Card | undefined;
+    if (owner.isHuman && !isAiTakeover && blackCards.length > 1) {
+      const pick = await requestSkillChoice({
+        skill: '倾城',
+        owner: owner.hero.name,
+        title: '「倾城」：选择弃置一张黑色牌（手牌或装备区）',
+        mode: 'card',
+        cards: blackCards,
+        min: 1,
+        max: 1,
+        cancelLabel: '取消倾城',
+      }, true);
+      if (!pick || pick.kind !== 'card' || pick.ids.length !== 1) return false;
+      cost = blackCards.find(c => c.id === pick.ids[0]);
+      if (!cost) return false;
+    } else {
+      cost = [...blackCards].sort((a, b) => {
+        const ai = a.type === CardType.EQUIPMENT ? 0 : 1;
+        const bi = b.type === CardType.EQUIPMENT ? 0 : 1;
+        return ai - bi || a.value - b.value;
+      })[0];
+    }
+    if (!owner.hand.some(c => c.id === cost.id)) {
+      // 代价来自装备区：移出槽位、置入弃牌堆，并触发「枭姬」
+      const slot = (Object.keys(eq) as EquipmentSlot[])
+        .find(k => (eq as Record<string, Card | undefined>)[k]?.id === cost.id);
+      if (slot) {
+        const nextEq = { ...eq };
+        delete nextEq[slot];
+        updatePlayer(ownerId, { equipment: nextEq });
+        setDiscardPile(prev => {
+          const next = [...prev, cost];
+          discardPileRef.current = next;
+          return next;
+        });
+        triggerXiaoji(ownerId);
+      }
+    } else {
+      discardCards(ownerId, [cost]);
+    }
     const sealSpan = playersRef.current.filter(p => !p.isDead).length + 1;
     skillSealRef.current[targetId] = turnCountRef.current + sealSpan;
     setGeneralRevealed(targetId, false, '倾城', true);
@@ -4854,12 +4899,31 @@ const App: React.FC = () => {
     setIsQingchengMode(false);
     await delay(500);
     if (cost.type === CardType.EQUIPMENT) {
-      const second = playersRef.current.find(p => !p.isDead && p.id !== ownerId && p.id !== targetId && isEnemy(owner, p));
-      if (second) {
-        skillSealRef.current[second.id] = turnCountRef.current + sealSpan;
-        setGeneralRevealed(second.id, false, '倾城', true);
-        addLog(`「倾城」弃置的是装备牌，再次暗置 ${second.hero.name} 的武将牌`, 'skill');
-        await delay(400);
+      const candidates = playersRef.current
+        .filter(p => !p.isDead && p.id !== ownerId && p.id !== targetId && p.generalRevealed !== false);
+      if (candidates.length > 0) {
+        let secondId: number | null = null;
+        if (owner.isHuman && !isAiTakeover) {
+          const pick = await requestSkillChoice({
+            skill: '倾城',
+            owner: owner.hero.name,
+            title: '弃置的是装备牌：可再暗置一名武将牌明置的其他角色',
+            mode: 'choose',
+            choices: candidates.map(p => ({ id: String(p.id), label: p.hero.name, desc: `${p.hp}/${p.maxHp}` })),
+            cancelLabel: '不再暗置',
+          }, true);
+          if (pick && pick.kind === 'choose') secondId = Number(pick.id);
+        } else {
+          const enemy = candidates.filter(p => isEnemy(owner, p)).sort((a, b) => a.hp - b.hp)[0];
+          secondId = enemy ? enemy.id : null;
+        }
+        const second = secondId !== null ? getPlayer(secondId) : undefined;
+        if (second) {
+          skillSealRef.current[second.id] = turnCountRef.current + sealSpan;
+          setGeneralRevealed(second.id, false, '倾城', true);
+          addLog(`「倾城」弃置的是装备牌，再次暗置 ${second.hero.name} 的武将牌`, 'skill');
+          await delay(400);
+        }
       }
     }
     return true;
@@ -9227,12 +9291,15 @@ const App: React.FC = () => {
       }
     }
 
-    // 邹氏「倾城」：弃黑色牌暗置敌方武将牌
+    // 邹氏「倾城」：弃黑色牌（手牌或装备区）暗置敌方已明置的武将牌
     if (aiSkillsOn && aiPlayer.hero.name === '邹氏' && !qingchengUsedRef.current
         && zoushiRevealedRef.current.has(aiPlayer.id)) {
-      const blackCard = aiPlayer.hand.find(c => c.suit === Suit.SPADE || c.suit === Suit.CLUB);
-      const enemy = pickAITarget(aiPlayer);
-      if (blackCard && enemy) {
+      const hasBlack = aiPlayer.hand.some(c => c.suit === Suit.SPADE || c.suit === Suit.CLUB)
+        || Object.values(aiPlayer.equipment ?? {}).some(c => !!c && (c.suit === Suit.SPADE || c.suit === Suit.CLUB));
+      const enemy = playersRef.current
+        .filter(p => !p.isDead && p.id !== aiPlayer.id && isEnemy(aiPlayer, p) && p.generalRevealed !== false)
+        .sort((a, b) => a.hp - b.hp)[0];
+      if (hasBlack && enemy) {
         await resolveQingcheng(aiPlayer.id, enemy.id);
         await delay(500);
       }
@@ -12719,14 +12786,15 @@ const App: React.FC = () => {
 
                        {/* 邹氏「倾城」 */}
                        {players[0].hero.name === '邹氏' && !isQingchengMode && !hasUsedQingcheng
-                         && players[0].hand.some(c => c.suit === Suit.SPADE || c.suit === Suit.CLUB) && (
+                         && (players[0].hand.some(c => c.suit === Suit.SPADE || c.suit === Suit.CLUB)
+                           || (Object.values(players[0].equipment ?? {}) as Array<Card | undefined>).some(c => !!c && (c.suit === Suit.SPADE || c.suit === Suit.CLUB))) && (
                          <button
                            onClick={() => {
                              setIsQingchengMode(true);
                              setIsSelectingTarget(true);
                              setSelectedCardIds([]);
                              setActiveSelectedId(null);
-                             addLog('「倾城」：请选择一名角色（弃置黑色手牌暗置其武将牌）', 'info');
+                             addLog('「倾城」：请选择一名武将牌明置的角色（弃置一张黑色牌暗置其武将牌）', 'info');
                            }}
                            className="skill-btn text-base"
                          >
