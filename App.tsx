@@ -3184,7 +3184,8 @@ const App: React.FC = () => {
         }
 
         // 赵襄「芳魂」：移去 1 个「梅影」，发动「龙胆」将【闪】当【杀】使用，结算后摸一张牌
-        if (currentPlayer.hero.name === '赵襄' && skillsOn(currentPlayer.id)) {
+        if (currentPlayer.hero.name === '赵襄' && skillsOn(currentPlayer.id)
+            && (!currentPlayer.isHuman || isAiTakeover)) {
           let guard = 0;
           while (guard < 2) {
             const me = getPlayer(currentPlayer.id);
@@ -4474,6 +4475,8 @@ const App: React.FC = () => {
       const me = players.find(p => p.isHuman) || players[0];
       const isZhaoyun = me.hero.name === '赵云';
       const isGuanyu = canUseWusheng(me);
+      // 赵襄「芳魂」：有「梅影」时可将【闪】当【杀】使用（主动使用，目标由玩家选择）
+      const isZhaoxiang = me.hero.name === '赵襄' && (me.meiyanMarks ?? 0) > 0;
       const isRedCard = [Suit.HEART, Suit.DIAMOND].includes(card.suit); // 红色牌（红桃和方块）
 
       // 丈八蛇矛模式：选两张手牌
@@ -4640,7 +4643,8 @@ const App: React.FC = () => {
         // 对于关羽，将红色牌当杀使用时也需要选择目标
         const needTarget = [CardName.SHA, CardName.JUEDOU, CardName.SHUNSHOU, CardName.GUOHE, CardName.LESI, CardName.TAO, CardName.HUOGONG, CardName.BINGLIANG, CardName.TIESUO, CardName.JIEDAO].includes(card.name) ||
                           (isZhaoyun && card.name === CardName.SHAN) || // 赵云的闪可以当杀使用，需要选择目标
-                          (isGuanyu && isRedCard); // 关羽的红色牌可以当杀使用，需要选择目标
+                          (isGuanyu && isRedCard) || // 关羽的红色牌可以当杀使用，需要选择目标
+                          (isZhaoxiang && card.name === CardName.SHAN); // 赵襄的闪可移去梅影当杀使用
         
         if (needTarget) {
           setIsSelectingTarget(true);
@@ -4656,6 +4660,8 @@ const App: React.FC = () => {
             addLog("【借刀杀人】请先选择一名有武器的角色", 'info');
           } else if (isZhaoyun && card.name === CardName.SHAN) {
             addLog("请选择【杀】的目标...", 'info');
+          } else if (isZhaoxiang && card.name === CardName.SHAN) {
+            addLog("【芳魂】请选择【杀】的目标（将移去 1 枚「梅影」发动「龙胆」）...", 'info');
           } else if (isGuanyu && isRedCard) {
             addLog("请选择【杀】的目标...", 'info');
           } else {
@@ -5510,6 +5516,7 @@ const App: React.FC = () => {
     let effectiveCardName = card.name;
     if (canUseWusheng(me) && [Suit.HEART, Suit.DIAMOND].includes(card.suit)) effectiveCardName = CardName.SHA;
     if (me.hero.name === '赵云' && card.name === CardName.SHAN) effectiveCardName = CardName.SHA;
+    if (me.hero.name === '赵襄' && card.name === CardName.SHAN && (me.meiyanMarks ?? 0) > 0) effectiveCardName = CardName.SHA;
     const targetProtection = getTargetProtection(target, effectiveCardName);
     if (target.id !== me.id && targetProtection) {
       addLog(`${target.hero.name} 发动「${targetProtection}」，不能成为该牌的目标`, 'skill');
@@ -5542,11 +5549,22 @@ const App: React.FC = () => {
       const isUsingLongdan = me.hero.name === '赵云' && card.name === CardName.SHAN;
       // 处理「武圣」（关羽或许身授予）- 主动使用
       const isUsingWusheng = canUseWusheng(me) && [Suit.HEART, Suit.DIAMOND].includes(card.suit);
+      // 赵襄「芳魂」：移去 1 枚「梅影」发动「龙胆」，将【闪】当【杀】使用
+      const isUsingFanghun = me.hero.name === '赵襄' && card.name === CardName.SHAN && (me.meiyanMarks ?? 0) > 0;
       
       setSelectedCardIds([]);
       setIsSelectingTarget(false);
 
-      if (isUsingLongdan) {
+      if (isUsingFanghun) {
+        // 赵襄移去梅影，将闪当杀使用，结算后摸一张
+        updatePlayer(me.id, { meiyanMarks: Math.max(0, (me.meiyanMarks ?? 0) - 1) });
+        addLog(`【芳魂】赵襄移去 1 个「梅影」，发动「龙胆」将【${card.name}】当【杀】对 ${target.hero.name} 使用`, 'skill');
+        showSkillBanner('赵襄', '芳魂');
+        const tempShaCard = { ...card, name: CardName.SHA };
+        await resolveCardEffect(me, [target], tempShaCard);
+        drawCards(me.id, 1);
+        addLog('【芳魂】龙胆结算后赵襄摸一张牌', 'skill');
+      } else if (isUsingLongdan) {
         // 赵云将闪当杀使用
         addLog(`${me.hero.name} 使用技能「龙胆」，将【${card.name}】当【杀】使用`, 'skill');
         showSkillBanner(me.hero.name, '龙胆');
