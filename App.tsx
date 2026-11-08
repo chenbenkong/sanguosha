@@ -1756,6 +1756,7 @@ const App: React.FC = () => {
         __devIdentity?: (spec: Array<{ id: number; identity: string }>) => void;
         __devTrick?: (spec: Array<{ id: number; cards: string[] }>) => void;
         __devDeckTop?: (names: string[]) => void;
+        __devDeckOnly?: (names: string[]) => void;
         __devLogs?: () => string[];
       };
       devWin.__devLogs = () => logsRef.current.map(l => l.text);
@@ -1836,6 +1837,24 @@ const App: React.FC = () => {
         pool.push(...made);
         deckRef.current = pool;
         setDeck(pool);
+      };
+      // 仅测试用：用指定牌名重建整个牌堆（names[0] 在牌堆底），用于构造「伏诛」触发条件
+      devWin.__devDeckOnly = (names) => {
+        const pool = [...deckRef.current];
+        const base = (playersRef.current[0]?.hand[0] ?? pool[0]) as Card;
+        const made = names.map((nm, i): Card => {
+          let name = nm as CardName;
+          let suit: Suit = Suit.HEART;
+          if (nm.startsWith('黑')) { name = nm.slice(1) as CardName; suit = Suit.SPADE; }
+          else if (nm.startsWith('♦')) { name = nm.slice(1) as CardName; suit = Suit.DIAMOND; }
+          const tpl = pool.find(c => c.name === name) ?? base;
+          const type = (name === CardName.SHA || name === CardName.SHAN || name === CardName.TAO || name === CardName.JIU)
+            ? CardType.BASIC
+            : (EQUIP_META[name] ? CardType.EQUIPMENT : CardType.SCROLL);
+          return { ...tpl, id: `devdeck-${i}-${Date.now()}`, name, suit, type, description: `开发态构造：${nm}` };
+        });
+        deckRef.current = made;
+        setDeck(made);
       };
       devWin.__devDamage = (victimId, sourceId, amount, nature, cardName) => {
         let card: Card | undefined;
@@ -3600,14 +3619,16 @@ const App: React.FC = () => {
               placeTop = !!(pick && pick.kind === 'choose' && pick.id === 'top');
             }
             if (placeTop) {
+              // 牌堆顶 = 数组末尾（摸牌从末尾取）
               setDeck(prev => {
-                const next = [giftCard, ...prev];
+                const next = [...prev, giftCard];
                 deckRef.current = next;
                 return next;
               });
             } else {
+              // 牌堆底 = 数组开头
               setDeck(prev => {
-                const next = [...prev, giftCard];
+                const next = [giftCard, ...prev];
                 deckRef.current = next;
                 return next;
               });
@@ -3615,12 +3636,12 @@ const App: React.FC = () => {
             addLog(`【问卦】${currentPlayer.hero.name} 交给徐氏【${giftCard.name}】，徐氏将其置于牌堆${placeTop ? '顶' : '底'}`, 'skill');
             showSkillBanner('徐氏', '问卦');
             if (placeTop) {
-              // 置于牌堆顶：双方从牌堆底各摸一张
+              // 置于牌堆顶：双方从牌堆底（数组开头）各摸一张
               for (const pid of [xushi.id, currentPlayer.id]) {
                 const now = deckRef.current;
-                const bottom = now[now.length - 1];
+                const bottom = now[0];
                 if (!bottom) break;
-                const next = now.slice(0, -1);
+                const next = now.slice(1);
                 setDeck(next);
                 deckRef.current = next;
                 mutateHand(pid, h => [...h, bottom]);
@@ -3959,33 +3980,53 @@ const App: React.FC = () => {
         }
 
         // 徐氏「伏诛」：一名男性角色的结束阶段内，若牌堆剩余牌数不大于徐氏体力值的十倍，
-        // 则依次对该角色使用牌堆中的 X 张【杀】（X 为场上人数），然后将牌堆洗牌
+        // 则徐氏可以依次对该角色使用牌堆中 X 张【杀】（X 为场上人数，不足则全部使用），然后洗牌
         if (endingPlayer && !endingPlayer.isDead && endingPlayer.hero.gender === 'male') {
           const xs = playersRef.current.find(p => !p.isDead && p.id !== endingPlayer.id
             && p.hero.name === '徐氏' && skillsOn(p.id));
           if (xs && deckRef.current.length <= xs.hp * 10) {
             const x = playersRef.current.filter(p => !p.isDead).length;
-            const slashes = deckRef.current.filter(c => c.name === CardName.SHA).slice(0, x);
+            // 牌堆顶在数组末尾：从顶向底依次取【杀】，取满 X 张或牌堆中的【杀】用尽为止
+            const slashes = [...deckRef.current].reverse().filter(c => c.name === CardName.SHA).slice(0, x);
             if (slashes.length > 0) {
-              setDeck(prev => {
-                const next = prev.filter(c => !slashes.some(s => s.id === c.id));
-                deckRef.current = next;
-                return next;
-              });
-              addLog(`【伏诛】徐氏对 ${endingPlayer.hero.name} 依次使用牌堆中的 ${slashes.length} 张【杀】`, 'skill');
-              showSkillBanner('徐氏', '伏诛');
-              await delay(400);
-              const xsNow = getPlayer(xs.id);
-              for (const s of slashes) {
-                const victimNow = getPlayer(endingPlayer.id);
-                if (!xsNow || !victimNow || xsNow.isDead || victimNow.isDead) break;
-                await resolveCardEffect(xsNow, [victimNow], s);
+              let go = true;
+              if (xs.isHuman && !isAiTakeover) {
+                const r = await requestSkillChoice({
+                  skill: '伏诛',
+                  owner: '徐氏',
+                  title: `牌堆剩余 ${deckRef.current.length} 张（≤ 体力值 ${xs.hp} × 10），是否对 ${endingPlayer.hero.name} 依次使用牌堆中 ${slashes.length} 张【杀】？`,
+                  mode: 'choose',
+                  choices: [{ id: 'yes', label: `发动伏诛（${slashes.length} 张【杀】）` }],
+                  cancelLabel: '不发动',
+                }, true);
+                go = !!(r && r.kind === 'choose' && r.id === 'yes');
               }
-              const reshuffled = shuffle(deckRef.current);
-              setDeck(reshuffled);
-              deckRef.current = reshuffled;
-              addLog('【伏诛】结算完毕，牌堆重新洗牌', 'info');
-              await delay(300);
+              if (go) {
+                const usedIds = new Set(slashes.map(s => s.id));
+                setDeck(prev => {
+                  const next = prev.filter(c => !usedIds.has(c.id));
+                  deckRef.current = next;
+                  return next;
+                });
+                addLog(`【伏诛】徐氏对 ${endingPlayer.hero.name} 依次使用牌堆中的 ${slashes.length} 张【杀】`, 'skill');
+                showSkillBanner('徐氏', '伏诛');
+                await delay(400);
+                for (const s of slashes) {
+                  const xsNow = getPlayer(xs.id);
+                  const victimNow = getPlayer(endingPlayer.id);
+                  if (!xsNow || !victimNow || xsNow.isDead || victimNow.isDead) break;
+                  await resolveCardEffect(xsNow, [victimNow], s);
+                  // 从牌堆取出的【杀】结算后进入弃牌堆
+                  const dp = [...discardPileRef.current, s];
+                  discardPileRef.current = dp;
+                  setDiscardPile(dp);
+                }
+                const reshuffled = shuffle(deckRef.current);
+                setDeck(reshuffled);
+                deckRef.current = reshuffled;
+                addLog('【伏诛】结算完毕，牌堆重新洗牌', 'info');
+                await delay(300);
+              }
             }
           }
         }
