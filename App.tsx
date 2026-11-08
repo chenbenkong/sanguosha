@@ -2188,12 +2188,13 @@ const App: React.FC = () => {
 
     if (killerId !== undefined && killerId !== victimId) {
       const killer = getPlayer(killerId)!;
-      // 灵雎「焚心」：限定技，杀死角色后若自己不为主公，可与死者交换身份牌（AI 仅在击杀主公时使用）
+      // 灵雎「焚心」：限定技，杀死一名角色后，若自己不为主公，可与其交换身份牌（不限死者是否主公）
       if (killer.hero.name === '灵雎' && skillsOn(killerId) && !killer.fenxinUsed
-          && killer.identity !== Identity.ZHUGONG && victim.identity === Identity.ZHUGONG) {
-        updatePlayer(killerId, { fenxinUsed: true, identity: Identity.ZHUGONG });
-        updatePlayer(victimId, { identity: killer.identity });
-        addLog(`【焚心】灵雎与 ${victim.hero.name} 交换身份牌，灵雎成为【主公】，${victim.hero.name} 变为【${killer.identity}】`, 'skill');
+          && killer.identity !== Identity.ZHUGONG) {
+        const killerOldIdentity = killer.identity;
+        updatePlayer(killerId, { fenxinUsed: true, identity: victim.identity });
+        updatePlayer(victimId, { identity: killerOldIdentity });
+        addLog(`【焚心】灵雎与 ${victim.hero.name} 交换身份牌，灵雎成为【${victim.identity}】，${victim.hero.name} 变为【${killerOldIdentity}】`, 'skill');
         showSkillBanner('灵雎', '焚心');
       }
       // 何太后「戚乱」：记录本回合击杀数（结束阶段按 3×击杀数摸牌）
