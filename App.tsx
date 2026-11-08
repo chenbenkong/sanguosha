@@ -4368,7 +4368,8 @@ const App: React.FC = () => {
     if (pendingReaction && !isAiTakeover) {
       const responder = getPlayer(pendingReaction.targetId)!;
       const neededCard = pendingReaction.cardName;
-      const canUseSkill = pendingReaction.canUseLongdan || (me.hero.name === '赵云');
+      const canUseSkill = pendingReaction.canUseLongdan || me.hero.name === '赵云'
+        || (me.hero.name === '赵襄' && (me.meiyanMarks ?? 0) > 0);
       const skillCardName = pendingReaction.skillCardName || 
                            (neededCard === CardName.SHAN ? CardName.SHA : CardName.SHAN);
 
@@ -4414,8 +4415,15 @@ const App: React.FC = () => {
           
           // 记录日志，显示是否使用了技能
           if (isUsingSkillCard) {
-            addLog(`${me.hero.name} 使用技能「龙胆」，将【${card.name}】当【${neededCard}】使用`, 'skill');
-            showSkillBanner(me.hero.name, '龙胆');
+            if (me.hero.name === '赵襄') {
+              // 「芳魂」：移去 1 枚「梅影」发动「龙胆」转化
+              updatePlayer(me.id, { meiyanMarks: Math.max(0, (me.meiyanMarks ?? 0) - 1) });
+              addLog(`【芳魂】赵襄移去 1 个「梅影」，发动「龙胆」将【${card.name}】当【${neededCard}】使用`, 'skill');
+              showSkillBanner('赵襄', '芳魂');
+            } else {
+              addLog(`${me.hero.name} 使用技能「龙胆」，将【${card.name}】当【${neededCard}】使用`, 'skill');
+              showSkillBanner(me.hero.name, '龙胆');
+            }
           } else if (isUsingWusheng) {
             addLog(`${me.hero.name} 使用技能「武圣」，将【${card.name}】当【${neededCard}】使用`, 'skill');
             showSkillBanner(me.hero.name, '武圣');
@@ -7099,7 +7107,8 @@ const App: React.FC = () => {
       // HUMAN REACTION
       if (responder.isHuman && !isAiTakeover) {
         const hasCard = responder.hand.some(c => c.name === neededCard);
-        const canUseSkill = responder.hero.name === '赵云';
+        const canUseSkill = responder.hero.name === '赵云'
+          || (responder.hero.name === '赵襄' && (responder.meiyanMarks ?? 0) > 0);
         const skillCardName = canUseSkill ? (neededCard === CardName.SHAN ? CardName.SHA : CardName.SHAN) : null;
         const hasSkillCard = canUseSkill && responder.hand.some(c => c.name === skillCardName);
         const hasWuxie = responder.hand.some(c => c.name === CardName.WUXIE);
@@ -7302,8 +7311,9 @@ const App: React.FC = () => {
           return false;
         }
         
-        // 检查赵云的技能
-        if (!hasCard && responder.hero.name === '赵云') {
+        // 检查赵云「龙胆」/ 赵襄「芳魂」的杀闪互转技能
+        if (!hasCard && (responder.hero.name === '赵云'
+            || (responder.hero.name === '赵襄' && (responder.meiyanMarks ?? 0) > 0))) {
           // 尝试使用技能：如果需要闪，使用杀；如果需要杀，使用闪
           if (neededCard === CardName.SHAN) {
             cardToPlay = responder.hand.find(c => c.name === CardName.SHA);
@@ -7346,10 +7356,14 @@ const App: React.FC = () => {
             addLog(`${responder.hero.name} 使用技能「倾国」，将【${cardToPlay.name}】当【${neededCard}】使用`, 'skill');
             showSkillBanner(responder.hero.name, '倾国');
           } else if (isUsingSkill) {
-            // 区分赵云的龙胆和「武圣」
+            // 区分赵云的龙胆、赵襄的芳魂与「武圣」
             if (canUseWusheng(responder)) {
               addLog(`${responder.hero.name} 使用技能「武圣」，将【${cardToPlay.name}】当【${neededCard}】使用`, 'skill');
               showSkillBanner(responder.hero.name, '武圣');
+            } else if (responder.hero.name === '赵襄') {
+              updatePlayer(responder.id, { meiyanMarks: Math.max(0, (responder.meiyanMarks ?? 0) - 1) });
+              addLog(`【芳魂】赵襄移去 1 个「梅影」，发动「龙胆」将【${cardToPlay.name}】当【${neededCard}】使用`, 'skill');
+              showSkillBanner('赵襄', '芳魂');
             } else {
               addLog(`${responder.hero.name} 使用技能「龙胆」，将【${cardToPlay.name}】当【${neededCard}】使用`, 'skill');
               showSkillBanner(responder.hero.name, '龙胆');
@@ -10156,7 +10170,8 @@ const App: React.FC = () => {
                  {/* Filter Hand for needed card, skill cards, and Wuxie */}
                  {(() => {
                    const neededCard = pendingReaction.cardName;
-                   const canUseSkill = me.hero.name === '赵云';
+                   const canUseSkill = me.hero.name === '赵云'
+                     || (me.hero.name === '赵襄' && (me.meiyanMarks ?? 0) > 0);
                    const skillCardName = neededCard === CardName.SHAN ? CardName.SHA : CardName.SHAN;
                    const responder = players.find(p => p.id === pendingReaction.targetId) || me;
                    const hasWuxie = responder.hand.some(c => c.name === CardName.WUXIE);
@@ -12590,7 +12605,8 @@ const App: React.FC = () => {
                if (pendingReaction && !isAiTakeover) {
                   // 检查是否为需要的牌或可以通过技能使用的牌
                   const neededCard = pendingReaction.cardName;
-                  const canUseSkill = me.hero.name === '赵云';
+                  const canUseSkill = me.hero.name === '赵云'
+                    || (me.hero.name === '赵襄' && (me.meiyanMarks ?? 0) > 0);
                   const skillCardName = neededCard === CardName.SHAN ? CardName.SHA : CardName.SHAN;
                   // 「武圣」：红色牌可当【杀】打出
                   const isWushengCard = canUseWusheng(me) && neededCard === CardName.SHA &&
