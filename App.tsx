@@ -2641,27 +2641,47 @@ const App: React.FC = () => {
           await delay(300);
         }
 
-        // 赵襄「扶汉」：限定技，回合开始时若拥有「梅影」，移去全部梅影并替换为蜀势力武将
+        // 赵襄「扶汉」：限定技，回合开始时可移去全部「梅影」，从未登场的蜀势力武将中五选一替换
         if (currentPlayer.hero.name === '赵襄' && skillsOn(currentPlayer.id)
             && !currentPlayer.fuhanUsed && (currentPlayer.meiyanMarks ?? 0) > 0) {
-          const marks = currentPlayer.meiyanMarks ?? 0;
-          const pool = HEROES.filter(h => h.kingdom === '蜀' && !h.pending && h.name !== '赵襄');
-          const newHero = pool[Math.floor(Math.random() * pool.length)];
-          if (newHero) {
-            // 体力上限 = 本局移去梅影数（至多游戏人数）；若为体力最低者回复 1 点
-            const newMax = Math.max(1, Math.min(marks, playersRef.current.length));
-            const aliveHp = playersRef.current.filter(p => !p.isDead).map(p => p.hp);
-            const isLowest = currentPlayer.hp <= Math.min(...aliveHp);
-            updatePlayer(currentPlayer.id, {
-              hero: newHero,
-              fuhanUsed: true,
-              meiyanMarks: 0,
-              maxHp: newMax,
-              hp: Math.min(currentPlayer.hp + (isLowest ? 1 : 0), newMax),
-            });
-            addLog(`【扶汉】赵襄移去 ${marks} 枚「梅影」并替换为蜀势力武将 ${newHero.name}，体力上限改为 ${newMax}${isLowest ? '，因体力最低回复 1 点' : ''}`, 'skill');
-            showSkillBanner('赵襄', '扶汉');
-            await delay(400);
+          const inPlay = new Set(playersRef.current.map(p => p.hero.name));
+          const pool = HEROES.filter(h => h.kingdom === '蜀' && !h.pending && h.name !== '赵襄' && !inPlay.has(h.name));
+          const candidates = shuffle(pool).slice(0, 5);
+          if (candidates.length > 0) {
+            let chosen: Hero | undefined;
+            if (currentPlayer.isHuman && !isAiTakeover) {
+              const pick = await requestSkillChoice({
+                skill: '扶汉',
+                owner: currentPlayer.hero.name,
+                title: '移去全部「梅影」，从五名未登场的蜀势力武将中选择一名替换',
+                mode: 'choose',
+                choices: candidates.map((h, i) => ({ id: String(i), label: h.name, desc: `体力上限 ${h.maxHp}` })),
+                cancelLabel: '不发动扶汉',
+              }, true);
+              if (pick && pick.kind === 'choose') chosen = candidates[Number(pick.id)];
+            } else {
+              chosen = candidates[Math.floor(Math.random() * candidates.length)];
+            }
+            if (chosen) {
+              const me = getPlayer(currentPlayer.id);
+              const marks = me?.meiyanMarks ?? 0;
+              if (me && marks > 0) {
+                // 体力上限 = 本局移去梅影数（至多游戏人数）；若为体力最低者回复 1 点
+                const newMax = Math.max(1, Math.min(marks, playersRef.current.length));
+                const aliveHp = playersRef.current.filter(p => !p.isDead).map(p => p.hp);
+                const isLowest = me.hp <= Math.min(...aliveHp);
+                updatePlayer(currentPlayer.id, {
+                  hero: chosen,
+                  fuhanUsed: true,
+                  meiyanMarks: 0,
+                  maxHp: newMax,
+                  hp: Math.min(me.hp + (isLowest ? 1 : 0), newMax),
+                });
+                addLog(`【扶汉】赵襄移去 ${marks} 枚「梅影」并替换为蜀势力武将 ${chosen.name}，体力上限改为 ${newMax}${isLowest ? '，因体力最低回复 1 点' : ''}`, 'skill');
+                showSkillBanner('赵襄', '扶汉');
+                await delay(400);
+              }
+            }
           }
         }
 
