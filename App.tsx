@@ -11,6 +11,7 @@ import RulesDialog from './src/components/RulesDialog';
 import { GameSave, SAVE_VERSION, readSave, writeSave, clearSave, consumeSaveRejected, isSaveFinished } from './src/game/save';
 import { shuffle, rankValue, wuguKeepPriority } from './src/game/utils';
 import { useGameState, setPlayers, setDeck, setDiscardPile, setTurnIndex, setPhase, setWinnerSide } from './src/game/gameStore';
+import { countExemptHandCards, computeDiscardExcess, evaluateWinnerSide, nextAliveTurnIndex } from './src/game/rules';
 import { LogPanel, PhasePanel, TurnRail, TurnStrip, ObjectiveStrip, MobilePhaseChip } from './src/components/game/GameHud';
 import { PlayerInspectModal } from './src/components/game/PlayerInspectModal';
 import { SkillInfoModal } from './src/components/game/SkillInfoModal';
@@ -841,20 +842,14 @@ const App: React.FC = () => {
   };
 
   // 诸葛果「羽化」：非基本牌不计入手牌上限；董白「黠慧」：黑色牌不计入手牌上限
-  const nonBasicCount = (p: Player) => {
-    if (p.hero.name === '诸葛果') return p.hand.filter(c => c.type !== CardType.BASIC).length;
-    if (p.hero.name === '董白') return p.hand.filter(c => c.suit === Suit.SPADE || c.suit === Suit.CLUB).length;
-    return 0;
-  };
+  // 手牌上限/弃牌数的规则计算统一在 src/game/rules.ts，这里只保留 DEV 探针上报
   const excessCards = (p: Player) => {
-    const nb = nonBasicCount(p);
-    if (nb > 0 && (import.meta as unknown as { env?: { DEV?: boolean } }).env?.DEV === true) {
+    const nb = countExemptHandCards(p);
+    if (nb > 0 && DEV_BUILD) {
       const w = window as unknown as { __r4yuhua?: Record<string, unknown> };
       w.__r4yuhua = { ...(w.__r4yuhua || {}), hero: p.hero.name, hand: p.hand.length, hp: p.hp, nonBasic: nb, sample: p.hand.map(c => c.type) };
     }
-    // 胡金定「怀子」：手牌上限等于体力上限
-    const limitHp = p.hero.name === '胡金定' ? p.maxHp : p.hp;
-    return Math.max(0, p.hand.length - limitHp - nb - (p.handLimitDelta ?? 0));
+    return computeDiscardExcess(p);
   };
   // 供 mutateHand 的延时回调使用，避免在 drawCards 声明前引用它
   const drawCardsRef = useRef<((playerId: number, count: number) => Card[]) | null>(null);
@@ -2397,38 +2392,9 @@ const App: React.FC = () => {
     // 延迟检查游戏结束，让玩家先看到阵亡信息和身份
     setTimeout(() => {
       if (isGameOverRef.current) return; // 防止重复触发
-      
-      const updatedPlayers = playersRef.current;
-      const lord = updatedPlayers.find(p => p.identity === Identity.ZHUGONG);
-      
-      if (!lord) return;
-
-      // 检查主公是否阵亡
-      if (lord.isDead) {
-        // 官方规则：主公阵亡时，只有「内奸是除主公外的唯一存活者」才判内奸胜；
-        // 若仍有其他角色存活（忠臣等），反贼的胜利条件（主公阵亡）已成立，判反贼胜。
-        const aliveRebels = updatedPlayers.filter(p => p.identity === Identity.FANZEI && !p.isDead);
-        const aliveSpy = updatedPlayers.find(p => p.identity === Identity.NEIJIAN && !p.isDead);
-        if (aliveRebels.length > 0) {
-          handleGameOver('rebel');
-        } else if (aliveSpy) {
-          // 内奸需单独存活（与主公单挑胜出）才算赢；仍有忠臣等他人存活则判反贼胜
-          const otherAlive = updatedPlayers.filter(p => !p.isDead && p.id !== aliveSpy.id);
-          handleGameOver(otherAlive.length === 0 ? 'spy' : 'rebel');
-        } else {
-          // 反贼与内奸均已阵亡：视为朝廷方获胜（主公死于意外）
-          handleGameOver('lord');
-        }
-        return;
-      }
-      
-      // 检查反贼和内奸是否都阵亡
-      const rebels = updatedPlayers.filter(p => p.identity === Identity.FANZEI && !p.isDead);
-      const spy = updatedPlayers.find(p => p.identity === Identity.NEIJIAN);
-      if (rebels.length === 0 && (!spy || spy.isDead)) {
-        handleGameOver('lord');
-        return;
-      }
+      // 胜负条件在 src/game/rules.ts 中集中实现，便于单测覆盖
+      const side = evaluateWinnerSide(playersRef.current);
+      if (side) handleGameOver(side);
     }, 100);
   };
 
@@ -4245,21 +4211,11 @@ const App: React.FC = () => {
             }
           }
         }
-        let nextIndex = (turnIndex + 1) % players.length;
-        // Skip dead logic handled at start of effect, but safer here too
-        let safety = 0;
-        
         // 更新ref中的最新状态
         playersRef.current = players;
-        
-        while (safety < 10) {
-          const nextPlayer = getPlayer(nextIndex);
-          if (!nextPlayer || !nextPlayer.isDead) {
-            break;
-          }
-          nextIndex = (nextIndex + 1) % players.length;
-          safety++;
-        }
+
+        // 下一位存活角色：跳过阵亡玩家（规则实现见 src/game/rules.ts）
+        const nextIndex = nextAliveTurnIndex(playersRef.current.length ? playersRef.current : players, turnIndex);
         
         // 存档点：本回合结算完毕、下一位尚未开始时落盘
         setCheckpoint({ turnIndex: nextIndex, id: Date.now() });
