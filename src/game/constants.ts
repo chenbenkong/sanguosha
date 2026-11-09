@@ -9,7 +9,7 @@ export const WINNER_LABEL: Record<WinnerSide, string> = {
 };
 
 // 版本号统一维护：首页页脚、README 与发布记录都以此为准
-export const APP_VERSION = 'v3.49';
+export const APP_VERSION = 'v3.50';
 
 // 势力色：魏蓝 / 蜀红 / 吴绿 / 群金（对应 theme.css 中的 --k-main）
 export const KINGDOM_CLASS: Record<string, string> = {
