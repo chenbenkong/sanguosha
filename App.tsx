@@ -12,6 +12,14 @@ import { GameSave, SAVE_VERSION, readSave, writeSave, clearSave, consumeSaveReje
 import { shuffle, rankValue, wuguKeepPriority } from './src/game/utils';
 import { LogPanel, PhasePanel, TurnRail, TurnStrip, ObjectiveStrip, MobilePhaseChip } from './src/components/game/GameHud';
 import { PlayerInspectModal } from './src/components/game/PlayerInspectModal';
+import { SkillInfoModal } from './src/components/game/SkillInfoModal';
+import { DyingModal } from './src/components/game/DyingModal';
+import { WuguModal } from './src/components/game/WuguModal';
+import { DiscardPileViewer } from './src/components/game/DiscardPileViewer';
+import { SkillChoiceModal, SkillChoiceRequest, SkillChoiceResult } from './src/components/game/SkillChoiceModal';
+import { ReactionModal } from './src/components/game/ReactionModal';
+import { StartScreen } from './src/components/game/StartScreen';
+import { HeroSelectScreen } from './src/components/game/HeroSelectScreen';
 import { GameTopBar, UiDisplayMenu, UiRegion, BgmPref } from './src/components/game/GameTopBar';
 import { IconSpeaker, IconSun, IconMoon, IconBolt, IconBook, IconDice, IconMotion, IconArrowLeft, ThemeIcon, IconEye } from './src/components/Icons';
 import { useLayoutProfile } from './src/hooks/useLayoutProfile';
@@ -763,26 +771,6 @@ const App: React.FC = () => {
 
   // ── 通用「技能选择」弹窗 ──
   // 人类角色触发时弹窗可选；AI 角色 / 托管状态直接返回 null，调用方走原有自动最优路径。
-  type SkillChoiceRequest = {
-    skill: string;
-    owner: string;
-    title: string;
-    hint?: string;
-    mode: 'choose' | 'multi' | 'card' | 'target';
-    choices?: { id: string; label: string; desc?: string }[];
-    cards?: Card[];
-    targets?: { id: number; name: string; sub?: string }[];
-    min?: number;
-    max?: number;
-    cancelLabel?: string;
-  };
-  type SkillChoiceResult =
-    | { kind: 'choose'; id: string }
-    | { kind: 'multi'; ids: string[] }
-    | { kind: 'card'; ids: string[] }
-    | { kind: 'target'; ids: number[] }
-    | { kind: 'cancel' }
-    | { kind: 'timeout' };
   const SKILL_CHOICE_SECONDS = 30;
   const [skillChoice, setSkillChoice] = useState<SkillChoiceRequest | null>(null);
   const [skillChoiceSel, setSkillChoiceSel] = useState<string[]>([]);
@@ -9950,572 +9938,69 @@ const App: React.FC = () => {
 
   if (screen === 'start') {
     return (
-      <div
-        data-density={layoutDensity}
-        data-size-tier={sizeTier}
-        data-motion={motionOn ? 'on' : 'off'}
-        data-fx={fxLevel}
-        className={`h-screen w-full flex flex-col items-center justify-center p-4 relative overflow-hidden ${theme === 'light' ? 'parchment-bg' : ''}`}
-        style={scaleStyle}
-      >
-        {/* 背景轮播 */}
-        <BackgroundCarousel 
-          images={BACKGROUND_IMAGES}
-          interval={CAROUSEL_CONFIG.interval}
-        />
-        
-        {/* 多层背景效果 - 根据主题切换（在没有背景图或背景图加载失败时显示） */}
-        {theme === 'dark' ? (
-          <>
-            {/* 静态暖光 + 极淡祥云暗纹：去掉 blur + animate 光斑，首页不再持续合成 */}
-            <div className="absolute inset-0 pointer-events-none" style={{
-              background: 'radial-gradient(ellipse 58% 44% at 50% 34%, rgba(200,164,92,0.13) 0%, rgba(0,0,0,0) 70%)'
-            }}></div>
-            <div className="absolute inset-0 opacity-20 pointer-events-none" style={{
-              backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23d4af37' fill-opacity='0.05'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`
-            }}></div>
-            {/* 装饰性边框 */}
-            <div className="absolute inset-8 border border-amber-800/20 rounded-lg pointer-events-none"></div>
-            <div className="absolute inset-10 border border-amber-700/10 rounded-lg pointer-events-none"></div>
-            {/* 四角装饰 */}
-            <div className="absolute top-6 left-6 w-16 h-16 border-t-2 border-l-2 border-amber-700/40 rounded-tl-lg"></div>
-            <div className="absolute top-6 right-6 w-16 h-16 border-t-2 border-r-2 border-amber-700/40 rounded-tr-lg"></div>
-            <div className="absolute bottom-6 left-6 w-16 h-16 border-b-2 border-l-2 border-amber-700/40 rounded-bl-lg"></div>
-            <div className="absolute bottom-6 right-6 w-16 h-16 border-b-2 border-r-2 border-amber-700/40 rounded-br-lg"></div>
-          </>
-        ) : (
-          <>
-            {/* 白天模式装饰边框 - 简约风格 */}
-            <div className="absolute inset-8 border border-[#e5e0db]/50 rounded-lg pointer-events-none"></div>
-            <div className="absolute inset-10 border border-[#d4cfc9]/30 rounded-lg pointer-events-none"></div>
-            {/* 四角装饰 - 柔和色调 */}
-            <div className="absolute top-6 left-6 w-16 h-16 border-t-2 border-l-2 border-[#c4a77d]/40 rounded-tl-lg"></div>
-            <div className="absolute top-6 right-6 w-16 h-16 border-t-2 border-r-2 border-[#c4a77d]/40 rounded-tr-lg"></div>
-            <div className="absolute bottom-6 left-6 w-16 h-16 border-b-2 border-l-2 border-[#c4a77d]/40 rounded-bl-lg"></div>
-            <div className="absolute bottom-6 right-6 w-16 h-16 border-b-2 border-r-2 border-[#c4a77d]/40 rounded-br-lg"></div>
-          </>
-        )}
-
-        {/* 顶部控制：静音 / 主题 */}
-        <div className="absolute top-5 right-5 z-50 flex items-center gap-2">
-          <button
-            onClick={toggleMute}
-            className="ui-icon-btn"
-            title={isMuted ? '开启音乐' : '静音'}
-            aria-label={isMuted ? '开启音乐' : '静音'}
-          >
-            <IconSpeaker muted={isMuted} />
-          </button>
-          <button
-            onClick={toggleMotion}
-            className="ui-icon-btn"
-            title={motionOn ? '关闭动效' : '开启动效'}
-            aria-label={motionOn ? '关闭动效' : '开启动效'}
-          >
-            <IconMotion off={!motionOn} />
-          </button>
-          <button
-            onClick={cycleFx}
-            className="ui-icon-btn flex-col !gap-0.5"
-            title={`${FX_LABEL[fxLevel]}（点击切换）`}
-            aria-label={`特效强度：${FX_LABEL[fxLevel]}，点击切换`}
-          >
-            <span className="text-[12px] leading-none font-bold">特效</span>
-            <span className="text-[10px] leading-none opacity-75">{FX_TAG[fxLevel]}</span>
-          </button>
-          <button
-            onClick={toggleTheme}
-            className="ui-icon-btn"
-            title={theme === 'dark' ? '切换到白天模式' : '切换到黑夜模式'}
-            aria-label={theme === 'dark' ? '切换到白天模式' : '切换到黑夜模式'}
-          >
-            <ThemeIcon theme={theme} />
-          </button>
-        </div>
-
-        {/* 主内容：标题 + 出征面板 + 战绩，全部在一屏内 */}
-        <div className="relative z-10 flex min-h-full w-full flex-col items-center justify-center px-5 py-16">
-          <div className="relative text-center">
-            {/* 朱印 */}
-            <div className={`absolute -top-5 right-1 md:-right-12 rotate-6 w-11 h-11 md:w-14 md:h-14 rounded-[5px] flex items-center justify-center border shadow-[0_6px_20px_rgba(0,0,0,0.5)] ${
-              theme === 'dark'
-                ? 'bg-gradient-to-br from-[#9e2b25] to-[#701c17] border-[#d4af37]/55'
-                : 'bg-gradient-to-br from-[#a8342c] to-[#7d211c] border-[#8a6914]/55'
-            }`}>
-              <span className="font-ancient text-3xl md:text-4xl text-[#f3d9a4] leading-none select-none">殺</span>
-            </div>
-
-            <h1 className={`font-ancient text-7xl md:text-8xl lg:text-[104px] leading-[1.15] tracking-[0.12em] relative ${
-              theme === 'dark'
-                ? 'text-transparent bg-clip-text bg-gradient-to-b from-[#f6e3ae] via-[#d4af37] to-[#8d6a18]'
-                : 'text-[#2a1d0e]'
-            }`}>
-              三国杀
-            </h1>
-
-            <div className="mt-3 flex items-center justify-center gap-2 md:gap-4">
-              <span className={`h-px w-6 sm:w-14 md:w-20 ${theme === 'dark' ? 'bg-gradient-to-r from-transparent to-[#c8a45c]/60' : 'bg-gradient-to-r from-transparent to-[#8b6914]/45'}`} />
-              <span className={`text-[13px] md:text-sm tracking-[0.24em] md:tracking-[0.42em] pl-[0.24em] md:pl-[0.42em] font-ancient whitespace-nowrap ${theme === 'dark' ? 'text-[#d9c49a]' : 'text-[#6b4a1a]'}`}>
-                群雄逐鹿 · {playerCount}人军争
-              </span>
-              <span className={`h-px w-6 sm:w-14 md:w-20 ${theme === 'dark' ? 'bg-gradient-to-l from-transparent to-[#c8a45c]/60' : 'bg-gradient-to-l from-transparent to-[#8b6914]/45'}`} />
-            </div>
-            <div className={`mt-2 text-[10px] tracking-[0.52em] pl-[0.52em] ${theme === 'dark' ? 'text-[#8f7c5e]' : 'text-[#9b8a6c]'}`}>
-              SANGUOSHA · IDENTITY
-            </div>
-          </div>
-
-          <div className="ui-panel mt-9 w-full max-w-[600px] px-6 py-6 md:px-8">
-            <div className="grid grid-cols-1 sm:grid-cols-[76px_1fr] items-center gap-y-3 sm:gap-y-5 gap-x-4">
-              <span className="section-caption">对局人数</span>
-              <div className="flex gap-2" role="group" aria-label="对局人数">
-                <button className="ui-tile" aria-pressed={playerCount === 5} onClick={() => setPlayerCount(5)}>五人局</button>
-                <button className="ui-tile" aria-pressed={playerCount === 7} onClick={() => setPlayerCount(7)}>七人局</button>
-              </div>
-
-              <span className="section-caption">AI 难度</span>
-              <div>
-                <div className="flex flex-wrap gap-2" role="group" aria-label="AI 难度">
-                  {([
-                    { key: 'easy', label: '简单', hint: 'AI 会偶尔失误，可能乱弃关键牌' },
-                    { key: 'normal', label: '普通', hint: '按身份与血量进行常规决策' },
-                    { key: 'hard', label: '困难', hint: '威胁评估、保留无懈/桃、协同保主公' },
-                  ] as const).map(item => (
-                    <button
-                      key={item.key}
-                      className="ui-tile !text-base !px-2.5 sm:!px-4 !py-1.5"
-                      aria-pressed={aiDifficulty === item.key}
-                      onClick={() => setAiDifficulty(item.key)}
-                      title={item.hint}
-                    >
-                      {item.label}
-                    </button>
-                  ))}
-                </div>
-                <p className={`mt-2 text-[11px] leading-relaxed ${theme === 'dark' ? 'text-[#8f806a]' : 'text-[#8a7a60]'}`}>
-                  {aiDifficulty === 'easy' ? 'AI 会偶尔失误，适合熟悉规则' : aiDifficulty === 'hard' ? 'AI 会评估威胁、保留关键牌并协同队友' : '标准 AI 强度'}
-                </p>
-              </div>
-            </div>
-
-            <div className={`mt-5 h-px ${theme === 'dark' ? 'bg-gradient-to-r from-transparent via-[#c8a45c]/25 to-transparent' : 'bg-gradient-to-r from-transparent via-[#8b6914]/20 to-transparent'}`} />
-
-            <div className="mt-6 flex flex-col items-center gap-3">
-              <button
-                onClick={() => { initAudio(); setScreen('select'); }}
-                className="ui-cta"
-              >
-                点兵出征
-              </button>
-
-              {/* 继续上一局：读取本地存档，从该回合开头重放 */}
-              {savedGame && (() => {
-                const myHeroName = savedGame.players.find(p => p.isHuman)?.hero.name ?? '';
-                const d = new Date(savedGame.ts);
-                const pad = (n: number) => String(n).padStart(2, '0');
-                const savedAt = `${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
-                return (
-                  <button
-                    onClick={resumeGame}
-                    className="group flex items-center gap-3 px-6 py-2 rounded-lg border border-[#c8a45c]/40 bg-[#1b1510]/80 transition-colors hover:border-[#e8cf94] hover:bg-[#241c14]/90"
-                  >
-                    <span className="font-ancient text-lg tracking-[0.18em] text-[#e8cf94]">继续上一局</span>
-                    <span className="text-[11px] tracking-wide text-[#9a8b74]">
-                      {myHeroName} · {savedGame.playerCount}人局 · 存于 {savedAt}
-                    </span>
-                  </button>
-                );
-              })()}
-
-              <div className="flex w-full max-w-[430px] flex-col sm:flex-row items-stretch justify-center gap-2.5">
-                <button
-                  onClick={startTutorial}
-                  aria-label="新手教学：9 步分步引导，可跳过，随时可重看"
-                  className={`group flex flex-1 items-center justify-center gap-3 min-h-[52px] px-4 rounded-lg border transition-colors ${theme === 'dark'
-                    ? 'border-[#c8a45c]/50 bg-[#1b1510]/85 hover:border-[#e8cf94] hover:bg-[#241c14]/95'
-                    : 'border-[#8b6914]/45 bg-[#fbf6ea]/90 hover:border-[#8b6914] hover:bg-[#fff9ec]'
-                    }`}
-                >
-                  <IconDice />
-                  <span className="flex flex-col items-start leading-tight text-left">
-                    <span className={`font-ancient text-base tracking-[0.18em] ${theme === 'dark' ? 'text-[#e8cf94]' : 'text-[#6b4a1a]'}`}>新手教学</span>
-                    <span className={`text-[10px] tracking-wide ${theme === 'dark' ? 'text-[#9a8b74]' : 'text-[#8a7a60]'}`}>9 步 · 可跳过 · 随时重看</span>
-                  </span>
-                </button>
-
-                <button
-                  onClick={() => setShowRules(true)}
-                  aria-label="玩法说明"
-                  className={`flex items-center justify-center gap-2 min-h-[52px] px-4 rounded-lg border transition-colors ${theme === 'dark'
-                    ? 'border-[#c8a45c]/30 hover:border-[#e8cf94]/70'
-                    : 'border-[#8b6914]/30 hover:border-[#8b6914]/70'
-                    }`}
-                >
-                  <IconBook />
-                  <span className={`font-ancient text-base tracking-[0.18em] ${theme === 'dark' ? 'text-[#d9c49a]' : 'text-[#6b4a1a]'}`}>玩法说明</span>
-                </button>
-              </div>
-
-              {homeNotice && (
-                <div role="status" className="mt-1 px-4 py-2 rounded-lg border border-[#c8a45c]/45 bg-[#1b1510]/90 text-[12px] text-[#e8cf94]">
-                  {homeNotice}
-                </div>
-              )}
-            </div>
-          </div>
-
-          <div className="footer-line mt-6">
-            <span>对局 <b>{stats.games}</b></span>
-            <span className="sep">·</span>
-            <span>胜 <b className={stats.wins > 0 ? '!text-[#9fcfae]' : ''}>{stats.wins}</b></span>
-            <span className="sep">·</span>
-            <span>负 <b className={stats.losses > 0 ? '!text-[#e0a49c]' : ''}>{stats.losses}</b></span>
-            {stats.games > 0 && (
-              <>
-                <span className="sep">·</span>
-                <span>胜率 <b>{Math.round((stats.wins / stats.games) * 100)}%</b></span>
-              </>
-            )}
-          </div>
-        </div>
-
-        {/* 页脚版本信息：与战绩分离，避免相互叠压 */}
-        <div className="pointer-events-none absolute bottom-4 left-0 right-0 z-10 footer-line">
-          <span>三国杀 · {playerCount}人军争篇</span>
-          <span className="sep">◆</span>
-          <span>{APP_VERSION}</span>
-        </div>
-        
-        {showRules && <RulesDialog onClose={() => setShowRules(false)} onStartTutorial={startTutorial} />}
-      </div>
+      <StartScreen
+        theme={theme}
+        layoutDensity={layoutDensity}
+        sizeTier={sizeTier}
+        motionOn={motionOn}
+        fxLevel={fxLevel}
+        fxLabel={FX_LABEL[fxLevel]}
+        fxTag={FX_TAG[fxLevel]}
+        scaleStyle={scaleStyle}
+        playerCount={playerCount}
+        onPlayerCount={setPlayerCount}
+        aiDifficulty={aiDifficulty}
+        onAiDifficulty={setAiDifficulty}
+        savedGame={savedGame}
+        onResume={resumeGame}
+        onEnterSelect={() => { initAudio(); setScreen('select'); }}
+        onTutorial={startTutorial}
+        onShowRules={() => setShowRules(true)}
+        onCloseRules={() => setShowRules(false)}
+        showRules={showRules}
+        stats={stats}
+        homeNotice={homeNotice}
+        isMuted={isMuted}
+        onToggleMute={toggleMute}
+        onToggleMotion={toggleMotion}
+        onCycleFx={cycleFx}
+        onToggleTheme={toggleTheme}
+      />
     );
   }
 
   if (screen === 'select') {
     return (
-      <div className={`h-screen flex flex-col relative ${theme === 'light' ? 'parchment-bg' : ''}`}>
-        {/* 背景轮播 - 白天模式显示 */}
-        {theme === 'light' && (
-          <BackgroundCarousel 
-            images={BACKGROUND_IMAGES}
-            interval={CAROUSEL_CONFIG.interval}
-          />
-        )}
-        
-        {/* Background Effects - 根据主题切换 */}
-        {theme === 'dark' ? (
-          <>
-            {/* 底层：深色背景 */}
-            <div className="absolute inset-0 bg-gradient-to-b from-[#1a1410] via-[#2d2418] to-[#1a1410]"></div>
-            
-            {/* 羊皮纸纹理层 */}
-            <div 
-              className="absolute inset-0 opacity-40"
-              style={{
-                backgroundImage: `url("data:image/svg+xml,%3Csvg width='400' height='400' viewBox='0 0 400 400' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E")`,
-                mixBlendMode: 'overlay'
-              }}
-            ></div>
-            
-            {/* 古风纹理图案 */}
-            <div 
-              className="absolute inset-0 opacity-20"
-              style={{
-                backgroundImage: `url("data:image/svg+xml,%3Csvg width='100' height='100' viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M20,20 Q40,5 60,20 T100,20 M20,50 Q40,35 60,50 T100,50 M20,80 Q40,65 60,80 T100,80' stroke='%23d4af37' stroke-width='0.5' fill='none' opacity='0.3'/%3E%3C/svg%3E")`
-              }}
-            ></div>
-            
-            {/* 原版三国杀风格边框装饰 */}
-            <div className="absolute inset-4 border-2 border-[#8b7355]/30 rounded-lg pointer-events-none"></div>
-            <div className="absolute inset-6 border border-[#8b7355]/20 rounded-lg pointer-events-none"></div>
-            
-            {/* 四角装饰 */}
-            <div className="absolute top-4 left-4 w-16 h-16 border-l-2 border-t-2 border-[#d4af37]/50 rounded-tl-lg pointer-events-none"></div>
-            <div className="absolute top-4 right-4 w-16 h-16 border-r-2 border-t-2 border-[#d4af37]/50 rounded-tr-lg pointer-events-none"></div>
-            <div className="absolute bottom-4 left-4 w-16 h-16 border-l-2 border-b-2 border-[#d4af37]/50 rounded-bl-lg pointer-events-none"></div>
-            <div className="absolute bottom-4 right-4 w-16 h-16 border-r-2 border-b-2 border-[#d4af37]/50 rounded-br-lg pointer-events-none"></div>
-          </>
-        ) : (
-          <>
-            {/* 白天模式装饰边框 */}
-            <div className="absolute inset-4 border-2 border-[#c4a77d]/30 rounded-lg pointer-events-none z-10"></div>
-            <div className="absolute inset-6 border border-[#c4a77d]/20 rounded-lg pointer-events-none z-10"></div>
-            
-            {/* 四角装饰 */}
-            <div className="absolute top-4 left-4 w-16 h-16 border-l-2 border-t-2 border-[#c4a77d]/40 rounded-tl-lg pointer-events-none z-10"></div>
-            <div className="absolute top-4 right-4 w-16 h-16 border-r-2 border-t-2 border-[#c4a77d]/40 rounded-tr-lg pointer-events-none z-10"></div>
-            <div className="absolute bottom-4 left-4 w-16 h-16 border-l-2 border-b-2 border-[#c4a77d]/40 rounded-bl-lg pointer-events-none z-10"></div>
-            <div className="absolute bottom-4 right-4 w-16 h-16 border-r-2 border-b-2 border-[#c4a77d]/40 rounded-br-lg pointer-events-none z-10"></div>
-          </>
-        )}
-
-        {/* Header：返回 / 标题 / 图标控制 */}
-        <div className="flex-none relative z-20 px-4 pt-3">
-          <div className="relative flex items-center justify-center py-2">
-            <button
-              onClick={() => { setSelectedHero(null); setScreen('start'); }}
-              className="ui-text-btn absolute left-0"
-              aria-label="返回首页"
-            >
-              <IconArrowLeft />
-              <span>返回</span>
-            </button>
-
-            <div className="text-center px-2 min-w-0 pr-[6.5rem] sm:pr-2 md:max-w-none">
-              <h2 className={`font-ancient text-lg sm:text-3xl md:text-5xl whitespace-nowrap ${theme === 'dark' ? 'text-[#e8cf94]' : 'text-[#6b4a1a]'}`}>选择您的武将</h2>
-              <div className={`mt-1.5 text-[10px] tracking-[0.3em] md:tracking-[0.42em] pl-[0.3em] whitespace-nowrap hidden sm:block ${theme === 'dark' ? 'text-[#8f7c5e]' : 'text-[#9b8a6c]'}`}>
-                CHOOSE YOUR GENERAL · {HEROES.length} 名
-              </div>
-            </div>
-
-            <div className="absolute right-0 top-1/2 -translate-y-1/2 flex items-center gap-2">
-              <button onClick={toggleMute} className="ui-icon-btn" title={isMuted ? '开启音乐' : '静音'} aria-label={isMuted ? '开启音乐' : '静音'}>
-                <IconSpeaker muted={isMuted} />
-              </button>
-              <button onClick={toggleMotion} className="ui-icon-btn" title={motionOn ? '关闭动效' : '开启动效'} aria-label={motionOn ? '关闭动效' : '开启动效'}>
-                <IconMotion off={!motionOn} />
-              </button>
-              <button onClick={cycleFx} className="ui-icon-btn flex-col !gap-0.5" title={`${FX_LABEL[fxLevel]}（点击切换）`} aria-label={`特效强度：${FX_LABEL[fxLevel]}，点击切换`}>
-                <span className="text-[12px] leading-none font-bold">特效</span>
-                <span className="text-[10px] leading-none opacity-75">{FX_TAG[fxLevel]}</span>
-              </button>
-              <button onClick={toggleTheme} className="ui-icon-btn" title={theme === 'dark' ? '切换到白天模式' : '切换到黑夜模式'} aria-label={theme === 'dark' ? '切换到白天模式' : '切换到黑夜模式'}>
-                <ThemeIcon theme={theme} />
-              </button>
-            </div>
-          </div>
-        </div>
-
-        {/* 筛选栏：独立一行，不覆盖/挤占卡片区域；移动端横向滚动，触控高度 ≥44px */}
-        <div className="flex-none relative z-20 px-4 pt-1.5">
-          <div className="max-w-[1440px] mx-auto flex flex-col sm:flex-row sm:items-center gap-2">
-            <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-thin pb-0.5" role="tablist" aria-label="按势力筛选武将">
-              {(['全部', '魏', '蜀', '吴', '群'] as HeroKingdomFilter[]).map(k => (
-                <button
-                  key={k}
-                  role="tab"
-                  aria-selected={heroKingdom === k}
-                  onClick={() => { setHeroKingdom(k); setHeroPage(0); }}
-                  className={`shrink-0 min-h-[44px] min-w-[44px] px-3 rounded-md text-sm font-bold border transition-colors ${
-                    heroKingdom === k
-                      ? (theme === 'dark' ? 'bg-[#c8a45c] text-[#1a1410] border-[#f0d894]' : 'bg-[#6b4a1a] text-[#f7e9c8] border-[#a8842c]')
-                      : (theme === 'dark' ? 'bg-[#1a1410]/80 text-[#c8bda8] border-[#8b7355]/50 hover:border-[#c8a45c]' : 'bg-[#f3ead8]/80 text-[#6b4a1a] border-[#c4a77d]/60 hover:border-[#a8842c]')
-                  }`}
-                >
-                  {k}<span className="ml-1 text-[10px] opacity-75">{kingdomCounts[k] ?? 0}</span>
-                </button>
-              ))}
-            </div>
-
-            <div className={`relative w-full sm:w-64 sm:ml-auto`}>
-              <input
-                value={heroQuery}
-                onChange={(e) => { setHeroQuery(e.target.value); setHeroPage(0); }}
-                placeholder="搜索姓名 / 技能"
-                aria-label="搜索武将姓名或技能"
-                className={`w-full min-h-[44px] pl-3 pr-11 rounded-md text-sm border outline-none ${
-                  theme === 'dark'
-                    ? 'bg-[#1a1410]/85 text-[#e8cf94] border-[#8b7355]/60 placeholder:text-[#7d6f5a] focus:border-[#c8a45c]'
-                    : 'bg-[#f7f0e2]/90 text-[#4a3a22] border-[#c4a77d]/70 placeholder:text-[#9b8a6c] focus:border-[#a8842c]'
-                }`}
-              />
-              {heroQuery && (
-                <button
-                  onClick={() => { setHeroQuery(''); setHeroPage(0); }}
-                  aria-label="清空搜索"
-                  className={`absolute right-0.5 top-1/2 -translate-y-1/2 min-w-[44px] min-h-[44px] flex items-center justify-center rounded text-lg ${theme === 'dark' ? 'text-[#c8bda8]' : 'text-[#6b4a1a]'}`}
-                >
-                  ✕
-                </button>
-              )}
-            </div>
-
-            <div className={`flex-none text-[11px] text-center sm:text-right ${theme === 'dark' ? 'text-[#9a8b74]' : 'text-[#8a7a60]'}`}>
-              {filteredHeroes.length} / {HEROES.length} 名{heroPageCount > 1 ? ` · 第 ${heroPageClamped + 1}/${heroPageCount} 页` : ''}
-            </div>
-          </div>
-        </div>
-
-        {/* 武将网格：桌面端一屏 3 行，整张牌面裁切，技能名压在牌角 */}
-        <div className="flex-1 overflow-y-auto px-4 pb-8 relative z-10 scrollbar-thin">
-          {filteredHeroes.length === 0 ? (
-            <div className={`py-16 text-center text-sm ${theme === 'dark' ? 'text-[#9a8b74]' : 'text-[#8a7a60]'}`}>
-              没有匹配的武将，试试清空搜索或切换势力
-            </div>
-          ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 min-[1200px]:grid-cols-8 gap-3 w-full max-w-[1440px] mx-auto pt-2">
-            {pagedHeroes.map(hero => (
-              <button
-                key={hero.id}
-                onClick={() => { setSelectedHero(hero); setDetailPlayerId(null); setDetailHero(hero); }}
-                className={`hero-pick hero-card group text-left kingdom-frame ${KINGDOM_CLASS[hero.kingdom] ?? ''}`}
-                aria-pressed={selectedHero?.id === hero.id}
-                aria-label={`选择 ${hero.name}`}
-                title={`${hero.name}（${hero.kingdom} · ${hero.maxHp} 体力）【${hero.skillName}】${hero.skillDesc}${hero.lordSkillName ? ` 主公技【${hero.lordSkillName}】${hero.lordSkillDesc}` : ''}`}
-              >
-                <img
-                  src={hero.avatarUrl}
-                  alt={hero.name}
-                  loading="lazy"
-                  decoding="async"
-                  className="absolute inset-0 w-full h-full object-cover object-top transition-transform duration-500 group-hover:scale-[1.04]"
-                />
-                <div className="hero-pick-shade" />
-
-                {/* 势力印章（卡框同时按势力配色） */}
-                <span className="hero-kingdom absolute top-2 left-2">
-                  {hero.kingdom}
-                </span>
-
-                {/* 体力：只用勾玉表示（满/空/1血低血量），完整数值见悬停提示 */}
-                <span className="hero-hp absolute top-2 right-2" title={`体力上限 ${hero.maxHp}`}>
-                  <span className="hero-hp-pips">
-                    {Array.from({ length: hero.maxHp }).map((_, i) => (
-                      <i key={i} className="hero-hp-pip" />
-                    ))}
-                  </span>
-                </span>
-
-                {/* 选中角标 */}
-                {selectedHero?.id === hero.id && (
-                  <span className="absolute right-2 top-10 w-6 h-6 rounded-full bg-[#d4af37] text-[#241a0e] flex items-center justify-center text-xs font-bold shadow-lg">
-                    ✓
-                  </span>
-                )}
-
-                <div className="hero-pick-foot absolute inset-x-0 bottom-0 px-2.5 pb-2.5 pt-8">
-                  <div className="hero-pick-title truncate">{hero.description}</div>
-                  <div className="font-ancient hero-pick-name leading-tight text-[#f4e4bf] drop-shadow-[0_1px_3px_rgba(0,0,0,0.85)]">
-                    {hero.name}
-                  </div>
-                  <div className="hero-pick-skill">
-                    <span className="truncate">【{hero.skillName}】</span>
-                    {hero.pending && <span className="hero-lord-chip">实装中</span>}
-                    {hero.lordSkillName && <span className="hero-lord-chip">主公技</span>}
-                  </div>
-                  <div className="hero-pick-desc line-clamp-3">{hero.skillDesc}</div>
-                </div>
-              </button>
-            ))}
-          </div>
-          )}
-
-          {/* 分页：默认每页 24，切页记住位置；按钮触控高度 ≥44px */}
-          {heroPageCount > 1 && (
-            <div className="flex items-center justify-center gap-2 pb-4 pt-1">
-              <button
-                onClick={() => setHeroPage(Math.max(0, heroPageClamped - 1))}
-                disabled={heroPageClamped === 0}
-                className={`min-h-[44px] min-w-[64px] px-3 rounded-md text-sm border disabled:opacity-40 disabled:cursor-not-allowed ${theme === 'dark' ? 'bg-[#1a1410]/80 text-[#c8bda8] border-[#8b7355]/50' : 'bg-[#f3ead8]/80 text-[#6b4a1a] border-[#c4a77d]/60'}`}
-                aria-label="上一页"
-              >
-                上一页
-              </button>
-              {Array.from({ length: heroPageCount }).map((_, i) => (
-                <button
-                  key={i}
-                  onClick={() => setHeroPage(i)}
-                  aria-current={heroPageClamped === i ? 'page' : undefined}
-                  className={`min-h-[44px] min-w-[44px] rounded-md text-sm font-bold border ${
-                    heroPageClamped === i
-                      ? (theme === 'dark' ? 'bg-[#c8a45c] text-[#1a1410] border-[#f0d894]' : 'bg-[#6b4a1a] text-[#f7e9c8] border-[#a8842c]')
-                      : (theme === 'dark' ? 'bg-[#1a1410]/80 text-[#c8bda8] border-[#8b7355]/50' : 'bg-[#f3ead8]/80 text-[#6b4a1a] border-[#c4a77d]/60')
-                  }`}
-                >
-                  {i + 1}
-                </button>
-              ))}
-              <button
-                onClick={() => setHeroPage(Math.min(heroPageCount - 1, heroPageClamped + 1))}
-                disabled={heroPageClamped >= heroPageCount - 1}
-                className={`min-h-[44px] min-w-[64px] px-3 rounded-md text-sm border disabled:opacity-40 disabled:cursor-not-allowed ${theme === 'dark' ? 'bg-[#1a1410]/80 text-[#c8bda8] border-[#8b7355]/50' : 'bg-[#f3ead8]/80 text-[#6b4a1a] border-[#c4a77d]/60'}`}
-                aria-label="下一页"
-              >
-                下一页
-              </button>
-            </div>
-          )}
-        </div>
-
-        {/* 底部详情条：始终存在，未选将时提示并可直接天命随机
-            手机端按钮换行到下一行，避免把武将名/技能挤成竖排 */}
-        <div className="pick-detail flex-none z-30 px-4 py-2.5">
-          <div className="max-w-[1440px] mx-auto flex flex-col md:flex-row md:items-center gap-2 md:gap-4">
-            <div className="flex items-center gap-3 min-w-0 w-full md:flex-1">
-              {selectedHero ? (
-                <>
-                  {/* 竖幅立绘缩略：点击查看原图大图 */}
-                  <button
-                    onClick={() => setPortraitHero(selectedHero)}
-                    className="flex-none rounded-md overflow-hidden border border-[#c8a45c]/60 hover:border-[#f0d894] transition-colors"
-                    aria-label={`查看 ${selectedHero.name} 立绘大图`}
-                    title="查看立绘大图"
-                  >
-                    <img
-                      src={selectedHero.avatarUrl}
-                      alt={selectedHero.name}
-                      loading="eager"
-                      decoding="async"
-                      className="block w-12 h-[72px] object-cover object-top"
-                    />
-                  </button>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-baseline gap-2">
-                      <h3 className={`font-ancient text-2xl ${theme === 'dark' ? 'text-[#e8cf94]' : 'text-[#6b4a1a]'}`}>{selectedHero.name}</h3>
-                      <span className={`text-[11px] tracking-wider ${theme === 'dark' ? 'text-[#9a8b74]' : 'text-[#8a7a60]'}`}>
-                        {selectedHero.kingdom} · {selectedHero.maxHp} 体力 · 【{selectedHero.skillName}】
-                      </span>
-                      <button
-                        onClick={() => setPortraitHero(selectedHero)}
-                        className={`ml-auto flex-none text-[11px] px-2 py-0.5 rounded border ${theme === 'dark' ? 'border-[#c8a45c]/50 text-[#e8cf94] hover:bg-[#c8a45c]/15' : 'border-[#a8842c]/50 text-[#6b4a1a] hover:bg-[#c8a45c]/15'}`}
-                      >
-                        查看立绘
-                      </button>
-                      <button
-                        onClick={() => { setDetailPlayerId(null); setDetailHero(selectedHero); }}
-                        className={`flex-none text-[11px] px-2 py-0.5 rounded border ${theme === 'dark' ? 'border-[#c8a45c]/50 text-[#e8cf94] hover:bg-[#c8a45c]/15' : 'border-[#a8842c]/50 text-[#6b4a1a] hover:bg-[#c8a45c]/15'}`}
-                        aria-label={`查看 ${selectedHero.name} 武将详情`}
-                      >
-                        武将详情
-                      </button>
-                    </div>
-                    <p className={`mt-0.5 text-xs leading-relaxed truncate ${theme === 'dark' ? 'text-[#c8bda8]' : 'text-[#5a4c38]'}`}>
-                      {selectedHero.skillDesc}
-                      {selectedHero.lordSkillName && <span className={`ml-2 ${theme === 'dark' ? 'text-[#d9b46a]' : 'text-[#8b6914]'}`}>主公技【{selectedHero.lordSkillName}】{selectedHero.lordSkillDesc}</span>}
-                    </p>
-                  </div>
-                </>
-              ) : (
-                <div className={`flex-1 text-center text-xs md:text-sm ${theme === 'dark' ? 'text-[#9a8b74]' : 'text-[#8a7a60]'}`}>
-                  滚动浏览 {HEROES.length} 名武将 · 点选查看技能，确认后出战
-                </div>
-              )}
-            </div>
-
-            <div className="flex items-center gap-2 flex-none w-full md:w-auto">
-              <button
-                onClick={() => {
-                  const pool = HEROES.filter(h => h.id !== selectedHero?.id && !h.pending);
-                  const pick = pool[Math.floor(Math.random() * pool.length)];
-                  startGame(pick);
-                }}
-                className="btn-ink flex-1 md:flex-none flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg font-ancient text-base tracking-wider"
-                title="从已实装武将中随机挑选一名立即出战"
-              >
-                <IconDice />
-                天命随机
-              </button>
-              <button
-                onClick={() => selectedHero && startGame(selectedHero)}
-                disabled={!selectedHero || selectedHero.pending}
-                className="btn-gold flex-1 md:flex-none px-7 py-2.5 rounded-lg font-ancient text-lg tracking-[0.18em]"
-              >
-                {selectedHero?.pending ? '技能实装中' : '确认出战'}
-              </button>
-            </div>
-          </div>
-        </div>
-
+      <>
+        <HeroSelectScreen
+          theme={theme}
+          motionOn={motionOn}
+          fxLabel={FX_LABEL[fxLevel]}
+          fxTag={FX_TAG[fxLevel]}
+          isMuted={isMuted}
+          onToggleMute={toggleMute}
+          onToggleMotion={toggleMotion}
+          onCycleFx={cycleFx}
+          onToggleTheme={toggleTheme}
+          onBack={() => { setSelectedHero(null); setScreen('start'); }}
+          heroTotal={HEROES.length}
+          heroKingdom={heroKingdom}
+          kingdomCounts={kingdomCounts}
+          onKingdomChange={(k) => { setHeroKingdom(k); setHeroPage(0); }}
+          heroQuery={heroQuery}
+          onQueryChange={(v) => { setHeroQuery(v); setHeroPage(0); }}
+          pageClamped={heroPageClamped}
+          pageCount={heroPageCount}
+          onPageChange={setHeroPage}
+          filteredCount={filteredHeroes.length}
+          pagedHeroes={pagedHeroes}
+          allHeroes={HEROES}
+          selectedHero={selectedHero}
+          onPickHero={(h) => { setSelectedHero(h); setDetailPlayerId(null); setDetailHero(h); }}
+          onOpenDetail={(h) => { setDetailPlayerId(null); setDetailHero(h); }}
+          onOpenPortrait={setPortraitHero}
+          onStart={startGame}
+        />
         <HeroDetailModal
           hero={detailHero}
           onClose={() => setDetailHero(null)}
@@ -10524,7 +10009,7 @@ const App: React.FC = () => {
           onZoom={(h) => setPortraitHero(h)}
         />
         <PortraitLightbox hero={portraitHero} onClose={() => setPortraitHero(null)} />
-      </div>
+      </>
     );
   }
 
@@ -10774,216 +10259,40 @@ const App: React.FC = () => {
 
       {/* 弃牌堆查看器 */}
       {showDiscardViewer && (
-         <div className="absolute inset-0 z-[90] modal-mask flex items-center justify-center p-4" onClick={() => setShowDiscardViewer(false)}>
-            <div
-              className="modal-shell max-w-3xl w-[92%] max-h-[80vh] flex flex-col overflow-hidden"
-              onClick={(e) => e.stopPropagation()}
-            >
-               <div className="flex items-center justify-between px-5 py-3 border-b border-[#8b7355]/35">
-                 <h3 className="modal-title text-xl font-ancient">弃牌堆 <span className="text-sm opacity-60 tracking-normal normal-case">{discardPile.length} 张</span></h3>
-                 <button
-                   onClick={() => setShowDiscardViewer(false)}
-                   className="btn-ink w-8 h-8 rounded-full flex items-center justify-center text-sm"
-                   aria-label="关闭弃牌堆"
-                 >✕</button>
-               </div>
-               <div className="flex-1 overflow-y-auto p-5 scrollbar-thin">
-                 {discardPile.length === 0 ? (
-                   <p className="modal-text-dim text-center py-10">弃牌堆空空如也</p>
-                 ) : (
-                   <div className="flex flex-wrap gap-2 justify-center">
-                     {[...discardPile].reverse().map(card => (
-                       <div key={card.id} title={card.description}>
-                         <CardComponent card={card} small disabled />
-                       </div>
-                     ))}
-                   </div>
-                 )}
-               </div>
-            </div>
-         </div>
+        <DiscardPileViewer cards={discardPile} onClose={() => setShowDiscardViewer(false)} />
       )}
 
       {/* 通用技能选择弹窗（人类角色可选；AI / 托管不出现） */}
       {skillChoice && !isAiTakeover && (
-        <div className="absolute inset-0 z-50 modal-mask flex items-center justify-center p-4">
-          <div className="modal-frame w-full max-w-2xl p-5" role="dialog" aria-label={`${skillChoice.skill}选择`}>
-            <div className="flex items-center justify-between mb-1">
-              <h3 className="modal-title text-2xl font-ancient">【{skillChoice.skill}】</h3>
-              <span className="modal-text-dim text-sm tabular-nums">{skillChoiceLeft ?? SKILL_CHOICE_SECONDS} 秒</span>
-            </div>
-            <p className="modal-text text-base mb-1">{skillChoice.title}</p>
-            {skillChoice.hint && <p className="modal-text-dim text-sm mb-2">{skillChoice.hint}</p>}
-            <div className="modal-divider mb-3" />
-
-            {skillChoice.mode === 'choose' && (
-              <div className="flex flex-col gap-2">
-                {skillChoice.choices?.map(ch => (
-                  <button
-                    key={ch.id}
-                    onClick={() => resolveSkillChoice({ kind: 'choose', id: ch.id })}
-                    className="btn-ink min-h-[44px] px-4 py-2 rounded-lg text-left"
-                  >
-                    <span className="font-bold">{ch.label}</span>
-                    {ch.desc && <span className="block text-xs opacity-70">{ch.desc}</span>}
-                  </button>
-                ))}
-              </div>
-            )}
-
-            {skillChoice.mode === 'multi' && (
-              <>
-                <div className="grid grid-cols-3 gap-2">
-                  {skillChoice.choices?.map(ch => {
-                    const on = skillChoiceSel.includes(ch.id);
-                    return (
-                      <button
-                        key={ch.id}
-                        onClick={() => toggleSkillChoiceItem(ch.id, false)}
-                        className={`btn-ink min-h-[44px] px-3 py-2 rounded-lg text-sm ${on ? 'ring-2 ring-[#e8cf94]' : ''}`}
-                      >
-                        <span className="font-bold">{ch.label}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-                <p className="modal-text-dim text-xs text-center mt-2">
-                  已选 {skillChoiceSel.length} 项，需 {skillChoice.min ?? 1}–{skillChoice.max ?? 3} 项
-                </p>
-              </>
-            )}
-
-            {skillChoice.mode === 'card' && (
-              <>
-                <div className="flex flex-wrap gap-2 justify-center max-h-[46vh] overflow-y-auto p-1 scrollbar-thin">
-                  {skillChoice.cards?.map(c => {
-                    const on = skillChoiceSel.includes(c.id);
-                    return (
-                      <div
-                        key={c.id}
-                        className="relative cursor-pointer min-w-[44px] min-h-[44px] flex items-center justify-center"
-                        onClick={() => toggleSkillChoiceItem(c.id, false)}
-                        role="button"
-                        aria-label={`选择【${c.name}】`}
-                      >
-                        <CardComponent card={c} small />
-                        {on && <span className="absolute inset-0 rounded-lg ring-2 ring-[#e8cf94] bg-[#e8cf94]/10" />}
-                      </div>
-                    );
-                  })}
-                </div>
-                <p className="modal-text-dim text-xs text-center mt-2">
-                  已选 {skillChoiceSel.length} 张，需 {skillChoice.min ?? 1}–{skillChoice.max ?? (skillChoice.cards?.length ?? 0)} 张
-                </p>
-              </>
-            )}
-
-            {skillChoice.mode === 'target' && (
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                {skillChoice.targets?.map(t => {
-                  const on = skillChoiceSel.includes(String(t.id));
-                  return (
-                    <button
-                      key={t.id}
-                      onClick={() => toggleSkillChoiceItem(String(t.id), (skillChoice.max ?? 1) <= 1)}
-                      className={`btn-ink min-h-[44px] px-3 py-2 rounded-lg text-sm ${on ? 'ring-2 ring-[#e8cf94]' : ''}`}
-                    >
-                      <span className="font-bold">{t.name}</span>
-                      {t.sub && <span className="block text-xs opacity-70">{t.sub}</span>}
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-
-            <div className="flex justify-end gap-2 mt-4">
-              <button
-                onClick={() => resolveSkillChoice({ kind: 'cancel' })}
-                className="btn-ink min-h-[44px] px-4 rounded-lg text-sm"
-              >
-                {skillChoice.cancelLabel || '取消'}
-              </button>
-              {(skillChoice.mode === 'card' || skillChoice.mode === 'target' || skillChoice.mode === 'multi') && (
-                <button
-                  onClick={submitSkillChoice}
-                  disabled={!skillChoiceValid}
-                  className="btn-ink min-h-[44px] px-5 rounded-lg text-sm font-bold disabled:opacity-40"
-                >
-                  {skillChoice.mode === 'card' ? '确认选择' : (skillChoice.mode === 'multi' ? '确认猜测' : '确认目标')}
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
+        <SkillChoiceModal
+          request={skillChoice}
+          selected={skillChoiceSel}
+          left={skillChoiceLeft}
+          seconds={SKILL_CHOICE_SECONDS}
+          valid={skillChoiceValid}
+          onToggle={toggleSkillChoiceItem}
+          onChoose={(id) => resolveSkillChoice({ kind: 'choose', id })}
+          onSubmit={submitSkillChoice}
+          onCancel={() => resolveSkillChoice({ kind: 'cancel' })}
+        />
       )}
 
       {/* Manual Reaction Modal */}
       {pendingReaction && !isAiTakeover && (
-         <div className="absolute inset-0 z-40 modal-mask flex items-center justify-center p-4">
-            <div className="modal-frame modal-frame-danger w-full max-w-xl p-6 text-center">
-               <h3 className="modal-title text-3xl font-ancient mb-1">杀机已至</h3>
-               <div className="modal-divider mb-3" />
-               <div className="flex items-center justify-center gap-2 mb-3">
-                 <span className={`text-xl font-bold tabular-nums ${(reactionLeft ?? 0) <= 5 ? 'text-[#e0705f] animate-pulse' : 'text-[#e8cf94]'}`}>
-                   {reactionLeft ?? DECISION_SECONDS}
-                 </span>
-                 <span className="modal-text-dim text-xs">秒内请选择，超时自动放弃</span>
-               </div>
-               <p className="modal-text mb-2 text-base leading-relaxed">
-                 <span className="font-bold text-[#f0dcae]">{getPlayer(pendingReaction.sourceId)?.hero.name}</span> 对你使用了 
-                 <span className="font-bold text-[#e8a99f] mx-1">【{pendingReaction.originalCard.name}】</span>
-               </p>
-               <p className="modal-text-dim text-sm mb-5">
-                 需要打出【{pendingReaction.cardName}】来抵消
-               </p>
-               <div className="mb-6 flex justify-center gap-2 flex-wrap">
-                 {/* Filter Hand for needed card, skill cards, and Wuxie */}
-                 {(() => {
-                   const neededCard = pendingReaction.cardName;
-                   const canUseSkill = me.hero.name === '赵云'
-                     || (me.hero.name === '赵襄' && (me.meiyanMarks ?? 0) > 0);
-                   const skillCardName = neededCard === CardName.SHAN ? CardName.SHA : CardName.SHAN;
-                   const responder = players.find(p => p.id === pendingReaction.targetId) || me;
-                   const hasWuxie = responder.hand.some(c => c.name === CardName.WUXIE);
-                   // 「武圣」：红色牌可当【杀】打出
-                   const canWusheng = canUseWusheng(me) && neededCard === CardName.SHA;
-                   const isWushengCard = (c: Card) => canWusheng && (c.suit === Suit.HEART || c.suit === Suit.DIAMOND);
-                   // 甄姬「倾国」：黑色牌可当【闪】打出
-                   const canQingguo = me.hero.name === '甄姬' && neededCard === CardName.SHAN;
-                   const isQingguoCard = (c: Card) => canQingguo && (c.suit === Suit.SPADE || c.suit === Suit.CLUB);
-
-                   // 过滤可用卡牌：需要的卡牌、技能卡牌、武圣红牌、倾国黑牌、无懈可击（仅无懈响应阶段）
-                   const usableCards = responder.hand.filter(c => {
-                     return c.name === neededCard || 
-                            (canUseSkill && c.name === skillCardName) ||
-                            isWushengCard(c) ||
-                            isQingguoCard(c) ||
-                            (neededCard === CardName.WUXIE && c.name === CardName.WUXIE);
-                   });
-                    
-                   return usableCards.length > 0 ? (
-                     usableCards.map(c => (
-                       <div key={c.id} className="transform hover:-translate-y-2 transition-transform cursor-pointer" onClick={() => handleCardClick(c)}>
-                          <CardComponent card={c} small />
-                       </div>
-                     ))
-                   ) : (
-                     <p className="modal-text-dim italic">手中无【{pendingReaction.cardName}】可挡...</p>
-                   );
-                 })()}
-               </div>
-               <div className="flex justify-center gap-4">
-                  <button 
-                    onClick={handleManualSkipReaction}
-                    className="btn-ink px-6 py-2 rounded-lg font-ancient text-lg"
-                  >
-                    放弃/掉血
-                  </button>
-               </div>
-            </div>
-         </div>
+        <ReactionModal
+          me={me}
+          responder={players.find(p => p.id === pendingReaction.targetId) || me}
+          sourceName={getPlayer(pendingReaction.sourceId)?.hero.name ?? ''}
+          neededCard={pendingReaction.cardName}
+          originalCardName={pendingReaction.originalCard.name}
+          left={reactionLeft}
+          seconds={DECISION_SECONDS}
+          canWusheng={canUseWusheng(me)}
+          onPick={handleCardClick}
+          onSkip={handleManualSkipReaction}
+        />
       )}
-      
+
       {/* 武将详情：点击任意头像打开（人物介绍 + 技能说明） */}
       {inspectPlayerId !== null && (() => {
         const p = getPlayer(inspectPlayerId);
@@ -11012,558 +10321,42 @@ const App: React.FC = () => {
 
       {/* Skill Info Modal - 技能说明弹窗 */}
       {showSkillModal && (
-         <div className="absolute inset-0 z-[100] modal-mask flex items-center justify-center p-4">
-            <div className="modal-shell max-w-3xl w-[95%] max-h-[85vh] overflow-y-auto p-6 scrollbar-thin">
-               {/* 标题 */}
-               <div className="text-center mb-6">
-                 <h3 className="modal-title text-3xl font-ancient mb-2">技能说明</h3>
-                 <div className="w-32 modal-divider mx-auto"></div>
-               </div>
-
-               {/* 武将信息 */}
-               <div className="flex items-center gap-4 mb-6 p-4 bg-black/30 rounded-lg border border-[#8b7355]/30">
-                 <img src={me.hero.avatarUrl} alt={me.hero.name} loading="eager" decoding="async" className="w-20 h-[120px] rounded-lg border-2 border-[#d4af37]/50 object-cover" />
-                 <div>
-                   <h4 className="text-2xl font-bold text-[#d4af37] font-ancient">{me.hero.name}</h4>
-                   {/* 对局内技能说明浮层不显示称号（epithet） */}
-                   <div className="flex items-center gap-2 mt-1">
-                     <span className={`px-2 py-0.5 rounded text-xs font-bold ${
-                       me.hero.kingdom === '魏' ? 'bg-blue-900/60 text-blue-200' :
-                       me.hero.kingdom === '蜀' ? 'bg-red-900/60 text-red-200' :
-                       me.hero.kingdom === '吴' ? 'bg-green-900/60 text-green-200' :
-                       'bg-stone-700/60 text-stone-200'
-                     }`}>
-                       {me.hero.kingdom}
-                     </span>
-                     <span className="text-red-400 text-sm">♥ {me.maxHp}</span>
-                   </div>
-                 </div>
-               </div>
-
-               {/* 左右分栏布局：技能介绍 + 手牌说明 */}
-               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                 {/* 左侧：技能介绍 */}
-                 <div className="space-y-4">
-                   {/* 技能名称 */}
-                   <div className="bg-gradient-to-r from-[#8b4513]/30 to-transparent p-4 rounded-lg border-l-4 border-[#d4af37]">
-                     <h5 className="text-xl font-bold text-[#d4af37] mb-2 font-ancient">
-                       【{me.hero.skillName}】
-                     </h5>
-                     <p className="text-stone-300 leading-relaxed">{me.hero.skillDesc}</p>
-                     {me.hero.lordSkillName && (
-                       <div className="mt-3 pt-3 border-t border-[#8b7355]/30">
-                         <div className="text-base font-bold text-[#e8cf94] mb-1 font-ancient">主公技【{me.hero.lordSkillName}】</div>
-                         <p className="text-stone-300 leading-relaxed">{me.hero.lordSkillDesc}</p>
-                       </div>
-                     )}
-                   </div>
-
-                   {/* 使用示例 */}
-                   <div className="bg-black/20 p-4 rounded-lg border border-[#8b7355]/20">
-                     <h6 className="text-lg font-bold text-amber-400 mb-3 flex items-center gap-2">
-                       <span>💡</span> 使用示例
-                     </h6>
-                     <div className="text-stone-300 text-sm space-y-2">
-                       {me.hero.name === '曹操' && (
-                         <>
-                           <p>• 当你受到【杀】的伤害后，会自动获得这张【杀】</p>
-                           <p>• 当你受到【决斗】的伤害后，会自动获得这张【决斗】</p>
-                           <p>• <span className="text-yellow-400">示例</span>：曹操被赵云用【杀】攻击并受伤，曹操获得这张【杀】加入手牌</p>
-                         </>
-                       )}
-                       {me.hero.name === '刘备' && (
-                         <>
-                           <p>• 点击【仁德】按钮进入给牌模式</p>
-                           <p>• 选择任意数量的手牌（至少1张）</p>
-                           <p>• 选择目标角色，点击确认给出</p>
-                           <p>• 给出2张或更多牌时，回复1点体力</p>
-                           <p>• <span className="text-yellow-400">示例</span>：刘备有3张牌，选择给出2张给关羽，刘备回复1点体力</p>
-                         </>
-                       )}
-                       {me.hero.name === '孙权' && (
-                         <>
-                           <p>• 点击【制衡】按钮进入制衡模式</p>
-                           <p>• 选择任意数量的手牌弃置</p>
-                           <p>• 系统会自动摸取等量的牌</p>
-                           <p>• 每回合限使用一次</p>
-                           <p>• <span className="text-yellow-400">示例</span>：孙权弃置2张【闪】，摸取2张新牌，可能获得【杀】或【桃】</p>
-                         </>
-                       )}
-                       {me.hero.name === '吕布' && (
-                         <>
-                           <p>• 使用【杀】攻击目标时，目标需要打出两张【闪】才能抵消</p>
-                           <p>• 与目标【决斗】时，目标需要打出两张【杀】才能反击</p>
-                           <p>• <span className="text-yellow-400">示例</span>：吕布对曹操使用【杀】，曹操只有1张【闪】，无法防御，受到伤害</p>
-                         </>
-                       )}
-                       {me.hero.name === '赵云' && (
-                         <>
-                           <p>• 可以将【杀】当【闪】使用</p>
-                           <p>• 可以将【闪】当【杀】使用</p>
-                           <p>• 在需要出【闪】时，点击红色手牌即可使用</p>
-                           <p>• <span className="text-yellow-400">示例</span>：赵云被【杀】攻击，手牌中只有【杀】，可以将【杀】当【闪】使用来防御</p>
-                         </>
-                       )}
-                       {canUseWusheng(me) && (
-                         <>
-                           <p>• 可以将任意红色牌（红桃、方块）当【杀】使用</p>
-                           <p>• 红色牌包括：【桃】、【无中生有】等</p>
-                           <p>• <span className="text-yellow-400">示例</span>：关羽手牌中有【桃】（红桃），可以将其当【杀】使用攻击敌人</p>
-                         </>
-                       )}
-                       {me.hero.name === '司马懿' && (
-                         <>
-                           <p>• 当你使用【闪】或【无懈可击】成功免疫攻击后</p>
-                           <p>• 如果体力未满，回复1点体力</p>
-                           <p>• 如果体力已满，摸一张牌</p>
-                           <p>• <span className="text-yellow-400">示例</span>：司马懿使用【闪】抵消【杀】，体力从2/3回复到3/3</p>
-                         </>
-                       )}
-                       {me.hero.name === '貂蝉' && (
-                         <>
-                           <p>• 点击【离间】按钮进入离间模式</p>
-                           <p>• 弃置一张手牌</p>
-                           <p>• 选择两名男性角色进行【决斗】</p>
-                           <p>• 先被选中的角色先出【杀】</p>
-                           <p>• <span className="text-yellow-400">示例</span>：貂蝉弃置【闪】，选择吕布和曹操决斗，吕布先出【杀】</p>
-                         </>
-                       )}
-                       {me.hero.name === '张飞' && (
-                         <>
-                           <p>• 出牌阶段可连续使用任意数量的【杀】，不受次数限制</p>
-                           <p>• 配合【酒】可对同一目标连续造成高额伤害</p>
-                           <p>• <span className="text-yellow-400">示例</span>：张飞手握 3 张【杀】，一回合内可全部打出</p>
-                         </>
-                       )}
-                       {me.hero.name === '黄忠' && (
-                         <>
-                           <p>• 你使用【杀】时，若目标手牌数 ≥ 你的体力值，此【杀】不可被【闪】抵消</p>
-                           <p>• 体力越低越容易触发，适合残血反打</p>
-                           <p>• <span className="text-yellow-400">示例</span>：黄忠 2 点体力，目标有 3 张手牌，其无法出【闪】</p>
-                         </>
-                       )}
-                       {me.hero.name === '夏侯惇' && (
-                         <>
-                           <p>• 受到伤害后自动判定，结果非红桃则伤害来源失去 1 点体力</p>
-                           <p>• 越被围攻越容易反伤，注意别把自己逼入濒死</p>
-                           <p>• <span className="text-yellow-400">示例</span>：夏侯惇被【杀】命中，判定为黑桃，攻击者失去 1 点体力</p>
-                         </>
-                       )}
-                       {me.hero.name === '周瑜' && (
-                         <>
-                           <p>• 摸牌阶段额外摸一张（共摸 3 张）</p>
-                           <p>• 手牌更充裕，适合储备【杀】【闪】与锦囊</p>
-                           <p>• <span className="text-yellow-400">示例</span>：周瑜每回合稳定摸 3 张，快速积累装备与锦囊</p>
-                         </>
-                       )}
-                       {me.hero.name === '甄姬' && (
-                         <>
-                           <p>• 需要出【闪】时，任意黑色手牌（♠♣）都可以当【闪】打出</p>
-                           <p>• 回合开始自动「洛神」：判定为黑色则获得该牌并可继续，最多 3 次</p>
-                           <p>• <span className="text-yellow-400">示例</span>：甄姬开局洛神连翻两张黑牌，手牌直接+2</p>
-                         </>
-                       )}
-                       {me.hero.name === '黄月英' && (
-                         <>
-                           <p>• 每使用一张锦囊牌，立即摸一张牌（集智）</p>
-                           <p>• 使用锦囊牌无距离限制（奇才），可越位顺手</p>
-                           <p>• <span className="text-yellow-400">示例</span>：黄月英用【顺手牵羊】偷取远位敌人的装备</p>
-                         </>
-                       )}
-                       {me.hero.name === '孙尚香' && (
-                         <>
-                           <p>• 失去装备区的牌时摸两张（枭姬，换装/被拆/被偷都触发）</p>
-                           <p>• 弃两张手牌可与一名已受伤男性各回复 1 点体力（结姻，每回合一次）</p>
-                           <p>• <span className="text-yellow-400">示例</span>：孙尚香点「结姻」→ 点一名受伤男将，双方回血</p>
-                         </>
-                       )}
-                       {me.hero.name === '张春华' && (
-                         <>
-                           <p>• 回合结束时，若手牌少于已损失体力，自动摸牌补至该数值</p>
-                           <p>• 越受伤手牌越多，残血时反而更耐打</p>
-                           <p>• <span className="text-yellow-400">示例</span>：张春华 3 体力上限、当前 1 点体力，回合结束补至 2 张</p>
-                         </>
-                       )}
-                       {me.hero.name === '祝融' && (
-                         <>
-                           <p>• 【南蛮入侵】对你完全无效，并额外摸一张牌</p>
-                           <p>• 敌方放南蛮时你是最大受益者</p>
-                           <p>• <span className="text-yellow-400">示例</span>：对手使用【南蛮入侵】，祝融不受伤害并摸一张</p>
-                         </>
-                       )}
-                       {me.hero.name === '大乔' && (
-                         <>
-                           <p>• 成为【杀】目标时，自动弃一张手牌并把【杀】转给攻击范围内另一名角色</p>
-                           <p>• 手牌越充足越难被打中</p>
-                           <p>• <span className="text-yellow-400">示例</span>：大乔被【杀】指定，弃一张牌后将【杀】转移给相邻的敌人</p>
-                         </>
-                       )}
-                       {me.hero.name === '小乔' && (
-                         <>
-                           <p>• 你的方块牌在判定时视为红桃</p>
-                           <p>• 对【乐不思蜀】等判定有额外容错</p>
-                           <p>• <span className="text-yellow-400">示例</span>：小乔的【乐不思蜀】判定翻出方块，视为红桃而免于跳过出牌</p>
-                         </>
-                       )}
-                       {me.hero.name === '蔡文姬' && (
-                         <>
-                           <p>• 你阵亡时，击杀你的角色失去所有手牌</p>
-                           <p>• 敌人击杀你需付出代价，可用来威慑</p>
-                           <p>• <span className="text-yellow-400">示例</span>：蔡文姬被击杀，凶手手牌全部进入弃牌堆</p>
-                         </>
-                       )}
-                       {me.hero.name === '甘宁' && (
-                         <>
-                           <p>• 点击「奇袭」按钮后，选一张黑色牌（♠♣），再点目标角色，即当【过河拆桥】使用</p>
-                           <p>• 无需距离限制，可拆手牌或装备</p>
-                           <p>• <span className="text-yellow-400">示例</span>：甘宁用黑色【酒】当【过河拆桥】，拆掉远处敌人的武器</p>
-                         </>
-                       )}
-                       {me.hero.name === '吕蒙' && (
-                         <>
-                           <p>• 出牌阶段没有使用过【杀】，弃牌阶段自动跳过</p>
-                           <p>• 手上牌多时可以放心留牌蓄势</p>
-                           <p>• <span className="text-yellow-400">示例</span>：吕蒙本回合只上装、不出杀，回合结束无需弃牌</p>
-                         </>
-                       )}
-                       {me.hero.name === '王异' && (
-                         <>
-                           <p>• 回合开始时若已受伤，自动摸等同于已损失体力的牌</p>
-                           <p>• 越受伤收益越大，适合主动换血</p>
-                           <p>• <span className="text-yellow-400">示例</span>：王异 3 上限、当前 1 体力，回合开始摸 2 张</p>
-                         </>
-                       )}
-                       {me.hero.name === '步练师' && (
-                         <>
-                           <p>• 你阵亡时，自动令己方体力最低的一名角色摸三张牌</p>
-                           <p>• 阵亡也能为队友留下资源</p>
-                           <p>• <span className="text-yellow-400">示例</span>：步练师阵亡，队友主公摸三张牌继续作战</p>
-                         </>
-                       )}
-                     </div>
-                   </div>
-                 </div>
-
-                 {/* 右侧：当前手牌使用效果 */}
-                 {me.hand.length > 0 && (
-                   <div className="bg-gradient-to-b from-[#1a1510] to-[#0f0f0f] p-4 rounded-lg border border-[#d4af37]/30">
-                     <h6 className="text-lg font-bold text-[#d4af37] mb-4 flex items-center gap-2 font-ancient">
-                       <span className="w-[3px] h-5 rounded-sm bg-gradient-to-b from-[#f0d894] to-[#a8842c]" />
-                       当前手牌使用效果
-                     </h6>
-                     <div className="grid grid-cols-1 gap-3 max-h-[400px] overflow-y-auto">
-                       {me.hand.map((card, index) => {
-                         const isRedCard = [Suit.HEART, Suit.DIAMOND].includes(card.suit);
-                         const isZhaoyun = me.hero.name === '赵云';
-                         const isGuanyu = canUseWusheng(me);
-                         
-                         // 获取卡牌效果说明
-                         const getCardEffect = () => {
-                           switch (card.name) {
-                             case CardName.SHA:
-                               if (isZhaoyun) return '可当【杀】或【闪】使用';
-                               if (isGuanyu && isRedCard) return '红色【杀】，可通过「武圣」转换';
-                               return '对目标造成1点伤害';
-                             case CardName.SHAN:
-                               if (isZhaoyun) return '可当【杀】或【闪】使用';
-                               return '抵消一张【杀】的伤害';
-                             case CardName.TAO:
-                               return '回复1点体力';
-                             case CardName.JIU:
-                               return '本回合下一张【杀】伤害+1';
-                             case CardName.JUEDOU:
-                               return '与目标轮流出【杀】，先不出者受伤';
-                             case CardName.WUZHONG:
-                               return '摸两张牌';
-                             case CardName.NANMAN:
-                               return '全场需打出【杀】，否则受伤';
-                             case CardName.WANJIAN:
-                               return '全场需打出【闪】，否则受伤';
-                             case CardName.SHUNSHOU:
-                               return '获得目标一张手牌';
-                             case CardName.GUOHE:
-                               return '弃置目标一张手牌';
-                             case CardName.LESI:
-                               return '目标下回合可能跳过出牌阶段';
-                             case CardName.WUXIE:
-                               return '抵消一张锦囊牌的效果';
-                             case CardName.HUOGONG:
-                               return '展示目标手牌，弃置同花色牌造成火焰伤害';
-                             case CardName.TIESUO:
-                               return '横置1-2名角色，传导属性伤害';
-                             case CardName.BINGLIANG:
-                               return '目标下回合可能跳过摸牌阶段';
-                             case CardName.WUGU:
-                               return '所有角色依次选择并获得一张牌';
-                             case CardName.TAOYUAN:
-                               return '所有角色回复1点体力';
-                             case CardName.JIEDAO:
-                               return '令有武器的角色攻击另一名角色，否则获得其武器';
-                             case CardName.SHANDIAN:
-                               return '延时锦囊，判定黑桃2-9则受到3点雷电伤害';
-                             default:
-                               return card.description;
-                           }
-                         };
-
-                         // 获取卡牌类型颜色
-                         const getCardTypeColor = () => {
-                           switch (card.type) {
-                             case CardType.BASIC:
-                               return 'border-stone-500/50 bg-stone-800/50';
-                             case CardType.SCROLL:
-                               return 'border-amber-600/50 bg-amber-900/30';
-                             case CardType.EQUIPMENT:
-                               return 'border-blue-600/50 bg-blue-900/30';
-                             default:
-                               return 'border-stone-500/50';
-                           }
-                         };
-
-                         return (
-                           <div 
-                             key={card.id} 
-                             className={`flex items-center gap-3 p-3 rounded-lg border ${getCardTypeColor()} hover:bg-[#2a2018] transition-colors`}
-                           >
-                             {/* 使用 CardComponent 显示卡牌 */}
-                             <div className="flex-shrink-0 transform scale-75 origin-left -ml-2">
-                               <CardComponent card={card} small />
-                             </div>
-                             <div className="flex-1 min-w-0 -ml-1">
-                               <div className="flex items-center gap-2 mb-1">
-                                 <span className="text-[#d4af37] font-bold font-ancient">{card.name}</span>
-                                 <span className="text-stone-500 text-xs">{card.rank}</span>
-                                 <span className={`text-xs px-1.5 py-0.5 rounded ${
-                                   card.type === CardType.BASIC ? 'bg-stone-700 text-stone-300' :
-                                   card.type === CardType.SCROLL ? 'bg-amber-800/60 text-amber-200' :
-                                   'bg-blue-800/60 text-blue-200'
-                                 }`}>
-                                   {card.type}
-                                 </span>
-                               </div>
-                               <p className="text-stone-400 text-sm leading-relaxed">{getCardEffect()}</p>
-                             </div>
-                           </div>
-                         );
-                       })}
-                     </div>
-                   </div>
-                 )}
-               </div>
-
-               {/* 关闭按钮 */}
-               <div className="mt-6 flex justify-center">
-                 <button
-                   onClick={() => setShowSkillModal(false)}
-                   className="btn-gold px-8 py-3 rounded-lg font-ancient text-xl"
-                 >
-                   明白了
-                 </button>
-               </div>
-            </div>
-         </div>
+        <SkillInfoModal me={me} canWusheng={canUseWusheng(me)} onClose={() => setShowSkillModal(false)} />
       )}
 
       {/* Dying State Modal - Ask for Peaches - 最高优先级 */}
       {dyingState && dyingState.isActive && (
-         <div className="absolute inset-0 z-[200] modal-mask flex items-center justify-center p-4">
-            <div className="modal-frame modal-frame-danger w-full max-w-lg p-6 text-center">
-               <h3 className="modal-title text-3xl font-ancient mb-1">💀 濒死求桃</h3>
-               <div className="modal-divider mb-3" />
-               {dyingState.rescuerId === me.id && (
-                 <div className="flex items-center justify-center gap-2 mb-2">
-                   <span className={`text-xl font-bold tabular-nums ${(dyingLeft ?? 0) <= 5 ? 'text-[#e0705f] animate-pulse' : 'text-[#e8cf94]'}`}>
-                     {dyingLeft ?? DECISION_SECONDS}
-                   </span>
-                   <span className="modal-text-dim text-xs">秒内请选择，超时自动放弃</span>
-                 </div>
-               )}
-               <div className="modal-text-dim text-xs mb-4">
-                 目标: {getPlayer(dyingState.victimId)?.hero.name} | 当前体力: {getPlayer(dyingState.victimId)?.hp}/{getPlayer(dyingState.victimId)?.maxHp}
-               </div>
-
-               {/* 显示当前被询问的玩家 */}
-               <div className={`mb-4 p-3 rounded-lg border transition-all duration-300 ${
-                 dyingState.rescuerId === me.id
-                   ? 'bg-[#1b3024]/45 border-[#6a9a80]/60 animate-pulse'
-                   : 'bg-black/25 border-[#8b7355]/30'
-               }`}>
-                 <p className="modal-text-dim text-sm">当前询问</p>
-                 <p className={`text-xl font-bold ${dyingState.rescuerId === me.id ? 'text-[#9fd4b4]' : 'text-[#d4af37]'}`}>
-                   {dyingState.rescuerId === me.id ? '🔥 轮到你了！' : getPlayer(dyingState.rescuerId!)?.hero.name}
-                 </p>
-                 {dyingState.rescuerId === me.id && (
-                   <p className="text-[#a8d4bb] text-sm mt-1">
-                     {dyingState.hasTao && dyingState.hasJiu 
-                       ? '请选择是否使用【桃】或【酒】救援' 
-                       : dyingState.hasTao 
-                         ? '请选择是否使用【桃】救援'
-                         : dyingState.hasJiu
-                           ? '请选择是否使用【酒】救援'
-                           : '请选择是否使用红色牌发动「急救」'}
-                   </p>
-                 )}
-               </div>
-
-               <p className="modal-text mb-6 text-base leading-relaxed">
-                 <span className="font-bold text-[#e8a99f]">{getPlayer(dyingState.victimId)?.hero.name}</span> 处于濒死状态，需要【桃】或【酒】来救命！
-               </p>
-               
-               {/* 只有被询问的玩家才能看到操作按钮 */}
-               {dyingState.rescuerId === me.id ? (
-                 <>
-                   <div className="mb-6 flex justify-center gap-2 flex-wrap">
-                     {/* Show player's hand with peaches and wine highlighted */}
-                     {me.hand.map(card => {
-                       const isJijiuCard = !!dyingState.hasJijiu
-                         && (card.suit === Suit.HEART || card.suit === Suit.DIAMOND);
-                       const isSaveCard = card.name === CardName.TAO || card.name === CardName.JIU || isJijiuCard;
-                       const cardType = card.name === CardName.TAO ? '桃' : card.name === CardName.JIU ? '酒' : '急救';
-                       return (
-                         <div 
-                           key={card.id} 
-                           className={`transform transition-all duration-200 relative
-                             ${isSaveCard ? 'scale-110 hover:scale-125 shadow-yellow-500/50 cursor-pointer' : 'opacity-30 grayscale pointer-events-none'}
-                           `}
-                           onClick={() => {
-                             if (isSaveCard && dyingState) {
-                               dyingState.resolve(true);
-                             }
-                           }}
-                         >
-                           <CardComponent card={card} small />
-                           {isSaveCard && (
-                             <div className="absolute -top-2 -right-2 bg-red-600 text-white text-[10px] px-1 rounded border border-white animate-pulse">
-                               点击使用{cardType}
-                             </div>
-                           )}
-                         </div>
-                       );
-                     })}
-                   </div>
-                   <div className="flex justify-center gap-6">
-                      <button 
-                        onClick={() => {
-                          // 使用桃或酒
-                          dyingState.resolve(true);
-                        }}
-                        disabled={!me.hand.some(c => c.name === CardName.TAO || c.name === CardName.JIU
-                          || (dyingState.hasJijiu && (c.suit === Suit.HEART || c.suit === Suit.DIAMOND)))}
-                        className={`px-8 py-3 rounded-lg font-ancient text-xl ${
-                          me.hand.some(c => c.name === CardName.TAO || c.name === CardName.JIU
-                            || (dyingState.hasJijiu && (c.suit === Suit.HEART || c.suit === Suit.DIAMOND)))
-                          ? 'btn-gold'
-                          : 'btn-ink opacity-45'
-                        }`}
-                      >
-                        {dyingState.hasTao ? '使用桃' : dyingState.hasJiu ? '使用酒' : '使用急救'}
-                      </button>
-                      <button 
-                        onClick={() => {
-                          // 不使用桃/酒
-                          dyingState.resolve(false);
-                        }}
-                        className="px-8 py-3 rounded-lg font-ancient text-xl bg-[#5e1a15] text-[#f0c8c2] border border-[#c86b62]/70 hover:bg-[#7a221b] hover:text-[#ffe4de] hover:scale-105 transition-all"
-                      >
-                        不救
-                      </button>
-                   </div>
-                 </>
-               ) : (
-                 /* 其他玩家等待中 */
-                 <div className="p-4 bg-black/25 rounded-lg border border-[#8b7355]/25">
-                   <p className="modal-text-dim">等待 <span className="text-[#d4af37] font-bold">{getPlayer(dyingState.rescuerId!)?.hero.name}</span> 决策中...</p>
-                   <div className="mt-3 flex justify-center">
-                     <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#d4af37]"></div>
-                   </div>
-                 </div>
-               )}
-            </div>
-         </div>
+        <DyingModal
+          me={me}
+          victim={getPlayer(dyingState.victimId)}
+          rescuer={dyingState.rescuerId != null ? getPlayer(dyingState.rescuerId) : undefined}
+          rescuerId={dyingState.rescuerId}
+          hasTao={dyingState.hasTao}
+          hasJiu={dyingState.hasJiu}
+          hasJijiu={dyingState.hasJijiu}
+          left={dyingLeft}
+          seconds={DECISION_SECONDS}
+          onUse={() => dyingState.resolve(true)}
+          onSkip={() => dyingState.resolve(false)}
+        />
       )}
 
       {/* 五谷丰登选择弹窗 - 点击选中+确认按钮 */}
       {wuguSelection && (
-        <div className="absolute inset-0 z-[150] modal-mask flex items-center justify-center p-4">
-          <div className="modal-frame max-w-5xl w-[95%] p-8">
-            {/* 标题 */}
-            <div className="text-center mb-6">
-              <h3 className="modal-title text-3xl font-ancient mb-3">五谷丰登</h3>
-              <p className="modal-text text-lg">{wuguSelection.playerName}，请选择一张牌</p>
-              <p className={`mt-1 text-sm ${(wuguLeft ?? 0) <= 5 ? 'text-[#e0705f] animate-pulse' : 'text-[#e8cf94]'}`}>
-                <span className="text-lg font-bold tabular-nums">{wuguLeft ?? DECISION_SECONDS}</span> 秒内请选择，超时自动选取
-              </p>
-              <div className="w-40 modal-divider mx-auto mt-3"></div>
-            </div>
-
-            {/* 展示的卡牌 - 点击选中效果 */}
-            <div className="flex justify-center gap-5 mb-6 flex-wrap px-4">
-              {wuguSelection.cards.map((card, index) => {
-                const isSelected = wuguSelectedCard?.id === card.id;
-                return (
-                  <div 
-                    key={card.id}
-                    onClick={() => setWuguSelectedCard(card)}
-                    className={`group relative cursor-pointer transition-all duration-300 ${
-                      isSelected ? 'scale-110 -translate-y-4 z-10' : 'hover:scale-105 hover:-translate-y-2'
-                    }`}
-                    style={{ 
-                      animation: `fade-in-up 0.4s ease-out ${index * 80}ms both`
-                    }}
-                  >
-                    {/* 选中/悬停光晕效果 */}
-                    <div className={`absolute inset-0 rounded-lg transition-all duration-300 ${
-                      isSelected 
-                        ? 'bg-[#d4af37]/40 shadow-[0_0_40px_rgba(212,175,55,0.8)] scale-110' 
-                        : 'bg-[#d4af37]/0 group-hover:bg-[#d4af37]/20 group-hover:shadow-[0_0_30px_rgba(212,175,55,0.6)]'
-                    }`}></div>
-                    
-                    {/* 选中标记 */}
-                    {isSelected && (
-                      <div className="absolute -top-3 -right-3 w-8 h-8 rounded-full bg-[#d4af37] text-[#1a1410] flex items-center justify-center text-lg font-bold z-20 shadow-lg animate-bounce">
-                        ✓
-                      </div>
-                    )}
-                    
-                    {/* 卡牌容器 */}
-                    <div className="relative">
-                      <CardComponent card={card} />
-                    </div>
-                    
-                    {/* 序号指示器 */}
-                    <div className={`absolute -bottom-3 left-1/2 -translate-x-1/2 w-8 h-8 rounded-full border flex items-center justify-center text-sm font-bold transition-all duration-300 ${
-                      isSelected 
-                        ? 'bg-[#d4af37] text-[#1a1410] border-[#d4af37] scale-110' 
-                        : 'bg-[#d4af37]/20 text-[#d4af37] border-[#d4af37]/40 opacity-0 group-hover:opacity-100'
-                    }`}>
-                      {index + 1}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-
-            {/* 确认按钮 */}
-            <div className="text-center">
-              <button
-                onClick={() => {
-                  if (wuguSelectedCard) {
-                    // 立即关闭弹窗并返回选择
-                    setWuguSelection(null);
-                    wuguSelection.onSelect(wuguSelectedCard);
-                    setWuguSelectedCard(null);
-                  }
-                }}
-                disabled={!wuguSelectedCard}
-                className={`px-10 py-3 rounded-full font-bold text-xl font-ancient tracking-widest transition-all duration-300 ${
-                  wuguSelectedCard ? 'btn-gold' : 'btn-ink opacity-55'
-                }`}
-              >
-                {wuguSelectedCard ? '确认选择' : '请先选择一张牌'}
-              </button>
-            </div>
-          </div>
-        </div>
+        <WuguModal
+          playerName={wuguSelection.playerName}
+          cards={wuguSelection.cards}
+          selected={wuguSelectedCard}
+          left={wuguLeft}
+          seconds={DECISION_SECONDS}
+          onSelect={setWuguSelectedCard}
+          onConfirm={() => {
+            if (!wuguSelectedCard) return;
+            setWuguSelection(null);
+            wuguSelection.onSelect(wuguSelectedCard);
+            setWuguSelectedCard(null);
+          }}
+        />
       )}
 
       {/* 常驻托管开关：z-index 高于所有弹窗，响应求闪 / 五谷丰登等弹窗期间也能直接点 */}
