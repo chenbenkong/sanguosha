@@ -106,7 +106,7 @@ describe('HERO_PROFILES', () => {
   test('【代码与注释不一致】heroDetail.ts:89 写「39 名武将」，实际 HERO_PROFILES 有 45 条 / HEROES 有 69 名', () => {
     const commentCount = 39;
     expect(Object.keys(HERO_PROFILES)).toHaveLength(45);
-    expect(HEROES).toHaveLength(69);
+    expect(HEROES).toHaveLength(99); // 第六批新增 30 名女将后为 99
     expect(Object.keys(HERO_PROFILES).length - commentCount).toBe(6);
     // 新将·第1批 的 6 名女将已补进 profile，注释未同步
     const newBatch = Object.values(HERO_PROFILES).filter(p => p.pack === '新将·第1批');
@@ -137,16 +137,26 @@ describe('getHeroDetail', () => {
     expect(bad).toEqual([]);
   });
 
-  test('没有 profile 条目的武将回退到 FALLBACK_PROFILE（不崩溃、字段齐全）', () => {
-    const missing = HEROES.filter(h => !HERO_PROFILES[h.name]);
-    // 24 名新武将尚未写 profile，回退是设计行为——数量变化说明数据被改动
-    expect(missing.length).toBe(24);
+  test('未写 profile 且非 pending 的武将回退到 FALLBACK_PROFILE（不崩溃、字段齐全）', () => {
+    const missing = HEROES.filter(h => !HERO_PROFILES[h.name] && !h.pending);
+    // 第六批新增的 30 名女将已标记 pending:true，走 PENDING_PROFILE 而非本回退分支
     for (const h of missing) {
       const d = getHeroDetail(h);
       expect(d.profile.pack).toBe('标准包');
       expect(d.profile.roles).toEqual(['均衡']);
       expect(d.profile.difficulty).toBe(2);
       expect(d.profile.tip).toBeTruthy();
+    }
+  });
+
+  test('第六批 30 名新女将标记为 pending 且走 PENDING_PROFILE', () => {
+    const pend = HEROES.filter(h => h.pending);
+    expect(pend.length).toBe(30);
+    expect(pend.every(h => h.gender === 'female')).toBe(true);
+    for (const h of pend) {
+      const d = getHeroDetail(h);
+      expect(d.profile.pack).toBe('新将·技能实装中');
+      expect(d.skills.length).toBeGreaterThan(0);
     }
   });
 

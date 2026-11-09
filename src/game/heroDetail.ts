@@ -239,6 +239,67 @@ const PENDING_SKILL_META: Record<string, { tags: SkillTag[]; timing: string; quo
   霜怀: { tags: ['被动技'], timing: '与你距离1以内的其他角色受到伤害时' },
 };
 
+
+/** 第六批新增 30 名女将的技能类型 / 时机 / 台词 */
+const BATCH6_SKILL_META: Record<string, SkillMeta> = {
+  尊位: { tags: ['主动技'], timing: '出牌阶段', quote: '尊位在此，尔等安敢造次。' },
+  蜜饴: { tags: ['主动技'], timing: '准备阶段 / 结束阶段', quote: '蜜饴甘甜，可慰军心。' },
+  寅君: { tags: ['被动技'], timing: '对其他角色使用手牌结算结束后', quote: '寅时之君，当立威仪。' },
+  异色: { tags: ['被动技'], timing: '其他角色获得你的牌后', quote: '色分异同，命由我定。' },
+  顺世: { tags: ['主动技'], timing: '准备阶段 / 回合外受到伤害后', quote: '顺势而为，方可长久。' },
+  媵予: { tags: ['主动技'], timing: '准备阶段', quote: '媵妾之礼，不敢有违。' },
+  拥嬖: { tags: ['限定技'], timing: '出牌阶段', quote: '得宠如此，夫复何求。' },
+  庇族: { tags: ['主动技'], timing: '出牌阶段', quote: '庇我宗族，同气连枝。' },
+  无胁: { tags: ['主动技'], timing: '回合结束时', quote: '无以为胁，唯以诚待。' },
+  霞泪: { tags: ['被动技'], timing: '你的红色牌进入弃牌堆后', quote: '霞光如泪，转瞬即逝。' },
+  暗织: { tags: ['主动技'], timing: '出牌阶段 / 受到伤害后', quote: '暗夜织锦，无人得见。' },
+  宛蝉: { tags: ['主动技'], timing: '出牌阶段（限一次）', quote: '宛转如蝉，绕梁不绝。' },
+  绛脂: { tags: ['被动技'], timing: '你成为基本牌或普通锦囊牌的目标后', quote: '绛唇一点，脂粉生香。' },
+  浮萍: { tags: ['被动技'], timing: '其他角色对你使用牌结算结束后', quote: '身如浮萍，随波逐流。' },
+  炜烈: { tags: ['主动技'], timing: '出牌阶段', quote: '炜烈之光，照亮丹心。' },
+  护关: { tags: ['主动技'], timing: '一名角色出牌阶段使用第一张牌时', quote: '过关斩将，护我周全。' },
+  摇佩: { tags: ['主动技'], timing: '其他角色弃牌阶段结束时', quote: '环佩叮当，步履生姿。' },
+  经音: { tags: ['主动技'], timing: '一名角色回合外使用【杀】结算后', quote: '经声琅琅，余音绕梁。' },
+  迟行: { tags: ['被动技'], timing: '一名角色的出牌阶段结束时', quote: '迟迟其行，不疾不徐。' },
+  斥怠: { tags: ['主动技'], timing: '一名角色的回合开始时', quote: '怠惰者，当斥之。' },
+  缢节: { tags: ['被动技'], timing: '其他角色获得你的牌后', quote: '缢节明志，不负此身。' },
+  异瞳: { tags: ['锁定技'], timing: '游戏开始时', quote: '异瞳所视，非此凡尘。' },
+  醅酿: { tags: ['主动技'], timing: '出牌阶段 / 一名角色进入濒死状态时', quote: '新醅初酿，愿君共饮。' },
+  诱言: { tags: ['主动技'], timing: '你的回合内（限一次）', quote: '巧言相诱，静待时机。' },
+  追还: { tags: ['主动技'], timing: '结束阶段', quote: '追而还之，恩怨分明。' },
+  蕙质: { tags: ['主动技'], timing: '准备阶段', quote: '蕙质兰心，自有分寸。' },
+  继椒: { tags: ['限定技'], timing: '出牌阶段', quote: '椒房之宠，绵延不绝。' },
+  芳妒: { tags: ['锁定技'], timing: '回合外受到伤害后', quote: '芳华易妒，天亦怜之。' },
+  节行: { tags: ['被动技'], timing: '体力值变化后', quote: '节行自守，不负初心。' },
+  元嫡: { tags: ['主动技'], timing: '其他角色出牌阶段使用第一张牌时', quote: '元嫡之尊，井然有序。' },
+  心幽: { tags: ['主动技'], timing: '出牌阶段（限一次）', quote: '心有所幽，静水流深。' },
+  辞虑: { tags: ['主动技'], timing: '你成为普通锦囊牌的目标后', quote: '辞去烦虑，心自安然。' },
+  痛悼: { tags: ['限定技'], timing: '当你处于濒死状态时', quote: '痛悼故人，泣血以告。' },
+  织纴: { tags: ['主动技'], timing: '你的回合内使用第一张非转化牌时', quote: '织纴之巧，可比天工。' },
+  燕尔: { tags: ['被动技'], timing: '其他角色出牌阶段失去最后的手牌时', quote: '燕尔新婚，如胶似漆。' },
+  遭谮: { tags: ['被动技'], timing: '其他角色出牌阶段', quote: '遭人构陷，何以自明。' },
+  追懿: { tags: ['锁定技'], timing: '你使用牌结算后', quote: '追慕懿德，不敢或忘。' },
+  育贤: { tags: ['主动技'], timing: '每轮开始时 / 其他角色出牌阶段使用牌时', quote: '育养贤才，为国储用。' },
+  愍善: { tags: ['被动技'], timing: '你受到1点伤害后', quote: '愍恤弱小，善莫大焉。' },
+  聆乐: { tags: ['锁定技'], timing: '一名角色造成本轮第一次伤害后', quote: '聆此雅乐，可慰平生。' },
+  盻睇: { tags: ['主动技'], timing: '出牌阶段', quote: '盻睇之间，已定胜负。' },
+  同礼: { tags: ['主动技'], timing: '出牌阶段使用牌指定目标后', quote: '同礼相待，不敢僭越。' },
+  奢葬: { tags: ['被动技'], timing: '进入濒死状态时', quote: '奢以为葬，聊尽哀思。' },
+  天则: { tags: ['被动技'], timing: '其他角色黑色判定牌生效后', quote: '天则有常，不容僭越。' },
+  生妒: { tags: ['主动技'], timing: '回合开始时', quote: '妒心一起，祸福难料。' },
+  介绫: { tags: ['主动技'], timing: '出牌阶段', quote: '绫罗为介，可挡刀兵。' },
+  妩艳: { tags: ['主动技'], timing: '出牌阶段 / 受到伤害后', quote: '妩媚姿容，倾城倾国。' },
+  占欲: { tags: ['主动技'], timing: '回合开始时', quote: '占其所欲，尽归于我。' },
+  望资: { tags: ['主动技'], timing: '其他角色的出牌阶段开始时', quote: '望其资财，为我所用。' },
+  和戎: { tags: ['主动技'], timing: '出牌阶段（限一次）', quote: '和戎之策，胜于刀兵。' },
+  谗逆: { tags: ['主动技'], timing: '出牌阶段（限一次）', quote: '谗言逆耳，其心可诛。' },
+  匿伏: { tags: ['锁定技'], timing: '一名角色的结束阶段', quote: '匿于暗处，静待时机。' },
+  抗歌: { tags: ['主动技'], timing: '你的第一个回合开始时', quote: '抗声而歌，以励同袍。' },
+  节烈: { tags: ['被动技'], timing: '你受到其他角色造成的伤害时', quote: '节烈之名，宁死不辱。' },
+  狡黠: { tags: ['主动技'], timing: '出牌阶段', quote: '狡黠如狐，出其不意。' },
+  狐魅: { tags: ['主动技'], timing: '出牌阶段（每个选项限一次）', quote: '狐魅之惑，摄人心魄。' },
+};
+
 const PENDING_PROFILE: HeroProfile = {
   pack: '新将·技能实装中',
   roles: ['均衡'],
@@ -251,7 +312,7 @@ export function getHeroDetail(hero: Hero): HeroDetailView {
   const names = hero.skillName.split('/').map(s => s.trim()).filter(Boolean);
   const descs = splitSkillDesc(hero.skillDesc, names);
   const skills: HeroSkillView[] = names.map((name, i) => {
-    const meta = SKILL_META[name] ?? PENDING_SKILL_META[name];
+    const meta = SKILL_META[name] ?? BATCH6_SKILL_META[name] ?? PENDING_SKILL_META[name];
     return {
       name,
       tags: meta?.tags ?? ['主动技'],
