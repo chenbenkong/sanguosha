@@ -36,7 +36,7 @@ export const ReactionModal: React.FC<{
         <h3 className="modal-title text-3xl font-ancient mb-1">杀机已至</h3>
         <div className="modal-divider mb-3" />
         <div className="flex items-center justify-center gap-2 mb-3">
-          <span className={`text-xl font-bold tabular-nums ${(left ?? 0) <= 5 ? 'text-[#e0705f] animate-pulse' : 'text-[#e8cf94]'}`}>
+          <span className={`text-xl font-bold tabular-nums ${(left ?? 0) <= 5 ? 'text-[#e0705f] animate-pulse' : 'text-[var(--gold-strong)]'}`}>
             {left ?? seconds}
           </span>
           <span className="modal-text-dim text-xs">秒内请选择，超时自动放弃</span>

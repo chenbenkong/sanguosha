@@ -29,25 +29,16 @@ export const OwnSeatPanel: React.FC<{
       data-seat-id={0}
       className={`
         own-seat seat-card relative rounded-xl border-2 kingdom-frame hero-card ${KINGDOM_CLASS[me.hero.kingdom] ?? ''}
-        focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#e8cf94]
+        focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--line-strong)]
         ${damageAnimTarget === 0 || healAnimTarget === 0
           ? ''
           : 'transition-[transform,box-shadow,border-color] duration-300'
         }
-        ${me.isDead
-          ? 'bg-[#15110e]/95 border-[#4a3f33] opacity-55'
-          : 'bg-[#1c1611]/95 border-[#8b7355]/45'
-        }
-        ${me.isDead ? 'is-dead' : ''}
+        ${me.isDead ? 'is-dead opacity-55' : ''}
         ${me.identity === Identity.ZHUGONG ? 'is-lord-card' : ''}
         ${isDying ? 'is-dying' : ''}
         ${isMyTurn && !isDying ? 'is-current-turn' : ''}
-        ${isMyTurn
-          ? (fxLevel === 'pure'
-            ? 'border-[#e8cf94]/70'
-            : 'border-[#c8a45c] shadow-[0_0_22px_rgba(200,164,92,0.30)] scale-105')
-          : ''
-        }
+        ${isMyTurn ? 'is-my-turn' : ''}
         ${damageAnimTarget === 0 && fxLevel !== 'pure' && fxLevel !== 'classic' ? 'animate-damage-shake' : ''}
         ${healAnimTarget === 0 ? 'animate-heal-pulse' : ''}
       `}
@@ -60,7 +51,7 @@ export const OwnSeatPanel: React.FC<{
 
       {damageNumber && damageNumber.targetId === 0 && (
         <div className="absolute -top-10 left-1/2 -translate-x-1/2 z-50 pointer-events-none">
-          <div className="text-4xl font-bold text-red-500 animate-damage-float drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]" style={{ textShadow: '2px 2px 4px rgba(0,0,0,0.8)' }}>
+          <div className="text-4xl font-bold text-[var(--danger)] animate-damage-float" style={{ textShadow: '2px 2px 4px rgba(0,0,0,0.8)' }}>
             -{damageNumber.amount}
           </div>
         </div>
@@ -68,7 +59,7 @@ export const OwnSeatPanel: React.FC<{
 
       {healNumber && healNumber.targetId === 0 && (
         <div className="absolute -top-10 left-1/2 -translate-x-1/2 z-50 pointer-events-none">
-          <div className="text-4xl font-bold text-green-500 animate-heal-float drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]" style={{ textShadow: '2px 2px 4px rgba(0,0,0,0.8)' }}>
+          <div className="text-4xl font-bold text-[var(--ok)] animate-heal-float" style={{ textShadow: '2px 2px 4px rgba(0,0,0,0.8)' }}>
             +{healNumber.amount}
           </div>
         </div>
@@ -124,26 +115,25 @@ export const OwnSeatPanel: React.FC<{
           </span>
         </div>
 
-        <div className="seat-name-rail">
-          <span className="seat-name">{me.hero.name}</span>
-          <span className="seat-skill">【{me.hero.skillName}】</span>
-        </div>
-
-        <div className="seat-hp-corner" title={`体力 ${me.hp}/${me.maxHp}`}>
-          <div className="seat-pips">
-            {Array.from({ length: me.maxHp }).map((_, i) => (
-              <span key={i} className={`seat-pip ${i < me.hp ? (me.hp === 1 ? 'is-low' : 'is-on') : ''}`} />
-            ))}
-          </div>
-        </div>
-
         {isMyTurn && (
           <div data-tour="turn" className="own-turn-chip">我的回合</div>
         )}
       </div>
 
       <div className="seat-info">
+        <div className="seat-name-rail">
+          <span className="seat-name">{me.hero.name}</span>
+          <span className="seat-skill">【{me.hero.skillName}】</span>
+        </div>
+
         <div className="seat-meta-row">
+          <span className="seat-hp-corner" title={`体力 ${me.hp}/${me.maxHp}`}>
+            <span className="seat-pips">
+              {Array.from({ length: me.maxHp }).map((_, i) => (
+                <span key={i} className={`seat-pip ${i < me.hp ? (me.hp === 1 ? 'is-low' : 'is-on') : ''}`} />
+              ))}
+            </span>
+          </span>
           <span className="seat-hand-count">手牌 <b className="tabular-nums">{me.hand.length}</b></span>
           <span className="seat-distance">范围 {attackRange}</span>
           {me.isDead && <span className="seat-dead-tag">阵亡</span>}

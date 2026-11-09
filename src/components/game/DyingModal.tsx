@@ -29,7 +29,7 @@ export const DyingModal: React.FC<{
         <div className="modal-divider mb-3" />
         {isMe && (
           <div className="flex items-center justify-center gap-2 mb-2">
-            <span className={`text-xl font-bold tabular-nums ${(left ?? 0) <= 5 ? 'text-[#e0705f] animate-pulse' : 'text-[#e8cf94]'}`}>
+            <span className={`text-xl font-bold tabular-nums ${(left ?? 0) <= 5 ? 'text-[#e0705f] animate-pulse' : 'text-[var(--gold-strong)]'}`}>
               {left ?? seconds}
             </span>
             <span className="modal-text-dim text-xs">秒内请选择，超时自动放弃</span>
@@ -43,7 +43,7 @@ export const DyingModal: React.FC<{
           isMe ? 'bg-[#1b3024]/45 border-[#6a9a80]/60 animate-pulse' : 'bg-black/25 border-[#8b7355]/30'
         }`}>
           <p className="modal-text-dim text-sm">当前询问</p>
-          <p className={`text-xl font-bold ${isMe ? 'text-[#9fd4b4]' : 'text-[#d4af37]'}`}>
+          <p className={`text-xl font-bold ${isMe ? 'text-[#9fd4b4]' : 'text-[var(--gold)]'}`}>
             {isMe ? '🔥 轮到你了！' : rescuer?.hero.name}
           </p>
           {isMe && (
@@ -105,7 +105,7 @@ export const DyingModal: React.FC<{
           </>
         ) : (
           <div className="p-4 bg-black/25 rounded-lg border border-[#8b7355]/25">
-            <p className="modal-text-dim">等待 <span className="text-[#d4af37] font-bold">{rescuer?.hero.name}</span> 决策中...</p>
+            <p className="modal-text-dim">等待 <span className="text-[var(--gold)] font-bold">{rescuer?.hero.name}</span> 决策中...</p>
             <div className="mt-3 flex justify-center">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#d4af37]"></div>
             </div>

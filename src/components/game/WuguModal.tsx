@@ -17,7 +17,7 @@ export const WuguModal: React.FC<{
       <div className="text-center mb-6">
         <h3 className="modal-title text-3xl font-ancient mb-3">五谷丰登</h3>
         <p className="modal-text text-lg">{playerName}，请选择一张牌</p>
-        <p className={`mt-1 text-sm ${(left ?? 0) <= 5 ? 'text-[#e0705f] animate-pulse' : 'text-[#e8cf94]'}`}>
+        <p className={`mt-1 text-sm ${(left ?? 0) <= 5 ? 'text-[#e0705f] animate-pulse' : 'text-[var(--gold-strong)]'}`}>
           <span className="text-lg font-bold tabular-nums">{left ?? seconds}</span> 秒内请选择，超时自动选取
         </p>
         <div className="w-40 modal-divider mx-auto mt-3"></div>
@@ -54,7 +54,7 @@ export const WuguModal: React.FC<{
               <div className={`absolute -bottom-3 left-1/2 -translate-x-1/2 w-8 h-8 rounded-full border flex items-center justify-center text-sm font-bold transition-all duration-300 ${
                 isSelected
                   ? 'bg-[#d4af37] text-[#1a1410] border-[#d4af37] scale-110'
-                  : 'bg-[#d4af37]/20 text-[#d4af37] border-[#d4af37]/40 opacity-0 group-hover:opacity-100'
+                  : 'bg-[#d4af37]/20 text-[var(--gold)] border-[#d4af37]/40 opacity-0 group-hover:opacity-100'
               }`}>
                 {index + 1}
               </div>

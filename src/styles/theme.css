@@ -1,6 +1,166 @@
+/* 历史样式（原 index.html 内联 <style>）先于 Tailwind 引入，
+   保证本文件后续规则在层叠顺序上仍与原内联样式一致 */
+@import './legacy.css';
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* ============================================================================
+   P0 · 语义令牌（暗 / 亮两套）
+   —— 组件只允许引用这里的变量，不再写裸 hex。
+   命名顺序：表面 → 墨色 → 描线 → 金 / 朱砂 → 牌桌 → 牌面 → 阴影。
+   亮色不是「深色块留在米色底上」，而是同一套设计的宣纸版本：
+   表面是纸、墨色反过来、线是赭石、金压低明度但仍要描得住。
+   ============================================================================ */
+
+:root {
+  /* 表面：0 页面底 / 1 场地 / 2 面板 / 3 浮起件 */
+  --surface-0: #0a0705;
+  --surface-1: #14100c;
+  --surface-2: #1c1611;
+  --surface-3: #241b14;
+  --surface-raised: #2a2118;
+  /* 卡面立绘上的压暗层（图片之上，不属于「表面」） */
+  --surface-scrim: rgba(6, 4, 3, 0.9);
+  --surface-scrim-weak: rgba(6, 4, 3, 0.55);
+
+  /* 墨色 */
+  --ink-strong: #f6e7c6;
+  --ink: #e3d5bd;
+  --ink-mute: #b7a68a;
+  --ink-faint: #8f806a;
+  --ink-inverse: #241a0e;
+  --ink-rgb: 227 213 189;
+
+  /* 描线 */
+  --line-soft: rgba(200, 164, 92, 0.20);
+  --line: rgba(200, 164, 92, 0.34);
+  --line-strong: rgba(232, 207, 148, 0.72);
+  --line-bronze: rgba(139, 115, 85, 0.45);
+
+  /* 金 / 朱砂 / 功能色 */
+  --gold-deep: #8b6914;
+  --gold: #c8a45c;
+  --gold-strong: #f0d894;
+  --gold-rgb: 200 164 92;
+  --cinnabar: #9e2b25;
+  --cinnabar-soft: #c86b62;
+  --cinnabar-rgb: 158 43 37;
+  --on-cinnabar: #f7e7cf;
+  --ok: #74bb8e;
+  --warn: #c8963c;
+  --danger: #e0705f;
+  --info: #8fb4d9;
+
+  /* 中央牌桌（绒面） */
+  --felt: radial-gradient(ellipse 62% 58% at 50% 46%,
+      rgba(200, 164, 92, 0.13) 0%,
+      rgba(200, 164, 92, 0.05) 44%,
+      rgba(0, 0, 0, 0) 76%);
+  --felt-edge: rgba(200, 164, 92, 0.22);
+  --felt-inner: rgba(0, 0, 0, 0.45);
+  --felt-tex: rgba(255, 255, 255, 0.035);
+
+  /* 牌面 */
+  --card-face: #efe6d3;
+  --card-edge: #8a6f3c;
+  --card-back-1: #2b2320;
+  --card-back-2: #151110;
+
+  /* 座位卡信息层：立绘之上的压暗带（亮色换成宣纸带） */
+  --seat-info-a: rgba(8, 6, 4, 0.97);
+  --seat-info-b: rgba(8, 6, 4, 0.86);
+  --seat-rail-a: rgba(6, 4, 3, 0.88);
+  --seat-rail-b: rgba(6, 4, 3, 0.42);
+  --seat-chip-bg: rgba(0, 0, 0, 0.38);
+  --seat-chip-fg: var(--ink-faint);
+  --seat-pip-empty: #3a2f26;
+
+  /* 阴影（亮色用更低不透明度 + 偏暖黑） */
+  --shadow-1: 0 2px 8px rgba(0, 0, 0, 0.35);
+  --shadow-2: 0 10px 26px rgba(0, 0, 0, 0.45);
+  --shadow-3: 0 18px 48px rgba(0, 0, 0, 0.55);
+  --shadow-rgb: 0 0 0;
+
+  /* 字号 / 间距阶梯（对局界面严格执行） */
+  --fs-11: 11px;
+  --fs-12: 12px;
+  --fs-13: 13px;
+  --fs-14: 14px;
+  --fs-16: 16px;
+  --fs-20: 20px;
+  --fs-24: 24px;
+  --fs-32: 32px;
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-6: 24px;
+  --sp-8: 32px;
+}
+
+/* 白天 = 同一套设计的宣纸版本 */
+.theme-light {
+  --surface-0: #efe8db;
+  --surface-1: #f7f2e8;
+  --surface-2: #fdfaf3;
+  --surface-3: #f4ecdd;
+  --surface-raised: #ffffff;
+  --surface-scrim: rgba(58, 42, 24, 0.72);
+  --surface-scrim-weak: rgba(58, 42, 24, 0.34);
+
+  --ink-strong: #2b2014;
+  --ink: #46351f;
+  --ink-mute: #6b5a3e;
+  --ink-faint: #8a7a60;
+  --ink-inverse: #fdfaf3;
+  --ink-rgb: 70 53 31;
+
+  --line-soft: rgba(140, 105, 60, 0.22);
+  --line: rgba(140, 105, 60, 0.38);
+  --line-strong: rgba(139, 105, 20, 0.72);
+  --line-bronze: rgba(140, 105, 60, 0.42);
+
+  --gold-deep: #8b6914;
+  --gold: #a8842c;
+  --gold-strong: #8b6914;
+  --gold-rgb: 168 132 44;
+  --cinnabar: #a13a30;
+  --cinnabar-soft: #c06a5f;
+  --cinnabar-rgb: 161 58 48;
+  --on-cinnabar: #fff3d8;
+  --ok: #4f8a66;
+  --warn: #9a6b1f;
+  --danger: #a83a2d;
+  --info: #3f6a96;
+
+  --felt: radial-gradient(ellipse 62% 58% at 50% 46%,
+      rgba(176, 140, 68, 0.20) 0%,
+      rgba(176, 140, 68, 0.08) 46%,
+      rgba(176, 140, 68, 0) 78%);
+  --felt-edge: rgba(140, 105, 60, 0.26);
+  --felt-inner: rgba(120, 95, 55, 0.14);
+  --felt-tex: rgba(120, 95, 55, 0.05);
+
+  --card-face: #fbf6ec;
+  --card-edge: #a8842c;
+  --card-back-1: #f3e9d8;
+  --card-back-2: #e6d9c2;
+
+  --seat-info-a: rgba(250, 245, 234, 0.98);
+  --seat-info-b: rgba(250, 245, 234, 0.90);
+  --seat-rail-a: rgba(247, 242, 232, 0.95);
+  --seat-rail-b: rgba(247, 242, 232, 0.55);
+  --seat-chip-bg: rgba(140, 105, 60, 0.10);
+  --seat-chip-fg: #7a6a52;
+  --seat-pip-empty: #d8ccb8;
+
+  --shadow-1: 0 2px 8px rgba(90, 70, 40, 0.14);
+  --shadow-2: 0 10px 26px rgba(90, 70, 40, 0.16);
+  --shadow-3: 0 18px 48px rgba(90, 70, 40, 0.20);
+  --shadow-rgb: 90 70 40;
+}
 
 /* ===== 手牌扇形排列 ===== */
 .fan-card {
@@ -22,18 +182,30 @@
   z-index: 20;
 }
 
-/* ===== 技能发动横幅 ===== */
+/* ===== 技能发动横幅 =====
+   光晕铺在伪元素上，动画只改 opacity（合成层），不再逐帧重绘 box-shadow */
 @keyframes skillGlowPulse {
-  0% { box-shadow: 0 0 0 0 rgba(212, 175, 55, 0.9), 0 0 18px 6px rgba(212, 175, 55, 0.55); }
-  60% { box-shadow: 0 0 0 6px rgba(212, 175, 55, 0.25), 0 0 34px 14px rgba(212, 175, 55, 0.35); }
-  100% { box-shadow: 0 0 0 0 rgba(212, 175, 55, 0), 0 0 0 0 rgba(212, 175, 55, 0); }
+  0%   { opacity: 0.9; }
+  60%  { opacity: 0.35; }
+  100% { opacity: 0; }
 }
 .skill-glow {
+  position: relative;
+  border-color: var(--line-strong) !important;
+}
+.skill-glow::before {
+  content: '';
+  position: absolute;
+  inset: -6px;
+  border-radius: inherit;
+  pointer-events: none;
+  box-shadow: 0 0 18px 6px rgba(var(--gold-rgb) / 0.55), 0 0 34px 14px rgba(var(--gold-rgb) / 0.30);
+  opacity: 0;
+  will-change: opacity;
   animation: skillGlowPulse 1.4s ease-out;
-  border-color: #e8cf94 !important;
 }
 @media (prefers-reduced-motion: reduce) {
-  .skill-glow { animation: none; box-shadow: 0 0 20px 6px rgba(212, 175, 55, 0.45); }
+  .skill-glow::before { animation: none; opacity: 0.45; }
 }
 
 /* ===== AI 思考：头像外圈暖金呼吸光 =====
@@ -299,21 +471,36 @@
   animation: target-breathe 1.6s ease-in-out infinite;
   cursor: pointer;
 }
+/* 呼吸只改伪元素 opacity，描边颜色保持静态，避免逐帧重绘 outline + shadow */
 @keyframes target-breathe {
-  0%, 100% { outline-color: rgba(240, 216, 148, 0.55); box-shadow: 0 0 0 0 rgba(240, 216, 148, 0.18); }
-  50% { outline-color: rgba(240, 216, 148, 1); box-shadow: 0 0 16px 3px rgba(240, 216, 148, 0.28); }
+  0%, 100% { opacity: 0.35; }
+  50% { opacity: 1; }
+}
+.target-candidate::after {
+  content: '';
+  position: absolute;
+  inset: -4px;
+  border-radius: inherit;
+  pointer-events: none;
+  box-shadow: 0 0 16px 3px rgba(var(--gold-rgb) / 0.40);
+  opacity: 0;
+  will-change: opacity;
+  animation: target-breathe 1.6s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .target-candidate::after { animation: none; opacity: 0.6; }
 }
 .target-chip {
   padding: 2px 7px;
   border-radius: 999px;
-  font-size: 10px;
+  font-size: var(--fs-11);
   line-height: 1.2;
   font-weight: 700;
   letter-spacing: 0.08em;
-  color: #2a1f14;
-  background: linear-gradient(180deg, #f0d894, #c8a45c);
+  color: var(--ink-inverse);
+  background: linear-gradient(180deg, var(--gold-strong), var(--gold));
   border: 1px solid rgba(255, 244, 214, 0.7);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.45);
+  box-shadow: 0 2px 8px rgba(var(--shadow-rgb) / 0.45);
 }
 
 /* 手机端操作按钮触控面积 ≥ 44px（官方移动版操作条规格） */
@@ -2984,3 +3171,986 @@ a:focus-visible {
 @media (prefers-reduced-motion: reduce) {
   .phase-banner { animation: none; opacity: 0.92; }
 }
+
+
+/* ============================================================================
+   P0 · 令牌落地：对局界面全部表面改为 var() 驱动
+   —— 本节取代此前散落在各处的裸 hex；同名选择器写在文件末尾，
+   因此在层叠上覆盖旧值，同时不改动任何 class 名 / data-region 契约。
+   ============================================================================ */
+
+/* ---- 1. 座位卡：三行信息层（姓名+势力 / 勾玉+手牌+距离 / 装备槽） ---- */
+.seat-card {
+  background: var(--surface-1);
+  border-color: var(--line-bronze);
+  box-shadow: var(--shadow-2), inset 0 0 0 1px rgba(var(--gold-rgb) / 0.08);
+}
+.seat-card:hover {
+  box-shadow: var(--shadow-3);
+}
+.theme-light .seat-card {
+  background: var(--surface-3);
+  box-shadow: var(--shadow-2), inset 0 0 0 1px rgba(var(--gold-rgb) / 0.14);
+}
+
+/* 立绘压暗：暗色仍然是墨底，亮色改成「纸上的淡墨」——不再是黑块 */
+.seat-scrim {
+  background:
+    linear-gradient(180deg, rgba(0, 0, 0, 0) 0%, rgba(0, 0, 0, 0) 38%, var(--seat-info-b) 74%, var(--seat-info-a) 100%),
+    linear-gradient(180deg, var(--surface-scrim-weak) 0%, rgba(0, 0, 0, 0) 34%);
+}
+.theme-light .seat-scrim {
+  background:
+    linear-gradient(180deg, rgba(0, 0, 0, 0) 0%, rgba(0, 0, 0, 0) 34%, var(--seat-info-b) 70%, var(--seat-info-a) 100%),
+    linear-gradient(180deg, rgba(58, 42, 24, 0.26) 0%, rgba(58, 42, 24, 0) 30%);
+}
+
+/* 第一行：势力 + 姓名 + 身份，横排——窄屏也不会被裁 */
+.seat-topline {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
+  top: var(--sp-1);
+  left: var(--sp-1);
+  right: var(--sp-1);
+}
+.seat-kingdom {
+  flex: 0 0 auto;
+  color: var(--ink-strong);
+  background: rgba(0, 0, 0, 0.55);
+  border-color: var(--line);
+  box-shadow: var(--shadow-1);
+}
+.theme-light .seat-kingdom {
+  background: var(--surface-raised);
+  color: var(--k-main, var(--gold-deep));
+  border-color: var(--line);
+}
+
+/* 姓名列改为横排（.seat-name-rail 保留 class 名，语义改为「姓名条」） */
+.seat-name-rail {
+  position: static;
+  width: auto;
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0;
+  padding: 0;
+  background: none;
+}
+.seat-name {
+  writing-mode: horizontal-tb;
+  font-size: var(--fs-16);
+  line-height: 1.15;
+  letter-spacing: 0.04em;
+  color: var(--ink-strong);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.85);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+.theme-light .seat-name { text-shadow: 0 1px 3px rgba(255, 252, 246, 0.9); }
+.seat-skill {
+  writing-mode: horizontal-tb;
+  max-height: 1.3em;
+  font-size: var(--fs-11);
+  line-height: 1.3;
+  letter-spacing: 0.02em;
+  color: var(--k-main, var(--gold));
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.85);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+.theme-light .seat-skill { text-shadow: 0 1px 3px rgba(255, 252, 246, 0.9); }
+.seat-identity {
+  flex: 0 0 auto;
+  box-shadow: var(--shadow-1);
+}
+
+/* 第二 / 三行：同一条信息带，垂直堆叠，永不与姓名相交 */
+.seat-info {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  padding: var(--sp-2) var(--sp-2) calc(var(--sp-2) + 1px);
+  background: linear-gradient(0deg, var(--seat-info-a) 0%, var(--seat-info-b) 62%, rgba(0, 0, 0, 0) 100%);
+}
+.theme-light .seat-info {
+  background: linear-gradient(0deg, var(--seat-info-a) 0%, var(--seat-info-b) 64%, rgba(0, 0, 0, 0) 100%);
+}
+
+/* 第二行：勾玉 + 手牌 + 距离，一条 flex 行，窄屏自动换行 */
+.seat-statline {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-width: 0;
+  flex-wrap: wrap;
+}
+.seat-hp-corner {
+  position: static;
+  flex: 0 0 auto;
+  max-width: none;
+  z-index: auto;
+}
+.seat-pips {
+  gap: 2px;
+  max-width: none;
+  flex-wrap: wrap;
+}
+.seat-pip {
+  background: var(--seat-pip-empty);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.35);
+}
+.seat-pip.is-on { background: linear-gradient(180deg, var(--gold-strong), var(--gold)); }
+.seat-pip.is-low { background: linear-gradient(180deg, #f0a08f, var(--cinnabar)); }
+
+.seat-meta-row {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin-top: 0;
+  gap: var(--sp-2);
+  font-size: var(--fs-13);
+  color: var(--ink);
+  flex-wrap: wrap;
+}
+.seat-hand-count b { color: var(--gold-strong); font-size: var(--fs-14); }
+.theme-light .seat-hand-count b { color: var(--gold-deep); }
+.seat-distance { color: var(--ink-mute); font-size: var(--fs-13); }
+.seat-dead-tag { color: var(--danger); font-size: var(--fs-13); }
+
+/* 第三行：装备槽 */
+.seat-equip {
+  gap: 3px;
+  margin-top: 0;
+}
+.seat-equip-slot {
+  height: 20px;
+  font-size: var(--fs-12);
+  border-color: var(--line-soft);
+  background: var(--seat-chip-bg);
+  color: var(--seat-chip-fg);
+}
+.seat-equip-slot.is-on {
+  color: var(--gold-strong);
+  border-color: var(--line-strong);
+  background: rgba(var(--gold-rgb) / 0.18);
+}
+.theme-light .seat-equip-slot.is-on { color: var(--gold-deep); }
+.seat-equip-dot { background: var(--gold-strong); box-shadow: 0 0 4px rgba(var(--gold-rgb) / 0.9); }
+
+.seat-judge { margin-top: 0; }
+
+/* 回合中 / 选择目标 徽标 */
+.seat-turn-chip,
+.own-turn-chip {
+  color: var(--on-cinnabar);
+  background: var(--cinnabar);
+  border-color: var(--cinnabar-soft);
+  box-shadow: 0 2px 12px rgba(var(--cinnabar-rgb) / 0.55);
+}
+.target-chip {
+  color: var(--ink-inverse);
+  background: linear-gradient(180deg, var(--gold-strong), var(--gold));
+  border-color: rgba(255, 244, 214, 0.7);
+}
+
+/* 阵亡遮罩 */
+.seat-dead { background: var(--surface-scrim); }
+.seat-dead span { color: var(--ink-strong); }
+
+/* ---- 2. 中央牌桌：绒面层次 + 内阴影 + 极淡纹理 ---- */
+.table-felt {
+  background:
+    /* 极淡织纹 */
+    repeating-linear-gradient(45deg, var(--felt-tex) 0 1px, transparent 1px 5px),
+    repeating-linear-gradient(-45deg, var(--felt-tex) 0 1px, transparent 1px 5px),
+    /* 中心高光 */
+    var(--felt),
+    /* 绒面底 */
+    radial-gradient(ellipse 74% 70% at 50% 48%, var(--surface-3) 0%, var(--surface-1) 58%, var(--surface-0) 100%);
+  box-shadow:
+    inset 0 0 0 1px var(--felt-edge),
+    inset 0 26px 60px -30px rgba(0, 0, 0, 0.75),
+    inset 0 0 90px 0 var(--felt-inner);
+}
+.theme-light .table-felt {
+  background:
+    repeating-linear-gradient(45deg, var(--felt-tex) 0 1px, transparent 1px 5px),
+    var(--felt),
+    radial-gradient(ellipse 74% 70% at 50% 48%, var(--surface-raised) 0%, var(--surface-3) 60%, var(--surface-1) 100%);
+  box-shadow:
+    inset 0 0 0 1px var(--felt-edge),
+    inset 0 -18px 40px -28px rgba(120, 95, 55, 0.35),
+    inset 0 0 90px 0 var(--felt-inner);
+}
+
+/* ---- 3. 牌堆 / 弃牌堆：与牌桌同一语汇 ---- */
+.deck-stack-layer {
+  background: var(--card-back-1);
+  border-color: var(--line-bronze);
+  box-shadow: var(--shadow-1);
+}
+.deck-face {
+  background: linear-gradient(155deg, var(--card-back-1) 0%, var(--card-back-2) 60%, var(--surface-0) 100%);
+  border-color: var(--line-bronze);
+  box-shadow: var(--shadow-3);
+}
+.deck-badge {
+  color: var(--ink-inverse);
+  background: linear-gradient(180deg, var(--gold-strong), var(--gold));
+  border-color: rgba(var(--gold-rgb) / 0.85);
+  box-shadow: var(--shadow-2);
+}
+.deck-badge.is-low {
+  color: var(--on-cinnabar);
+  background: linear-gradient(180deg, var(--cinnabar-soft), var(--cinnabar));
+  border-color: var(--cinnabar-soft);
+  box-shadow: 0 0 0 2px rgba(var(--cinnabar-rgb) / 0.3), var(--shadow-2);
+}
+.discard-badge {
+  color: var(--ink-inverse);
+  background: linear-gradient(180deg, var(--gold-strong), var(--gold));
+  border-color: rgba(var(--gold-rgb) / 0.8);
+}
+.deck-caption { color: var(--ink-mute); }
+.deck-empty {
+  color: var(--ink-faint);
+  border-color: var(--line);
+  background: var(--seat-chip-bg);
+}
+
+/* ---- 4. 战报 / 阶段条 / 顺序条：统一为纸面卡片 ---- */
+.log-panel {
+  border-color: var(--line);
+  background: linear-gradient(168deg, var(--surface-2) 0%, var(--surface-1) 100%);
+  box-shadow: var(--shadow-2), inset 0 0 0 1px rgba(var(--gold-rgb) / 0.05);
+}
+.theme-light .log-panel {
+  border-color: var(--line);
+  background: linear-gradient(168deg, var(--surface-2) 0%, var(--surface-3) 100%);
+  box-shadow: var(--shadow-1), inset 0 0 0 1px rgba(var(--gold-rgb) / 0.08);
+}
+.log-head { border-color: var(--line-soft); background: rgba(var(--gold-rgb) / 0.05); }
+.log-head-title { color: var(--gold); }
+.theme-light .log-head-title { color: var(--gold-deep); }
+.log-head-count { color: var(--ink-faint); }
+.log-row { color: var(--ink); }
+.log-row b { color: var(--ink-strong); }
+.theme-light .log-row b { color: var(--ink-strong); }
+
+/* 战报行按语义着色（明暗各一套，不再写死深色块） */
+.log-line {
+  border-left: 2px solid var(--log-accent, var(--line));
+  background: var(--log-bg, rgba(var(--gold-rgb) / 0.06));
+  color: var(--log-fg, var(--ink));
+}
+.log-line[data-type="danger"] { --log-accent: var(--cinnabar-soft); --log-fg: #f0c8c2; --log-bg: rgba(var(--cinnabar-rgb) / 0.16); }
+.log-line[data-type="success"] { --log-accent: var(--gold); --log-fg: #f0e0b8; --log-bg: rgba(var(--gold-rgb) / 0.16); }
+.log-line[data-type="skill"] { --log-accent: var(--info); --log-fg: #cfe0ee; --log-bg: rgba(143, 180, 217, 0.14); }
+.log-line[data-type="chat"] { --log-accent: var(--gold); --log-fg: #f0e8c8; --log-bg: rgba(var(--gold-rgb) / 0.12); }
+.log-line[data-type="warning"] { --log-accent: var(--warn); --log-fg: #f0dcb8; --log-bg: rgba(200, 150, 60, 0.14); }
+.log-line[data-type="info"] { --log-accent: var(--line-bronze); --log-fg: var(--ink); --log-bg: rgba(var(--gold-rgb) / 0.07); }
+.theme-light .log-line[data-type="danger"] { --log-fg: #6d2018; --log-bg: rgba(161, 58, 48, 0.12); }
+.theme-light .log-line[data-type="success"] { --log-fg: #5a4210; --log-bg: rgba(168, 132, 44, 0.14); }
+.theme-light .log-line[data-type="skill"] { --log-fg: #234a6e; --log-bg: rgba(63, 106, 150, 0.12); }
+.theme-light .log-line[data-type="chat"] { --log-fg: #5a4210; --log-bg: rgba(168, 132, 44, 0.10); }
+.theme-light .log-line[data-type="warning"] { --log-fg: #6b4a12; --log-bg: rgba(154, 107, 31, 0.12); }
+.theme-light .log-line[data-type="info"] { --log-fg: var(--ink); --log-bg: rgba(140, 105, 60, 0.07); }
+
+/* 手机端最近战报胶囊 */
+.mobile-log-line {
+  color: var(--ink-strong);
+  background: color-mix(in srgb, var(--surface-2) 94%, transparent);
+  border-color: var(--line);
+  box-shadow: var(--shadow-1);
+}
+.theme-light .mobile-log-line {
+  color: var(--ink-strong);
+  background: color-mix(in srgb, var(--surface-2) 96%, transparent);
+}
+
+/* 阶段条 */
+.phase-panel {
+  border-color: var(--line);
+  background: linear-gradient(168deg, var(--surface-2) 0%, var(--surface-1) 100%);
+  box-shadow: var(--shadow-2), inset 0 0 0 1px rgba(var(--gold-rgb) / 0.06);
+}
+.theme-light .phase-panel {
+  background: linear-gradient(168deg, var(--surface-2) 0%, var(--surface-3) 100%);
+  box-shadow: var(--shadow-1), inset 0 0 0 1px rgba(var(--gold-rgb) / 0.08);
+}
+.phase-panel-label { color: var(--ink-mute); }
+.phase-panel-name { color: var(--gold); }
+.theme-light .phase-panel-name { color: var(--gold-deep); }
+.phase-step {
+  color: var(--ink-faint);
+  background: transparent;
+}
+.phase-step[data-state="passed"] { color: var(--gold-deep); }
+.theme-light .phase-step[data-state="passed"] { color: var(--gold-deep); }
+.phase-step[data-state="active"] {
+  color: var(--ink-inverse);
+  background: linear-gradient(180deg, var(--gold-strong), var(--gold));
+  box-shadow: 0 0 10px rgba(var(--gold-rgb) / 0.5);
+}
+.phase-link { background: var(--line-soft); }
+.phase-link[data-state="passed"],
+.phase-link[data-state="active"] { background: var(--gold); }
+.phase-meter { background: rgba(var(--ink-rgb) / 0.12); }
+.phase-meter-fill { background: var(--gold); }
+.phase-meter-fill.is-low { background: var(--danger); }
+.phase-clock { color: var(--gold-strong); }
+.theme-light .phase-clock { color: var(--gold-deep); }
+.phase-clock.is-low { color: var(--danger); }
+
+/* 出牌顺序条 */
+.turn-rail-head {
+  color: var(--ink-mute);
+  border-color: var(--line-soft);
+}
+.turn-rail-row {
+  border-color: var(--line-soft);
+  background: rgba(var(--gold-rgb) / 0.05);
+  color: var(--ink);
+}
+.theme-light .turn-rail-row { background: rgba(140, 105, 60, 0.06); }
+.turn-rail-row[data-active="true"] {
+  border-color: var(--line-strong);
+  background: linear-gradient(90deg, rgba(var(--gold-rgb) / 0.26), rgba(var(--gold-rgb) / 0.06));
+  box-shadow: 0 0 12px rgba(var(--gold-rgb) / 0.28);
+}
+.turn-rail-idx { color: var(--ink-faint); }
+.turn-rail-name { color: var(--k-main, var(--ink-strong)); }
+.turn-rail-state { color: var(--ink-mute); background: rgba(var(--ink-rgb) / 0.08); }
+.turn-rail-row[data-active="true"] .turn-rail-state {
+  color: var(--ink-inverse);
+  background: linear-gradient(180deg, var(--gold-strong), var(--gold));
+}
+
+/* 手机顺序条胶囊 */
+.turn-chip {
+  border-color: var(--line);
+  background: color-mix(in srgb, var(--surface-2) 88%, transparent);
+  color: var(--k-main, var(--ink-strong));
+}
+.turn-chip[data-active="true"] {
+  color: var(--ink-inverse);
+  border-color: var(--line-strong);
+  background: linear-gradient(180deg, var(--gold-strong), var(--gold));
+}
+
+/* 左上身份目标条 */
+.objective-strip {
+  border-color: var(--line);
+  background: linear-gradient(180deg, var(--surface-2), var(--surface-1));
+  box-shadow: var(--shadow-1);
+}
+.objective-chip { color: var(--ink); border-color: var(--line-soft); background: rgba(var(--gold-rgb) / 0.08); }
+.objective-chip.is-主公 { color: var(--gold-strong); border-color: var(--line-strong); }
+.objective-chip.is-忠臣 { color: var(--gold); }
+.objective-chip.is-反贼 { color: var(--cinnabar-soft); border-color: rgba(var(--cinnabar-rgb) / 0.5); }
+.objective-chip.is-内奸 { color: var(--info); border-color: rgba(143, 180, 217, 0.45); }
+.objective-goal { color: var(--ink-mute); }
+.theme-light .objective-chip.is-主公 { color: var(--gold-deep); }
+.theme-light .objective-chip.is-忠臣 { color: var(--gold-deep); }
+.theme-light .objective-chip.is-反贼 { color: var(--cinnabar); }
+.theme-light .objective-chip.is-内奸 { color: var(--info); }
+
+/* 主视角回合徽标 */
+.own-turn-chip { color: var(--on-cinnabar); background: var(--cinnabar); border-color: var(--cinnabar-soft); }
+
+/* ---- 5. 底部：手牌托盘 / 计数 ---- */
+.hand-tray {
+  background: radial-gradient(ellipse 62% 100% at 50% 100%, rgba(var(--gold-rgb) / 0.12) 0%, rgba(0, 0, 0, 0) 72%);
+}
+.hand-tray::after { background: linear-gradient(90deg, transparent, var(--line), transparent); }
+.hand-count-label { color: var(--ink-faint); }
+.hand-count-value { color: var(--gold-strong); }
+.theme-light .hand-count-value { color: var(--gold-deep); }
+.hand-chip {
+  background: color-mix(in srgb, var(--surface-2) 82%, transparent);
+  border-color: var(--line);
+  color: var(--ink-mute);
+}
+.hand-chip b { color: var(--gold-strong); }
+.theme-light .hand-chip b { color: var(--gold-deep); }
+
+/* ---- 6. 牌面：墨框 + 纸纹 ---- */
+.card-frame {
+  border-color: var(--card-edge);
+  box-shadow: var(--shadow-1);
+}
+.card-frame.is-selected {
+  border-color: var(--gold-strong);
+  box-shadow: 0 10px 30px rgba(var(--shadow-rgb) / 0.55), 0 0 20px rgba(var(--gold-rgb) / 0.45);
+}
+.card-ink-rule { background: var(--card-edge); }
+
+/* ---- 7. 焦点环 / 触控区 ---- */
+:where(button, [role="button"], a, input, select, textarea):focus-visible {
+  outline: 2px solid var(--line-strong);
+  outline-offset: 2px;
+}
+@media (max-width: 767px) {
+  .turn-rail-fold,
+  .turn-strip-fold,
+  .log-panel button,
+  .turn-rail-mini,
+  .turn-strip-mini { min-width: 44px; min-height: 44px; }
+  .seat-equip-slot { min-height: 20px; }
+}
+
+
+
+/* ============================================================================
+   P0 · 手机端重排（390×844 / 375×667 等）
+   问题一：座位卡竖排姓名被裁、「手牌 4 距 1」与姓名列重叠
+   问题二：牌桌下方 ~140px 纯空白（field 定高 + bottom 不消费剩余高度）
+   解决：座位卡信息层改三行横排；field 改为 flex 增长吃掉剩余高度，
+   操作条改为固定定位（用 --m-seats 常量），不再依赖 --m-field 反推。
+   ============================================================================ */
+@media (max-width: 767px) {
+  :root {
+    --m-seats: 204px;   /* 52 顶部内边距 + 150 卡高 + 2 底部 */
+    --m-bar: 44px;      /* 操作条高度 */
+    --m-bar-gap: 8px;
+  }
+
+  /* 外壳：dvh 跟随浏览器 UI 收缩，避免地址栏吃掉高度后底部再留白 */
+  [data-density].h-screen { height: 100vh; height: 100dvh; }
+
+  /* 座位条：内容高度，不参与剩余空间分配 */
+  [data-region="seats"] {
+    flex: 0 0 auto !important;
+    padding: 52px 2px 2px !important;
+  }
+
+  /* 场地吃掉剩余高度：多出来的空间落在牌桌区域，而不是变成屏幕底部死白 */
+  [data-region="field"] {
+    flex: 1 1 auto !important;
+    height: auto !important;
+    min-height: var(--m-field, 170px);
+    padding: calc(28px + var(--m-bar) + var(--m-bar-gap)) 0 var(--sp-2) !important;
+    align-items: center !important;
+    justify-content: center !important;
+  }
+
+  /* 操作条：固定定位到座位条下方，不再靠 --m-field 反推 */
+  .action-bar {
+    position: fixed !important;
+    left: 6px !important;
+    right: 6px !important;
+    top: calc(var(--m-seats) + 28px) !important;
+    bottom: auto !important;
+    margin: 0 !important;
+    z-index: 45;
+  }
+
+  /* 底部：内容贴底，不吃空白 */
+  [data-region="bottom"] {
+    flex: 0 0 auto !important;
+    padding-bottom: max(var(--sp-2), env(safe-area-inset-bottom)) !important;
+  }
+
+  /* ---- 座位卡三行信息层（窄屏） ---- */
+  [data-region="seats"] .seat-card {
+    width: 96px;
+    height: 150px;
+  }
+  [data-region="seats"] .seat-topline {
+    top: 3px;
+    left: 3px;
+    right: 3px;
+    gap: 3px;
+  }
+  [data-region="seats"] .seat-kingdom { width: 20px; height: 20px; font-size: var(--fs-12); }
+  [data-region="seats"] .seat-identity { min-width: 20px; height: 19px; padding: 0 3px; font-size: var(--fs-12); }
+  [data-region="seats"] .seat-name { font-size: var(--fs-13); letter-spacing: 0.02em; }
+  [data-region="seats"] .seat-skill { font-size: var(--fs-11); }
+
+  [data-region="seats"] .seat-info {
+    padding: var(--sp-1) 3px 3px;
+    gap: 2px;
+  }
+  [data-region="seats"] .seat-meta-row {
+    gap: 3px;
+    font-size: var(--fs-11);
+    flex-wrap: wrap;
+    row-gap: 1px;
+  }
+  [data-region="seats"] .seat-hp-corner { max-width: none; }
+  [data-region="seats"] .seat-pips { gap: 1.5px; max-width: none; }
+  [data-region="seats"] .seat-pip { width: 6px; height: 10px; border-radius: 2px 2px 4px 4px; }
+  [data-region="seats"] .seat-hand-count { font-size: var(--fs-11); }
+  [data-region="seats"] .seat-hand-count b { font-size: var(--fs-11); }
+  [data-region="seats"] .seat-distance { font-size: var(--fs-11); }
+  [data-region="seats"] .seat-equip { gap: 2px; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  [data-region="seats"] .seat-equip-slot { height: 16px; font-size: var(--fs-11); border-radius: 3px; }
+  [data-region="seats"] .seat-judge span { height: 15px; line-height: 13px; font-size: var(--fs-11); }
+
+  /* 主视角卡：信息层同样三行 */
+  .own-seat {
+    width: calc(100% - 64px);
+    height: 140px;
+  }
+  .own-seat .seat-topline { top: 4px; left: 4px; right: 4px; gap: 4px; }
+  .own-seat .seat-kingdom { width: 22px; height: 22px; font-size: var(--fs-12); }
+  .own-seat .seat-identity { min-width: 22px; height: 20px; padding: 0 4px; font-size: var(--fs-12); }
+  .own-seat .seat-name { font-size: var(--fs-16); }
+  .own-seat .seat-skill { font-size: var(--fs-12); }
+  .own-seat .seat-info { padding: var(--sp-1) 6px var(--sp-2); gap: 3px; }
+  .own-seat .seat-meta-row { gap: var(--sp-2); font-size: var(--fs-12); }
+  .own-seat .seat-hand-count b { font-size: var(--fs-13); }
+  .own-seat .seat-distance { font-size: var(--fs-12); }
+  .own-seat .seat-pip { width: 9px; height: 14px; }
+  .own-seat .seat-equip-slot { height: 18px; font-size: var(--fs-12); }
+
+  /* 手机端牌桌：占满场地剩余高度，给牌堆一个真正的桌面 */
+  [data-region="felt"] {
+    top: 50%;
+    width: min(92vw, 560px);
+    height: min(46vh, 320px);
+  }
+
+  /* 手牌托盘贴住屏幕底部 */
+  .hand-tray { bottom: 0; height: 72px; }
+}
+
+
+
+/* ============================================================================
+   P1 · 动效收敛
+   - 只允许动 transform / opacity（box-shadow、filter、outline-color 的循环
+     动画已改为伪元素 opacity，见 skillGlowPulse / target-breathe）。
+   - prefers-reduced-motion：把所有动画与过渡压成静态，且不保留 will-change，
+     避免浏览器仍为已停掉的动画预留合成层。
+   ============================================================================ */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-delay: 0s !important;
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-delay: 0s !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+    will-change: auto !important;
+  }
+  /* 装饰性循环彻底不跑（不是压到 0.001ms 后仍留一帧） */
+  .ai-thinking::before,
+  .hp-fish::after,
+  .target-candidate::after,
+  .skill-glow::before,
+  .turn-glow,
+  .seat-scrim::after,
+  .hero-pick-shade::after,
+  .deck-fade,
+  .discard-count,
+  .phase-banner {
+    animation: none !important;
+  }
+  /* 静态等价物：保留「正在发生」的语义，去掉节奏 */
+  .ai-thinking::before { opacity: 0.5 !important; }
+  .skill-glow::before { opacity: 0.45 !important; }
+  .target-candidate::after { opacity: 0.6 !important; }
+  .deck-badge.is-low,
+  .phase-clock.is-low { animation: none !important; }
+}
+
+
+
+/* ============================================================================
+   P0 修正 · 座位卡可读性
+   上一版把姓名条搬到顶部并横排，结果直接压在立绘高光上（马超 / 张辽 名字几乎
+   读不出来）。姓名仍然回到卡面下缘的信息带：那里有稳定压暗层，
+   而「不与手牌/距离重叠」由信息带内部的三段 flex 保证，不依赖竖排。
+   ============================================================================ */
+.seat-topline {
+  justify-content: space-between;
+  align-items: flex-start;
+}
+/* 姓名条从顶栏摘出来，回到 bottom 信息带的第一行 */
+.seat-name-rail {
+  position: static;
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 0;
+  background: none;
+}
+.seat-name {
+  font-size: var(--fs-16);
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  color: var(--ink-strong);
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.95), 0 0 12px rgba(0, 0, 0, 0.7);
+}
+.theme-light .seat-name { text-shadow: 0 1px 3px rgba(255, 252, 246, 0.95); }
+.seat-skill {
+  font-size: var(--fs-11);
+  font-weight: 400;
+  color: var(--k-main, var(--gold));
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.95);
+}
+.theme-light .seat-skill { text-shadow: 0 1px 2px rgba(255, 252, 246, 0.95); }
+
+/* 三行紧凑堆叠：姓名 → 勾玉/手牌/距离 → 装备 */
+.seat-info {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: var(--sp-2) var(--sp-2) calc(var(--sp-2) + 1px);
+}
+.seat-meta-row {
+  flex: 1 1 100%;
+  gap: var(--sp-2);
+  flex-wrap: nowrap;
+  min-width: 0;
+}
+.seat-hp-corner { flex: 0 0 auto; }
+.seat-pips { flex-wrap: nowrap; }
+
+@media (max-width: 767px) {
+  [data-region="seats"] .seat-name { font-size: var(--fs-13); }
+  [data-region="seats"] .seat-skill { font-size: var(--fs-11); }
+  [data-region="seats"] .seat-info { gap: 2px; padding: 3px 3px 4px; }
+  [data-region="seats"] .seat-meta-row { gap: 4px; flex-wrap: nowrap; }
+  [data-region="seats"] .seat-name-rail { gap: 3px; }
+  .own-seat .seat-name { font-size: var(--fs-16); }
+}
+
+/* 手机：牌桌不要吃掉整块场地——它是桌面，不是背景板 */
+@media (max-width: 767px) {
+  [data-region="felt"] {
+    width: min(88vw, 460px);
+    height: min(38vh, 250px);
+  }
+}
+
+
+
+/* ============================================================================
+   P0 修正 · 白天模式的弹窗与提示
+   弹窗原本两套主题下恒为墨底（“正式场合配色”），但在白天模式里它读起来像
+   一块突然出现的深色贴片。改为同一套描金形制的宣纸版本：纸底、赭线、墨字。
+   ============================================================================ */
+.theme-light .modal-frame,
+.theme-light .modal-shell {
+  background: linear-gradient(168deg, var(--surface-raised) 0%, var(--surface-3) 52%, var(--surface-1) 100%);
+  border-color: var(--line);
+  box-shadow:
+    0 0 0 1px rgba(var(--gold-rgb) / 0.10),
+    var(--shadow-3),
+    inset 0 0 70px rgba(var(--gold-rgb) / 0.06);
+}
+.theme-light .modal-frame::before { border-color: rgba(var(--gold-rgb) / 0.20); }
+.theme-light .modal-frame::after {
+  background:
+    linear-gradient(90deg, var(--gold) , var(--gold)) left top / 15px 1px no-repeat,
+    linear-gradient(180deg, var(--gold), var(--gold)) left top / 1px 15px no-repeat,
+    linear-gradient(270deg, var(--gold), var(--gold)) right top / 15px 1px no-repeat,
+    linear-gradient(180deg, var(--gold), var(--gold)) right top / 1px 15px no-repeat,
+    linear-gradient(90deg, var(--gold), var(--gold)) left bottom / 15px 1px no-repeat,
+    linear-gradient(0deg, var(--gold), var(--gold)) left bottom / 1px 15px no-repeat,
+    linear-gradient(270deg, var(--gold), var(--gold)) right bottom / 15px 1px no-repeat,
+    linear-gradient(0deg, var(--gold), var(--gold)) right bottom / 1px 15px no-repeat;
+}
+.theme-light .modal-frame-danger {
+  border-color: var(--cinnabar-soft);
+  box-shadow:
+    0 0 0 1px rgba(var(--cinnabar-rgb) / 0.16),
+    var(--shadow-3),
+    0 0 48px rgba(var(--cinnabar-rgb) / 0.14);
+}
+.theme-light .modal-title {
+  background: linear-gradient(180deg, #8b6914 0%, #6b4a12 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+}
+.theme-light .modal-text { color: var(--ink); }
+.theme-light .modal-text-dim { color: var(--ink-mute); }
+.theme-light .btn-ink {
+  background: var(--surface-raised);
+  color: var(--ink);
+  border-color: var(--line);
+}
+.theme-light .btn-ink:hover:not(:disabled) {
+  color: var(--ink-strong);
+  border-color: var(--gold);
+  background: var(--surface-3);
+}
+.theme-light .btn-gold {
+  background: linear-gradient(180deg, var(--gold-strong), var(--gold));
+  color: var(--ink-inverse);
+  border-color: var(--gold-deep);
+  box-shadow: var(--shadow-1), inset 0 1px 0 rgba(255, 255, 255, 0.45);
+}
+.theme-light .modal-mask {
+  background:
+    radial-gradient(ellipse 82% 66% at 50% 44%, rgba(120, 95, 55, 0.30) 0%, rgba(90, 70, 40, 0.46) 78%),
+    rgba(90, 70, 40, 0.22);
+}
+
+/* 出牌铭牌：白天改为纸底墨字 */
+.card-plate { color: var(--ink-strong); }
+.theme-light .card-plate {
+  color: var(--ink-strong);
+  background: linear-gradient(180deg, var(--surface-raised), var(--surface-3));
+  border-color: var(--gold);
+  box-shadow: var(--shadow-2), inset 0 0 20px rgba(var(--gold-rgb) / 0.10);
+}
+
+/* 技能牌按钮 / 通用金墨按钮：白天版本 */
+.theme-light .skill-btn {
+  color: var(--ink);
+  border-color: var(--line);
+  background: linear-gradient(180deg, var(--surface-raised), var(--surface-3));
+}
+.theme-light .skill-btn:hover:not(:disabled) {
+  color: var(--ink-strong);
+  border-color: var(--gold);
+}
+.theme-light .ui-panel {
+  border-color: var(--line);
+  background: linear-gradient(168deg, var(--surface-2) 0%, var(--surface-3) 100%);
+  box-shadow: var(--shadow-1), inset 0 0 0 1px rgba(var(--gold-rgb) / 0.08);
+}
+
+/* 弹窗内滚动条 / 输入框在白天不要留深色轨道 */
+.theme-light ::-webkit-scrollbar-track { background: var(--surface-3); }
+.theme-light ::-webkit-scrollbar-thumb { background: var(--gold); }
+.theme-light ::-webkit-scrollbar-thumb:hover { background: var(--gold-deep); }
+
+
+
+/* ============================================================================
+   P0 修正 · 窄屏姓名不再截断
+   96px 座位卡上「姓名 + 【技能】」横排会挤到省略号（董… / 蔡…）。
+   窄屏改为上下两行：姓名独占一整行宽度，技能名单独一行。
+   ============================================================================ */
+@media (max-width: 767px) {
+  /* 旧的窄屏规则把姓名栏钉成 22px 竖条（width:22px；top:26px；padding:3px 0 5px），
+     这里必须显式复位，否则姓名被压成「郭…」 */
+  [data-region="seats"] .seat-name-rail {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0;
+    width: auto;
+    min-width: 0;
+    max-width: none;
+    top: auto;
+    left: auto;
+    right: auto;
+    padding: 0;
+    position: static;
+  }
+  [data-region="seats"] .seat-name {
+    max-width: 100%;
+    font-size: var(--fs-13);
+    line-height: 1.2;
+  }
+  [data-region="seats"] .seat-skill {
+    max-width: 100%;
+    font-size: var(--fs-11);
+    line-height: 1.2;
+  }
+  .own-seat .seat-name-rail {
+    flex-direction: row;
+    align-items: baseline;
+    gap: 6px;
+    width: auto;
+    padding: 0;
+    top: auto;
+  }
+  .own-seat .seat-name { font-size: var(--fs-16); }
+
+  /* 牌桌再收一档：它是桌面，不该占掉半个屏幕 */
+  [data-region="felt"] {
+    width: min(84vw, 420px);
+    height: min(32vh, 210px);
+  }
+}
+
+/* 桌面端也放宽一点：技能名过长时优先保住姓名 */
+@media (min-width: 768px) {
+  .seat-name { flex: 0 1 auto; }
+  .seat-skill { flex: 1 1 auto; min-width: 0; }
+}
+
+
+
+/* ============================================================================
+   P0 修正 · 桌面中央区对齐基线
+   之前牌桌椭圆按 field 的 content-box 居中，而牌堆按 flex 居中，两者差了一个
+   padding-top（座位高度），于是「桌面」和「桌上的牌」错位，中央读起来松散。
+   这里把牌桌改成与牌堆同一套定位基准：都用 field 的 padding-box 中心。
+   ============================================================================ */
+@media (min-width: 768px) {
+  [data-region="felt"] {
+    top: calc(50% + (44px + var(--sc-h) + 12px) / 2);
+  }
+  /* 战报栏 / 顺序条 / 牌桌共用一条上边界：座位行下沿 + 12px */
+  [data-region="log"],
+  [data-region="turn-rail"] {
+    border-top: 1px solid var(--line-soft);
+    border-top-left-radius: 0;
+    border-top-right-radius: 0;
+  }
+  /* 牌桌与底部的呼吸：让阶段条贴合牌桌下沿，中央不再「四角贴片 + 中间空」 */
+  .phase-panel { bottom: calc(var(--sp-2) + 2px) !important; }
+}
+@media (min-width: 768px) and (max-height: 700px) {
+  [data-region="felt"] { top: calc(50% + (48px + var(--sc-h) + 6px) / 2); }
+}
+@media (min-width: 768px) and (max-height: 640px) {
+  [data-region="felt"] { top: calc(50% + (36px + var(--sc-h) + 2px) / 2); }
+}
+[data-seat-stagger="true"] [data-region="felt"] {
+  top: calc(50% + (44px + var(--sc-h) + 38px) / 2);
+}
+
+
+
+/* ============================================================================
+   P0 修正 · 窄屏座位信息不互相压叠
+   「手牌 4 距 2」在 96px 卡上仍会被相邻卡吃掉末尾一位数字。
+   勾玉与文字分开排：勾玉独立一行左侧，手牌/距离占右侧，空间不够时距离换行。
+   ============================================================================ */
+@media (max-width: 767px) {
+  [data-region="seats"] .seat-meta-row {
+    flex-wrap: wrap;
+    row-gap: 0;
+    column-gap: 4px;
+  }
+  [data-region="seats"] .seat-distance { margin-left: 0; }
+  /* 座位条允许 2px 呼吸，避免卡片边框互相贴住后信息看起来被裁 */
+  [data-region="seats"] { column-gap: 4px !important; }
+  @media (max-width: 430px) {
+    [data-region="seats"] > * + * { margin-left: -4px; }
+  }
+
+  /* 手机手牌：不横向溢出屏幕，按可用宽度收缩 */
+  [data-region="hand"] { padding-left: 4px; padding-right: 4px; }
+  [data-region="hand"] > div.flex {
+    padding-left: 6px;
+    padding-right: 6px;
+    max-width: 100%;
+  }
+}
+
+
+
+/* ============================================================================
+   P0 修正 · WCAG AA 实测补丁
+   实测（qa/contrast.mjs，页面内取 computed style 反算）三处不达标：
+   1) 白天 出牌顺序·姓名 ratio 1.79 —— --k-main 势力金 #d4b062 在米纸上过浅；
+   2) 手牌计数标签 白天 3.64 / 黑夜 4.43 —— --ink-faint 用在 16px 正文上偏弱；
+   3) 战报行白天选择器未命中（LogPanel 在 md 以下 hidden，非对比度问题）。
+   修法：白天把势力色压深一档再用于文字；计数标签改用 --ink-mute。
+   ============================================================================ */
+.turn-rail-name {
+  color: var(--ink-strong);
+  /* 势力色只留作左侧色条语义，不再作为正文颜色 */
+}
+.turn-rail-row .turn-rail-name { color: var(--ink-strong); }
+.theme-light .turn-rail-name { color: var(--ink-strong); }
+
+.hand-count-label { color: var(--ink-mute); }
+.theme-light .hand-count-label { color: var(--ink-mute); }
+
+/* 势力色在亮色主题下统一压深，只用于装饰而非长文本 */
+.theme-light .kingdom-wei { --k-main: #2f6ea8; --k-line: rgba(47, 110, 168, 0.55); --k-bg: rgba(47, 110, 168, 0.10); }
+.theme-light .kingdom-shu { --k-main: #a53a30; --k-line: rgba(165, 58, 48, 0.55); --k-bg: rgba(165, 58, 48, 0.10); }
+.theme-light .kingdom-wu  { --k-main: #2f7a4b; --k-line: rgba(47, 122, 75, 0.55); --k-bg: rgba(47, 122, 75, 0.10); }
+.theme-light .kingdom-qun { --k-main: #8b6914; --k-line: rgba(139, 105, 20, 0.55); --k-bg: rgba(139, 105, 20, 0.10); }
+
+/* 顺序条上的姓名需要 ≥3:1（14px 粗体），势力色只做左边框 */
+.turn-rail-row[class*="kingdom-"] .turn-rail-name { color: var(--ink-strong); }
+
+/* 座位技能名同理：小字必须压住纸面/立绘 */
+.seat-skill { color: var(--k-main, var(--gold)); }
+.theme-light .seat-skill { color: var(--k-main, var(--gold-deep)); }
+
+
+
+/* 当前回合的小标签：金底上的字必须用墨色，不能被 --ink-mute 的浅色覆盖 */
+.turn-rail-row[data-active="true"] .turn-rail-state {
+  color: var(--ink-inverse) !important;
+  font-weight: 700;
+  background: linear-gradient(180deg, var(--gold-strong), var(--gold));
+}
+.theme-light .turn-rail-row[data-active="true"] .turn-rail-state {
+  color: var(--ink-inverse) !important;
+  background: linear-gradient(180deg, var(--gold-strong), var(--gold));
+}
+
+
+
+/* 渐变底的小标签补一层同色实心底：渲染不变，但背景色可被工具/取色器读到，
+   也让高对比模式与文字阴影缺失时仍保有正确的对比度 */
+.turn-rail-row[data-active="true"] .turn-rail-state {
+  background-color: var(--gold);
+  background-image: linear-gradient(180deg, var(--gold-strong), var(--gold));
+}
+.seat-equip-slot.is-on { background-color: rgba(var(--gold-rgb) / 0.18); }
+.target-chip {
+  background-color: var(--gold);
+  background-image: linear-gradient(180deg, var(--gold-strong), var(--gold));
+}
+.phase-step[data-state="active"] {
+  background-color: var(--gold);
+  background-image: linear-gradient(180deg, var(--gold-strong), var(--gold));
+}
+.deck-badge.is-low {
+  background-color: var(--cinnabar);
+  background-image: linear-gradient(180deg, var(--cinnabar-soft), var(--cinnabar));
+}
+
+
+
+/* ============================================================================
+   P0 · 操作条按钮的三态语义类（ActionBar 内联 hex 的去向）
+   ============================================================================ */
+.action-btn-idle {
+  background: var(--surface-3);
+  color: var(--ink-mute);
+  border-color: var(--line-bronze);
+}
+.action-btn-idle:hover:not(:disabled) {
+  border-color: var(--gold);
+  color: var(--gold-strong);
+}
+.theme-light .action-btn-idle {
+  background: var(--surface-raised);
+  color: var(--ink);
+  border-color: var(--line);
+}
+.theme-light .action-btn-idle:hover:not(:disabled) { color: var(--gold-deep); }
+
+.action-btn-active {
+  background: var(--cinnabar);
+  color: var(--on-cinnabar);
+  border-color: var(--cinnabar-soft);
+}
+.action-btn-active:hover:not(:disabled) { filter: brightness(1.08); }
+
+.action-btn-disabled {
+  background: var(--surface-1);
+  color: var(--ink-faint);
+  border-color: var(--line-soft);
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+.theme-light .action-btn-disabled {
+  background: var(--surface-3);
+  color: var(--ink-faint);
+  border-color: var(--line-soft);
+}
+

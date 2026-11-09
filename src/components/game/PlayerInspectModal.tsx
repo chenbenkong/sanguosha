@@ -24,14 +24,14 @@ export const PlayerInspectModal: React.FC<{
           <h3 className="modal-title text-3xl font-ancient mb-2">武将详情</h3>
           <div className="w-24 modal-divider mx-auto"></div>
         </div>
-        <div className="flex items-center gap-4 mb-5 p-4 bg-black/30 rounded-lg border border-[#8b7355]/30">
+        <div className="flex items-center gap-4 mb-5 p-4 bg-[rgba(var(--gold-rgb)/0.06)] rounded-lg border border-[var(--line)]">
           <div className="flex-none flex flex-col items-center gap-1.5">
             <img
               src={p.hero.avatarUrl}
               alt={p.hero.name}
               loading="eager"
               decoding="async"
-              className={`w-20 h-[120px] rounded-lg border-2 object-cover ${p.isDead ? 'grayscale border-stone-600 opacity-70' : 'border-[#d4af37]/50'}`}
+              className={`w-20 h-[120px] rounded-lg border-2 object-cover ${p.isDead ? 'grayscale border-[var(--line-soft)] opacity-70' : 'border-[var(--line-strong)]'}`}
               onError={(e) => {
                 const target = e.target as HTMLImageElement;
                 target.src = `data:image/svg+xml;utf8,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256"><rect width="256" height="256" fill="#241b14"/><text x="128" y="158" font-size="96" fill="#c8a45c" text-anchor="middle" font-family="serif">${p.hero.name}</text></svg>`)}`;
@@ -39,22 +39,22 @@ export const PlayerInspectModal: React.FC<{
             />
             <button
               onClick={() => onZoom(p)}
-              className="text-[11px] px-2 py-0.5 rounded border border-[#c8a45c]/50 text-[#e8cf94] hover:bg-[#c8a45c]/15"
+              className="text-[11px] px-2 py-0.5 rounded border border-[var(--line)] text-[var(--gold-strong)] hover:bg-[rgba(var(--gold-rgb)/0.15)]"
             >
               查看立绘
             </button>
             <button
               onClick={() => onOpenDetail(p)}
-              className="text-[11px] px-2 py-0.5 rounded border border-[#c8a45c]/50 text-[#e8cf94] hover:bg-[#c8a45c]/15"
+              className="text-[11px] px-2 py-0.5 rounded border border-[var(--line)] text-[var(--gold-strong)] hover:bg-[rgba(var(--gold-rgb)/0.15)]"
               aria-label={`查看 ${p.hero.name} 武将详情`}
             >
               武将详情
             </button>
           </div>
           <div className="flex-1">
-            <h4 className="text-2xl font-bold text-[#d4af37] font-ancient flex items-center gap-2">
+            <h4 className="text-2xl font-bold text-[var(--gold)] font-ancient flex items-center gap-2">
               {p.hero.name}
-              {p.isDead && <span className="text-[#c86b62] text-sm border border-[#9e2b25] px-1.5 py-0.5 rounded">阵亡</span>}
+              {p.isDead && <span className="text-[var(--cinnabar-soft)] text-sm border border-[var(--cinnabar)] px-1.5 py-0.5 rounded">阵亡</span>}
             </h4>
             {/* 对局内小卡浮层不显示称号（epithet）：称号只在选将页/完整详情面板出现 */}
             <div className="flex flex-wrap items-center gap-2 mt-1.5 text-sm">
@@ -65,25 +65,25 @@ export const PlayerInspectModal: React.FC<{
                 'bg-stone-700/60 text-stone-200'
               }`}>{p.hero.kingdom}</span>
               <span className="text-stone-400">{p.hero.gender === 'male' ? '男' : '女'}</span>
-              <span className={p.hp <= 1 ? 'text-[#e8a99f]' : 'text-red-400'}>♥ {p.hp}/{p.maxHp}</span>
+              <span className={p.hp <= 1 ? 'text-[var(--cinnabar-soft)]' : 'text-[var(--danger)]'}>♥ {p.hp}/{p.maxHp}</span>
               <span className="text-stone-400">手牌 {p.hand.length}</span>
-              <span className="text-[#c8a45c]">身份 {knownIdentity ? p.identity : '未知'}</span>
+              <span className="text-[var(--gold)]">身份 {knownIdentity ? p.identity : '未知'}</span>
             </div>
           </div>
         </div>
 
-        <div className="bg-gradient-to-r from-[#8b4513]/30 to-transparent p-4 rounded-lg border-l-4 border-[#d4af37] mb-4">
-          <h5 className="text-xl font-bold text-[#d4af37] mb-2 font-ancient">【{p.hero.skillName}】</h5>
+        <div className="bg-gradient-to-r from-[rgba(var(--gold-rgb)/0.18)] to-transparent p-4 rounded-lg border-l-4 border-[var(--gold)] mb-4">
+          <h5 className="text-xl font-bold text-[var(--gold)] mb-2 font-ancient">【{p.hero.skillName}】</h5>
           <p className="text-stone-300 leading-relaxed text-sm">{p.hero.skillDesc}</p>
           {p.hero.lordSkillName && (
-            <div className="mt-3 pt-3 border-t border-[#8b7355]/30">
-              <div className="text-base font-bold text-[#e8cf94] mb-1 font-ancient">主公技【{p.hero.lordSkillName}】</div>
+            <div className="mt-3 pt-3 border-t border-[var(--line-soft)]">
+              <div className="text-base font-bold text-[var(--gold-strong)] mb-1 font-ancient">主公技【{p.hero.lordSkillName}】</div>
               <p className="text-stone-300 leading-relaxed text-sm">{p.hero.lordSkillDesc}</p>
             </div>
           )}
         </div>
 
-        <div className="bg-black/20 p-4 rounded-lg border border-[#8b7355]/20 text-sm space-y-2.5">
+        <div className="bg-[rgba(var(--gold-rgb)/0.05)] p-4 rounded-lg border border-[var(--line-soft)] text-sm space-y-2.5">
           <div>
             <div className="text-stone-500 mb-1.5">装备区</div>
             {SLOTS.map(([slot, label]) => {
@@ -91,15 +91,15 @@ export const PlayerInspectModal: React.FC<{
               return c ? (
                 <div key={slot} className="mb-1.5">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#c8a45c]/15 border border-[#c8a45c]/30 text-[#e8cf94]">{label}</span>
-                    <span className="text-[#f0dcae] font-bold text-[13px]">【{c.name}】</span>
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-[rgba(var(--gold-rgb)/0.15)] border border-[var(--line)] text-[var(--gold-strong)]">{label}</span>
+                    <span className="text-[var(--gold-strong)] font-bold text-[13px]">【{c.name}】</span>
                     <span className="text-stone-500 text-[11px]">{c.suit}{c.rank}</span>
                   </div>
                   <p className="text-[11px] text-stone-400 leading-relaxed mt-0.5">{EQUIP_META[c.name]?.desc ?? c.description}</p>
                 </div>
               ) : (
                 <div key={slot} className="flex items-center gap-2 mb-1">
-                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-black/30 border border-[#8b7355]/30 text-stone-500">{label}</span>
+                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-[rgba(var(--gold-rgb)/0.05)] border border-[var(--line-soft)] text-[var(--ink-faint)]">{label}</span>
                   <span className="text-stone-600 text-[11px]">— 空</span>
                 </div>
               );
@@ -110,7 +110,7 @@ export const PlayerInspectModal: React.FC<{
               <div className="text-stone-500 mb-1">判定区（按放置先后逐张判定）</div>
               {(p.judgeZone ?? []).map(c => (
                 <div key={c.id} className="text-[12px] leading-relaxed">
-                  <span className="text-[#f0dcae]">【{c.name}】</span>
+                  <span className="text-[var(--gold-strong)]">【{c.name}】</span>
                   <span className="text-stone-500 text-[11px] ml-1">{c.suit}{c.rank}</span>
                 </div>
               ))}
@@ -123,7 +123,7 @@ export const PlayerInspectModal: React.FC<{
           )}
           {(p.isChained || p.isLeBuSiShu || p.isBingLiangCunDuan || p.isShandian) && (
             <div className="flex gap-2"><span className="text-stone-500 w-16 shrink-0">状态</span>
-              <span className="text-[#e8cf94]">
+              <span className="text-[var(--gold-strong)]">
                 {[
                   p.isChained ? '铁索横置' : '',
                   p.isLeBuSiShu ? '乐不思蜀' : '',

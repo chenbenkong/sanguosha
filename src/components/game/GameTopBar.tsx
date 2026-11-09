@@ -28,9 +28,9 @@ export const UiDisplayMenu: React.FC<{
     <div
       role="dialog"
       aria-label="界面显示设置"
-      className={`fixed right-3 top-14 z-[390] w-48 rounded-lg border p-2 shadow-xl ${theme === 'dark' ? 'bg-[#1b1511]/95 border-[#8b7355]/50 text-[#e6d8bd]' : 'bg-[#faf6ee]/95 border-[#c4a77d]/70 text-[#4a3a22]'}`}
+      className="fixed right-3 top-14 z-[390] w-48 rounded-lg border p-2 ui-panel"
     >
-      <div className="text-[11px] tracking-[0.25em] opacity-70 px-1 pb-1">界面显示</div>
+      <div className="text-[var(--fs-11)] tracking-[0.25em] opacity-70 px-1 pb-1">界面显示</div>
       {UI_REGION_ITEMS.map(item => {
         const shown = !uiHidden[item.key];
         return (
@@ -40,17 +40,17 @@ export const UiDisplayMenu: React.FC<{
             role="switch"
             aria-checked={shown}
             onClick={() => onToggleRegion(item.key)}
-            className="w-full flex items-center justify-between gap-2 px-2 py-1.5 rounded text-[12px] hover:bg-black/10"
+            className="w-full flex items-center justify-between gap-2 px-2 py-1.5 rounded text-[var(--fs-12)] hover:bg-[rgba(var(--gold-rgb)/0.10)]"
           >
             <span>{item.label}</span>
-            <span className={`text-[10px] px-1.5 py-0.5 rounded border ${shown ? 'border-[#c8a45c]/70 text-[#c8a45c]' : 'border-current opacity-50'}`}>
+            <span className={`text-[var(--fs-11)] px-1.5 py-0.5 rounded border ${shown ? 'border-[var(--line-strong)] text-[var(--gold)]' : 'border-current opacity-50'}`}>
               {shown ? '显示' : '隐藏'}
             </span>
           </button>
         );
       })}
-      <div className={`h-px my-1.5 ${theme === 'dark' ? 'bg-[#8b7355]/40' : 'bg-[#c4a77d]/50'}`} />
-      <div className="text-[11px] tracking-[0.25em] opacity-70 px-1 pb-1">游戏速度</div>
+      <div className="h-px my-1.5 bg-[var(--line-soft)]" />
+      <div className="text-[var(--fs-11)] tracking-[0.25em] opacity-70 px-1 pb-1">游戏速度</div>
       <div className="flex gap-1 px-1 pb-1">
         {([1, 2, 3] as const).map(v => (
           <button
@@ -58,14 +58,14 @@ export const UiDisplayMenu: React.FC<{
             type="button"
             onClick={() => onSetSpeed(v)}
             aria-pressed={speedLevel === v}
-            className={`flex-1 px-1 py-1 rounded text-[11px] border tabular-nums ${speedLevel === v ? 'border-[#c8a45c]/80 text-[#c8a45c]' : 'border-transparent opacity-60 hover:opacity-100'}`}
+            className={`flex-1 px-1 py-1 rounded text-[var(--fs-11)] border tabular-nums ${speedLevel === v ? 'border-[var(--line-strong)] text-[var(--gold)]' : 'border-transparent opacity-60 hover:opacity-100'}`}
           >
             ×{v}
           </button>
         ))}
       </div>
-      <div className={`h-px my-1.5 ${theme === 'dark' ? 'bg-[#8b7355]/40' : 'bg-[#c4a77d]/50'}`} />
-      <div className="text-[11px] tracking-[0.25em] opacity-70 px-1 pb-1">对局音乐</div>
+      <div className="h-px my-1.5 bg-[var(--line-soft)]" />
+      <div className="text-[var(--fs-11)] tracking-[0.25em] opacity-70 px-1 pb-1">对局音乐</div>
       <div className="flex gap-1 px-1">
         {(['auto', 'home', 'battle'] as BgmPref[]).map(v => (
           <button
@@ -73,7 +73,7 @@ export const UiDisplayMenu: React.FC<{
             type="button"
             onClick={() => onChooseBgm(v)}
             aria-pressed={bgmPref === v}
-            className={`flex-1 px-1 py-1 rounded text-[11px] border ${bgmPref === v ? 'border-[#c8a45c]/80 text-[#c8a45c]' : 'border-transparent opacity-60 hover:opacity-100'}`}
+            className={`flex-1 px-1 py-1 rounded text-[var(--fs-11)] border ${bgmPref === v ? 'border-[var(--line-strong)] text-[var(--gold)]' : 'border-transparent opacity-60 hover:opacity-100'}`}
           >
             {BGM_PREF_LABEL[v]}
           </button>
@@ -147,8 +147,8 @@ export const GameTopBar: React.FC<{
           title={`${fxLabel}（点击切换）`}
           aria-label={`特效强度：${fxLabel}，点击切换`}
         >
-          <span className="text-[12px] leading-none font-bold">特效</span>
-          <span className="text-[10px] leading-none opacity-75">{fxTag}</span>
+          <span className="text-[var(--fs-12)] leading-none font-bold">特效</span>
+          <span className="text-[var(--fs-11)] leading-none opacity-75">{fxTag}</span>
         </button>
       </>
     )}

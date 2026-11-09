@@ -80,7 +80,7 @@ export const EnemySeats: React.FC<{
         >
           {turnIndex === p.id && (
             <div className="absolute -top-3 left-1/2 -translate-x-1/2 z-30">
-              <div className="bg-[#9e2b25] text-[#f7e7cf] text-[11px] px-3 py-0.5 rounded-full font-bold shadow-[0_2px_10px_rgba(158,43,37,0.5)] border border-[#c86b62]/70 whitespace-nowrap tracking-widest">
+              <div className="seat-turn-chip text-[var(--fs-11)] px-3 py-0.5 rounded-full font-bold border whitespace-nowrap tracking-widest">
                 回合中
               </div>
             </div>
@@ -116,28 +116,19 @@ export const EnemySeats: React.FC<{
             }}
             title={p.isDead ? `${p.hero.name}（已阵亡）` : `点击查看 ${p.hero.name} 的武将详情`}
             className={`
-              seat-card relative rounded-xl border-2 kingdom-frame hero-card ${KINGDOM_CLASS[p.hero.kingdom] ?? ''}
-              focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#e8cf94]
+              seat-card relative rounded-xl border-2 kingdom-frame hero-card
+              focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--line-strong)]
               ${damageAnimTarget === p.id || healAnimTarget === p.id
                 ? ''
                 : 'transition-[transform,box-shadow,border-color] duration-300'
               }
-              ${p.isDead
-                ? 'bg-[#15110e]/95 border-[#4a3f33] opacity-55'
-                : 'bg-[#1c1611]/95 border-[#8b7355]/45'
-              }
-              ${p.isDead ? 'is-dead' : ''}
+              ${p.isDead ? 'is-dead opacity-55' : ''}
               ${p.identity === Identity.ZHUGONG ? 'is-lord-card' : ''}
               ${dyingVictimId === p.id ? 'is-dying' : ''}
               ${turnIndex === p.id && dyingVictimId !== p.id ? 'is-current-turn' : ''}
-              ${turnIndex === p.id
-                ? (fxLevel === 'pure'
-                  ? 'border-[#e8cf94]/70'
-                  : 'border-[#c8a45c] shadow-[0_0_22px_rgba(200,164,92,0.30)] scale-105')
-                : ''
-              }
+              ${turnIndex === p.id ? 'is-my-turn' : ''}
               ${(isSelectingTarget || isLijianMode || (isRendeMode && rendeSelectedCardIds.length > 0) || isJiedaoMode) && !p.isDead
-                ? 'cursor-pointer hover:border-[#c86b62] hover:shadow-[0_0_18px_rgba(158,43,37,0.4)]'
+                ? 'seat-selectable'
                 : ''
               }
               ${isLijianMode && lijianSelectedTargets.includes(p.id) ? 'ring-4 ring-red-500 scale-110' : ''}
@@ -173,7 +164,7 @@ export const EnemySeats: React.FC<{
 
             {damageNumber && damageNumber.targetId === p.id && (
               <div className="absolute -top-8 left-1/2 -translate-x-1/2 z-50 pointer-events-none">
-                <div className="text-4xl font-bold text-red-500 animate-damage-float drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]" style={{ textShadow: '2px 2px 4px rgba(0,0,0,0.8)' }}>
+                <div className="text-4xl font-bold text-[var(--danger)] animate-damage-float" style={{ textShadow: '2px 2px 4px rgba(0,0,0,0.8)' }}>
                   -{damageNumber.amount}
                 </div>
               </div>
@@ -181,7 +172,7 @@ export const EnemySeats: React.FC<{
 
             {healNumber && healNumber.targetId === p.id && (
               <div className="absolute -top-8 left-1/2 -translate-x-1/2 z-50 pointer-events-none">
-                <div className="text-4xl font-bold text-green-500 animate-heal-float drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]" style={{ textShadow: '2px 2px 4px rgba(0,0,0,0.8)' }}>
+                <div className="text-4xl font-bold text-[var(--ok)] animate-heal-float" style={{ textShadow: '2px 2px 4px rgba(0,0,0,0.8)' }}>
                   +{healNumber.amount}
                 </div>
               </div>
@@ -227,22 +218,24 @@ export const EnemySeats: React.FC<{
                 )}
               </div>
 
+            </div>
+
+            <div className="seat-info">
+              {/* 第一行：姓名 + 技能名（压在稳定暗层上，不压立绘高光） */}
               <div className="seat-name-rail">
                 <span className="seat-name">{p.hero.name}</span>
                 <span className="seat-skill">【{p.hero.skillName}】</span>
               </div>
 
-              <div className="seat-hp-corner" title={`体力 ${p.hp}/${p.maxHp}`}>
-                <div className="seat-pips">
-                  {Array.from({ length: p.maxHp }).map((_, i) => (
-                    <span key={i} className={`seat-pip ${i < p.hp ? (p.hp === 1 ? 'is-low' : 'is-on') : ''}`} />
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            <div className="seat-info">
+              {/* 第二行：勾玉 + 手牌 + 距离 */}
               <div className="seat-meta-row">
+                <span className="seat-hp-corner" title={`体力 ${p.hp}/${p.maxHp}`}>
+                  <span className="seat-pips">
+                    {Array.from({ length: p.maxHp }).map((_, i) => (
+                      <span key={i} className={`seat-pip ${i < p.hp ? (p.hp === 1 ? 'is-low' : 'is-on') : ''}`} />
+                    ))}
+                  </span>
+                </span>
                 <span className="seat-hand-count">手牌 <b className="tabular-nums">{p.hand.length}</b></span>
                 <span className="seat-distance">距 {getDistance(me.id, p.id)}</span>
                 {p.isDead && <span className="seat-dead-tag">阵亡</span>}
