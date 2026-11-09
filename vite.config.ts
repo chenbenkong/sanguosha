@@ -2,6 +2,27 @@ import path from 'path';
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
+// 把模块 id 归到固定 chunk 名。返回 undefined 表示交给 Rollup 默认分配（入口自身）。
+// 注意：被多个 chunk 引用的根级叶子模块（types.ts / constants.ts / src/config）必须显式归入
+// shared，否则它们会落进入口 chunk，形成 “其它 chunk -> 入口 chunk” 的循环依赖。
+function chunkNameOf(id: string): string | undefined {
+  const p = id.replace(/\\/g, '/');
+  if (p.includes('/node_modules/')) {
+    if (/\/node_modules\/(react|react-dom|scheduler)\//.test(p)) return 'react-vendor';
+    return 'vendor';
+  }
+  // 根级叶子模块：无 import，被几乎所有 chunk 依赖
+  if (/\/(types|constants)\.ts$/.test(p)) return 'shared';
+  if (p.includes('/src/config/')) return 'shared';
+  if (p.includes('/src/audio/')) return 'audio';
+  if (p.includes('/src/game/')) return 'game-core';
+  if (p.includes('/src/components/game/')) return 'ui-game';
+  if (p.includes('/src/components/')) return 'ui-core';
+  if (p.includes('/src/contexts/') || p.includes('/src/hooks/')) return 'ui-core';
+  if (/\/components\//.test(p)) return 'ui-core';
+  return undefined;
+}
+
 export default defineConfig(({ command }) => {
   const isProd = command === 'build';
   return {
@@ -18,9 +39,7 @@ export default defineConfig(({ command }) => {
     build: {
       rollupOptions: {
         output: {
-          manualChunks: {
-            'vendor': ['react', 'react-dom'],
-          },
+          manualChunks: chunkNameOf,
           chunkFileNames: 'assets/js/[name]-[hash].js',
           entryFileNames: 'assets/js/[name]-[hash].js',
           assetFileNames: (assetInfo) => {

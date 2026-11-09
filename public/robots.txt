@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://chenbenkong.github.io/sanguosha/sitemap.xml
