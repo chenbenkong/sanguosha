@@ -1,4 +1,5 @@
 {
+  // 架构治理批次：开启 strict。唯一放宽项 noImplicitAny 见下方注释。
   "compilerOptions": {
     "target": "ES2022",
     "experimentalDecorators": true,
@@ -24,6 +25,13 @@
       ]
     },
     "allowImportingTsExtensions": true,
-    "noEmit": true
+    "noEmit": true,
+    "strict": true,
+    // 单项放宽（逐项说明）：
+    //   noImplicitAny=false —— 只有 src/components/game/ActionBar.tsx 有 9 处 TS7006
+    //   （内联回调参数隐式 any）。该文件属并行批次 C，本批次不可修改。
+    //   证据：tsc --noEmit --noImplicitAny true 的全部报错都落在 ActionBar.tsx 内
+    //   （其余文件 0 条）；待 C 补上参数注解后把这一项删掉即可。
+    "noImplicitAny": false
   }
 }
