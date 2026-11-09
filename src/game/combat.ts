@@ -1,5 +1,6 @@
 import React from 'react';
 import type { Card, EquipmentSlot, Player } from '../../types';
+import { canHuguan } from './skills-batch6';
 import { CardName, CardType, GamePhase, Identity, Suit } from '../../types';
 import { EQUIP_META } from '../../constants';
 import { setDeck, setDiscardPile } from './gameStore';
@@ -238,6 +239,19 @@ export const createCombatEngine = (deps: CombatDeps): CombatEngine => {
       const key = `${source.id}-${turnCountRef.current}`;
       if (!firstUsedCardRef.current.has(key)) {
         firstUsedCardRef.current.add(key);
+        // 王悦 / 王桃「护关」：出牌阶段使用的第一张牌为红色时，可声明一个花色
+        // 令该花色本回合不计入其手牌上限（AI 与托管自动选当前手牌最多的花色）
+        if ((source.hero.name === '王悦' || source.hero.name === '王桃') && skillsOn(source.id) && canHuguan(card)) {
+          const counts: Record<string, number> = {};
+          source.hand.forEach(c => { counts[c.suit] = (counts[c.suit] || 0) + 1; });
+          const best = (Object.keys(counts) as Suit[]).sort((a, b) => counts[b] - counts[a])[0];
+          if (best) {
+            updatePlayer(source.id, { huguanSuit: best });
+            addLog(`【护关】${source.hero.name} 声明花色 ${best}，本回合该花色不计入手牌上限`, 'skill');
+            showSkillBanner(source.hero.name, '护关');
+            await delay(300);
+          }
+        }
         if (card.name === CardName.SHA) {
           const enabler = playersRef.current.find(p => hasGrantedSkill(p, '勇决')
             && p.hero.kingdom === source.hero.kingdom && p.id !== source.id);

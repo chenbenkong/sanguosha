@@ -16,10 +16,15 @@ export function handLimitOf(p: Player): number {
   return p.hero.name === '胡金定' ? p.maxHp : p.hp;
 }
 
-/** 不计入手牌上限的牌数：诸葛果「羽化」非基本牌；董白「黠慧」黑色牌 */
+/** 不计入手牌上限的牌数：诸葛果「羽化」非基本牌；董白「黠慧」黑色牌；王悦/王桃「护关」被声明花色 */
 export function countExemptHandCards(p: Player): number {
   if (p.hero.name === '诸葛果') return p.hand.filter(c => c.type !== CardType.BASIC).length;
   if (p.hero.name === '董白') return p.hand.filter(c => c.suit === Suit.SPADE || c.suit === Suit.CLUB).length;
+  // 王悦 / 王桃「护关」：本回合被声明的花色不计入手牌上限
+  if (p.hero.name === '王悦' || p.hero.name === '王桃') {
+    const suit = p.huguanSuit;
+    if (suit) return p.hand.filter(c => c.suit === suit).length;
+  }
   return 0;
 }
 

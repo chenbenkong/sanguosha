@@ -12,6 +12,7 @@ import { GameSave, SAVE_VERSION, readSave, writeSave, clearSave, consumeSaveReje
 import { shuffle, rankValue, wuguKeepPriority } from './src/game/utils';
 import { useGameState, setPlayers, setDeck, setDiscardPile, setTurnIndex, setPhase, setWinnerSide } from './src/game/gameStore';
 import { countExemptHandCards, computeDiscardExcess, evaluateWinnerSide, nextAliveTurnIndex, seatDistance, suddenDeathDamage, targetProtection } from './src/game/rules';
+import { jiexingTriggers, countHuguanExempt } from './src/game/skills-batch6';
 import { isAlly as isAllyImpl, isEnemy as isEnemyImpl } from './src/game/ai/relations';
 import { isSkillSealed as isSkillSealedImpl, skillsOn as skillsOnImpl } from './src/game/ai/skillGate';
 import { pickAITarget as pickAITargetImpl } from './src/game/ai/targeting';
@@ -904,6 +905,12 @@ const App: React.FC = () => {
     // 董白「黠慧」：体力值减少后，解除对获得的黑色牌的使用/打出/弃置限制
     if (updates.hp != null) {
       const before = playersRef.current.find(p => p.id === id);
+      // 袁姬「节行」：体力值变化后摸一张（此牌不计入本回合手牌上限）
+      if (before && jiexingTriggers(before, before.hp, updates.hp)) {
+        addLog(`【节行】袁姬体力值变化，摸一张牌`, 'skill');
+        showSkillBanner('袁姬', '节行');
+        updatePlayerWith(id, p => ({ hand: [...p.hand, ...drawCardsRef.current!(id, 1)] }));
+      }
       if (before && updates.hp < before.hp && xiaohuiLockRef.current[id]?.length) {
         delete xiaohuiLockRef.current[id];
         addLog(`【黠慧】${before.hero.name} 体力值减少，被禁用的黑色牌恢复使用`, 'info');
