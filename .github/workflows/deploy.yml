@@ -21,10 +21,36 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
       - run: npm ci
-      - run: npx vite build --base=./
+
+      # 闸门 1：类型检查，失败即阻断部署
+      - name: Type check
+        run: npx tsc --noEmit
+
+      # 闸门 2：单元测试。
+      # test:unit 走 vitest（当前无 vitest 用例，--passWithNoTests 保证不会误红）；
+      # test 走 node:test，是现有 14 条规则用例的真实入口，两者都跑才不漏测。
+      - name: Unit tests (vitest)
+        run: npm run test:unit
+      - name: Unit tests (node:test)
+        run: npm test
+
+      - name: Build
+        run: npx vite build --base=./
+
+      # 上传前打印体积摘要，便于在 Actions 日志里追踪体积回归
+      - name: Bundle size summary
+        run: |
+          echo "=== dist total ==="
+          du -sh dist
+          echo "=== top 10 largest files ==="
+          find dist -type f -printf '%s\t%p\n' \
+            | sort -rn \
+            | head -10 \
+            | awk -F '\t' '{ printf "%8.1f kB  %s\n", $1/1024, $2 }'
+
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

@@ -1,0 +1,28 @@
+{
+  "name": "三国杀 · 群雄逐鹿 — 网页版五人军争",
+  "short_name": "三国杀",
+  "description": "网页版《三国杀》五人身份局：水墨国风界面，内置 AI 对手与战术军师，支持 5 人 / 7 人军争模式。",
+  "lang": "zh-CN",
+  "dir": "ltr",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "theme_color": "#1a1512",
+  "background_color": "#1a1512",
+  "categories": ["games", "entertainment"],
+  "icons": [
+    {
+      "src": "./favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "./apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}
