@@ -1,12 +1,16 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { CardType, Identity, Suit } from '../../types.ts';
+import { CardName, CardType, Identity, Suit } from '../../types.ts';
 import {
   computeDiscardExcess,
   countExemptHandCards,
   evaluateWinnerSide,
   handLimitOf,
   nextAliveTurnIndex,
+  seatDistance,
+  suddenDeathDamage,
+  suddenDeathFromTurn,
+  targetProtection,
 } from './rules.ts';
 
 type P = Parameters<typeof handLimitOf>[0];
@@ -75,6 +79,47 @@ test('nextAliveTurnIndex：全部阵亡时不会死循环', () => {
   assert.ok(idx >= 0 && idx < allDead.length);
   // 受限跳跃次数：只跳 1 次时应停在第二个阵亡位
   assert.equal(nextAliveTurnIndex(allDead, 0, 1), 2);
+});
+
+test('seatDistance：环形短边、马术、±1 坐骑与最低距离 1', () => {
+  const ps = [0, 1, 2, 3, 4].map(id => mk({ id }));
+  assert.equal(seatDistance(ps, 0, 1), 1);
+  assert.equal(seatDistance(ps, 0, 4), 1);
+  assert.equal(seatDistance(ps, 0, 2), 2);
+  assert.equal(seatDistance(ps, 0, 3), 2); // 5 人局两侧都是 2
+  assert.equal(seatDistance([], 0, 1), 1);
+
+  const maChao = [mk({ id: 0, hero: { name: '马超' } }), mk({ id: 1 }), mk({ id: 2 }), mk({ id: 3 })];
+  assert.equal(seatDistance(maChao, 0, 2), 1); // 距离 2 - 马术 1
+
+  const minusHorse = [mk({ id: 0, equipment: { horseMinus: {} } }), mk({ id: 1 }), mk({ id: 2 })];
+  assert.equal(seatDistance(minusHorse, 0, 1), 1); // 1 - 1 后夹到 1
+
+  const plusHorse = [mk({ id: 0 }), mk({ id: 1 }), mk({ id: 2, equipment: { horsePlus: {} } })];
+  assert.equal(seatDistance(plusHorse, 0, 2), 2); // 短边 1 + 防御马 1
+});
+
+test('targetProtection：空城与谦逊', () => {
+  const zhuge = mk({ hero: { name: '诸葛亮' }, hand: [] });
+  assert.equal(targetProtection(zhuge, CardName.SHA), '空城');
+  assert.equal(targetProtection(zhuge, CardName.JUEDOU), '空城');
+  assert.equal(targetProtection(zhuge, CardName.SHUNSHOU), null);
+  assert.equal(targetProtection(mk({ hero: { name: '诸葛亮' }, hand: [card(CardType.BASIC, Suit.HEART)] }), CardName.SHA), null);
+
+  const luxun = mk({ hero: { name: '陆逊' } });
+  assert.equal(targetProtection(luxun, CardName.SHUNSHOU), '谦逊');
+  assert.equal(targetProtection(luxun, CardName.LESI), '谦逊');
+  assert.equal(targetProtection(luxun, CardName.SHA), null);
+  assert.equal(targetProtection(mk({ hero: { name: '曹操' }, hand: [] }), CardName.SHA), null);
+});
+
+test('suddenDeathDamage：阈值前不减体力，阈值后每回合 1 点', () => {
+  assert.equal(suddenDeathFromTurn(5), 54);
+  assert.equal(suddenDeathFromTurn(7), 66);
+  assert.equal(suddenDeathDamage(54, 5), 0);
+  assert.equal(suddenDeathDamage(55, 5), 1);
+  assert.equal(suddenDeathDamage(66, 7), 0);
+  assert.equal(suddenDeathDamage(67, 7), 1);
 });
 
 test('evaluateWinnerSide：主公在场且反贼未清空时无结果', () => {

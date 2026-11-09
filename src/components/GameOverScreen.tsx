@@ -20,7 +20,8 @@ interface GameOverScreenProps {
   toggleMute: () => void;
   motionOn: boolean;
   /** 特效强度：关 / 克制 / 完整（与对局页共用一套 CSS 变量） */
-  fxLevel?: 'off' | 'subtle' | 'full';
+  // 对局特写档位；GameOver 只按 off/subtle/full 取 CSS，classic/pure 保持原始属性值（与旧行为一致）
+  fxLevel?: 'classic' | 'pure' | 'off' | 'subtle' | 'full';
   onRestart: () => void;
   onHome: () => void;
 }

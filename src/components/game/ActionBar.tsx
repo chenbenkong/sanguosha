@@ -48,7 +48,7 @@ export interface ActionBarProps {
   theme: 'dark' | 'light';
   dyingState: unknown;
   isProcessing: number;
-  jiaozhaoPending: boolean;
+  jiaozhaoPending: { ownerId: number; cardId: string; declared: CardName; level: number } | null;
   zhangbaPending: unknown;
   qiangwuPoint: number | null;
   guohuanghouLevel: number;
@@ -1089,9 +1089,9 @@ export const ActionBar: React.FC<ActionBarProps> = (props) => {
                       <button 
                         data-tour="end-turn"
                         onClick={endTurn}
-                        disabled={!!dyingState || isProcessing}
+                        disabled={!!dyingState || isProcessing > 0}
                         className={`btn-ink px-6 py-2 rounded-lg text-lg font-ancient tracking-[0.1em] border
-                          ${(dyingState || isProcessing) ? 'opacity-45 cursor-not-allowed' : ''}
+                          ${(dyingState || isProcessing > 0) ? 'opacity-45 cursor-not-allowed' : ''}
                         `}
                       >
                         结束回合
@@ -1113,7 +1113,7 @@ export const ActionBar: React.FC<ActionBarProps> = (props) => {
                       </span>
                       <button
                         onClick={handleDiscardConfirm}
-                        disabled={!!dyingState || isProcessing || !exact}
+                        disabled={!!dyingState || isProcessing > 0 || !exact}
                         className={`
                           px-8 py-2.5 rounded-lg text-xl font-ancient tracking-[0.14em] border
                           ${exact && !dyingState && !isProcessing
@@ -1131,9 +1131,9 @@ export const ActionBar: React.FC<ActionBarProps> = (props) => {
                 {(isSelectingTarget || (isMyTurn && phase === GamePhase.ACTION && selectedCardIds.length > 0)) && (
                   <button 
                     onClick={() => { if (!dyingState && !isProcessing) { setSelectedCardIds([]); setActiveSelectedId(null); setIsSelectingTarget(false); } }}
-                    disabled={!!dyingState || isProcessing}
+                    disabled={!!dyingState || isProcessing > 0}
                     className={`px-4 py-2 rounded-lg text-sm font-bold transition-colors border
-                      ${(dyingState || isProcessing) 
+                      ${(dyingState || isProcessing > 0) 
                         ? 'bg-[#1a1512] text-[#5a5248] border-[#3a3229] cursor-not-allowed opacity-50' 
                         : 'bg-[#221b16] text-[#c8bda8] border-[#6a5642] hover:border-[#c8a45c] hover:text-[#e8cf94]'}
                     `}
@@ -1144,8 +1144,8 @@ export const ActionBar: React.FC<ActionBarProps> = (props) => {
 
                 <button
                   onClick={handleAskStrategy}
-                  disabled={me.isDead || !!dyingState || isProcessing}
-                  className={`btn-ink px-4 py-2 rounded-lg text-sm flex items-center gap-1.5 ${(dyingState || isProcessing) ? 'opacity-50 cursor-not-allowed' : ''}`}
+                  disabled={me.isDead || !!dyingState || isProcessing > 0}
+                  className={`btn-ink px-4 py-2 rounded-lg text-sm flex items-center gap-1.5 ${(dyingState || isProcessing > 0) ? 'opacity-50 cursor-not-allowed' : ''}`}
                 >
                   <IconBook />
                   问计

@@ -1,4 +1,4 @@
-import { CardType, Identity, Suit } from '../../types.ts';
+import { CardName, CardType, Identity, Suit } from '../../types.ts';
 import type { Player } from '../../types.ts';
 import type { WinnerSide } from './constants.ts';
 
@@ -44,6 +44,50 @@ export function nextAliveTurnIndex(players: Player[], currentIndex: number, maxS
     safety++;
   }
   return next;
+}
+
+/**
+ * 座位距离：环形取短边，再算马术与 ±1 坐骑。
+ * 不含「惴恐」「魅步」这类强制视为 1 的临时效果，由调用方在这之后覆盖。
+ */
+export function seatDistance(players: Player[], fromId: number, toId: number): number {
+  const n = players.length;
+  if (!n) return 1;
+  const raw = Math.abs(fromId - toId);
+  let d = Math.min(raw, n - raw);
+  const from = players.find(p => p.id === fromId);
+  const to = players.find(p => p.id === toId);
+  if (from?.hero.name === '马超' || from?.hero.name === '马云禄') d -= 1; // 马术
+  if (from?.equipment?.horseMinus) d -= 1;
+  if (to?.equipment?.horsePlus) d += 1;
+  return Math.max(1, d);
+}
+
+/** 目标保护：诸葛亮「空城」（无手牌时不能被【杀】【决斗】指定）、陆逊「谦逊」（不能被【顺手】【乐】指定） */
+export function targetProtection(target: Player, cardName: CardName): string | null {
+  if (target.hero.name === '诸葛亮' && target.hand.length === 0
+    && (cardName === CardName.SHA || cardName === CardName.JUEDOU)) {
+    return '空城';
+  }
+  if (target.hero.name === '陆逊'
+    && (cardName === CardName.SHUNSHOU || cardName === CardName.LESI)) {
+    return '谦逊';
+  }
+  return null;
+}
+
+/**
+ * 长局兜底「粮尽」：按人数给出触发回合数。
+ * 5 人局 54 个回合（约 11 轮）、7 人局 66 个回合（约 9.4 轮），远高于正常结算时长，
+ * 只用于防止 AI 互相回血导致永不结束。
+ */
+export function suddenDeathFromTurn(playerCount: number): number {
+  return 24 + 6 * Math.max(0, playerCount);
+}
+
+/** 第 turnCount 个回合结束时，每名存活角色失去的体力值 */
+export function suddenDeathDamage(turnCount: number, playerCount: number): number {
+  return turnCount > suddenDeathFromTurn(playerCount) ? 1 : 0;
 }
 
 /**

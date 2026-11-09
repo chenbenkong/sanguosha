@@ -11,7 +11,7 @@ import RulesDialog from './src/components/RulesDialog';
 import { GameSave, SAVE_VERSION, readSave, writeSave, clearSave, consumeSaveRejected, isSaveFinished } from './src/game/save';
 import { shuffle, rankValue, wuguKeepPriority } from './src/game/utils';
 import { useGameState, setPlayers, setDeck, setDiscardPile, setTurnIndex, setPhase, setWinnerSide } from './src/game/gameStore';
-import { countExemptHandCards, computeDiscardExcess, evaluateWinnerSide, nextAliveTurnIndex } from './src/game/rules';
+import { countExemptHandCards, computeDiscardExcess, evaluateWinnerSide, nextAliveTurnIndex, seatDistance, suddenDeathDamage, targetProtection } from './src/game/rules';
 import { LogPanel, PhasePanel, TurnRail, TurnStrip, ObjectiveStrip, MobilePhaseChip } from './src/components/game/GameHud';
 import { PlayerInspectModal } from './src/components/game/PlayerInspectModal';
 import { SkillInfoModal } from './src/components/game/SkillInfoModal';
@@ -135,6 +135,8 @@ const App: React.FC = () => {
   const [isProcessing, setIsProcessing] = useState(0); // 全局状态锁计数，防止结算期间进行其他操作
   const isGameOverRef = useRef<boolean>(false); // 游戏结束标志，防止重复触发
   const gameStartedAtRef = useRef<number>(0); // 本局开始时间，用于结算页「用时」
+  // 长局兜底：「粮尽」提示是否已播报（回合数复用下方全局 turnCountRef）
+  const famineAnnouncedRef = useRef<boolean>(false);
 
   // --- 人类决策读秒 ---
   // 出牌 / 弃牌阶段超时未操作：已选牌则自动出牌，未选牌则自动跳过
@@ -290,7 +292,7 @@ const App: React.FC = () => {
 
   // Promise resolver for human reaction (pausing the game flow)
   const humanReactionResolver = useRef<((result: { played: boolean, isWuxie: boolean }) => void) | null>(null);
-  const timeoutIdRef = useRef<NodeJS.Timeout | null>(null);
+  const timeoutIdRef = useRef<number | null>(null);
 
   const [loadingAdvice, setLoadingAdvice] = useState(false);
   const [advice, setAdvice] = useState<string | null>(null);
@@ -1482,36 +1484,19 @@ const App: React.FC = () => {
 
   // --- 距离与攻击范围 ---
   // 座位距离：环形相邻为 1；-1 马减少自己到他人的距离，+1 马增加他人到自己的距离
+  // 基础计算在 src/game/rules.ts（seatDistance），这里只叠加临时的「视为 1」效果
   const getDistance = useCallback((fromId: number, toId: number) => {
-    const list = playersRef.current;
-    const n = list.length;
-    if (!n) return 1;
-    const raw = Math.abs(fromId - toId);
-    let d = Math.min(raw, n - raw);
-    const from = list.find(p => p.id === fromId);
-    const to = list.find(p => p.id === toId);
-    if (from?.hero.name === '马超' || from?.hero.name === '马云禄') d -= 1; // 马术
-    if (from?.equipment?.horseMinus) d -= 1;
-    if (to?.equipment?.horsePlus) d += 1;
+    const d = seatDistance(playersRef.current, fromId, toId);
     // 伏皇后「惴恐」没赢：该角色与她本回合的距离视为 1
     if (doutuDistanceRef.current[fromId] === toId) return 1;
     // 孙鲁育「魅步」：弃置的牌不为【杀】或黑色锦囊牌时，该角色本回合与孙鲁育的距离视为 1
     if (meibuDistanceRef.current[fromId] === toId) return 1;
-    return Math.max(1, d);
+    return d;
   }, []);
 
   // 目标保护：诸葛亮「空城」、陆逊「谦逊」
-  const getTargetProtection = (target: Player, cardName: CardName): string | null => {
-    if (target.hero.name === '诸葛亮' && target.hand.length === 0
-        && (cardName === CardName.SHA || cardName === CardName.JUEDOU)) {
-      return '空城';
-    }
-    if (target.hero.name === '陆逊'
-        && (cardName === CardName.SHUNSHOU || cardName === CardName.LESI)) {
-      return '谦逊';
-    }
-    return null;
-  };
+  const getTargetProtection = (target: Player, cardName: CardName): string | null =>
+    targetProtection(target, cardName);
 
   // 攻击范围 = 1 + 武器范围
   const getAttackRange = useCallback((p: Player) => {
@@ -1760,6 +1745,7 @@ const App: React.FC = () => {
     setDiscardPile([]);
     setIsAiTakeover(false);
     // 清空跨局技能状态（否则第二局起守玺等「每种牌名限一次」会被旧局记录吞掉）
+    famineAnnouncedRef.current = false;
     shouxiDeclaredRef.current = new Set();
     fengpoBoostRef.current = {};
     doutuSelfOnlyRef.current = null;
@@ -2083,6 +2069,7 @@ const App: React.FC = () => {
     zoushiRevealedRef.current = new Set();
     skillSealRef.current = {};
     turnCountRef.current = 0;
+    famineAnnouncedRef.current = false;
     hetaishouKillsRef.current = 0;
     setIsJiedaoMode(false);
     setJiedaoWeaponTarget(null);
@@ -3586,7 +3573,7 @@ const App: React.FC = () => {
               } else if (receiverNow) {
                 const victims = playersRef.current
                   .filter(p => !p.isDead && p.id !== receiverNow.id && isEnemy(receiverNow, p)
-                    && getDistance(receiverNow, p) <= getAttackRange(receiverNow))
+                    && getDistance(receiverNow.id, p.id) <= getAttackRange(receiverNow))
                   .sort((a, b) => a.hp - b.hp)
                   .slice(0, x);
                 for (const t of victims) {
@@ -3886,9 +3873,8 @@ const App: React.FC = () => {
                 max: viewed.length,
                 cancelLabel: '全部放回牌堆顶',
               }, currentPlayer.isHuman);
-              const topCards = (!pick || pick.kind === 'timeout' || pick.kind === 'cancel')
-                ? viewed
-                : viewed.filter(c => pick.ids.includes(c.id));
+              const pickedIds = pick && pick.kind === 'card' ? pick.ids : null;
+              const topCards = pickedIds ? viewed.filter(c => pickedIds.includes(c.id)) : viewed;
               const bottomCards = viewed.filter(c => !topCards.includes(c));
               const restDeck = deckNow.slice(0, Math.max(0, deckNow.length - viewed.length));
               const nextDeck = [...bottomCards, ...restDeck, ...topCards];
@@ -4195,6 +4181,21 @@ const App: React.FC = () => {
         if (endingPlayer && !endingPlayer.isDead && endingPlayer.hero.name === '张琪瑛') {
           doDianhua(endingPlayer);
           await delay(500);
+        }
+
+        // 长局兜底「粮尽」：超过阈值后每回合所有存活角色失去 1 点体力，
+        // 由下面的濒死结算统一处理，避免 AI 互相回血导致永远打不完。
+        turnCountRef.current += 1;
+        const famine = suddenDeathDamage(turnCountRef.current, playersRef.current.length || players.length);
+        if (famine > 0) {
+          if (!famineAnnouncedRef.current) {
+            famineAnnouncedRef.current = true;
+            addLog(`【粮尽】战局已持续 ${turnCountRef.current} 个回合，此后每回合所有角色失去 ${famine} 点体力`, 'danger');
+          }
+          const starved = playersRef.current.map(p => p.isDead ? p : { ...p, hp: p.hp - famine });
+          playersRef.current = starved;
+          setPlayers(starved);
+          addLog(`【粮尽】所有角色失去 ${famine} 点体力`, 'danger');
         }
 
         // 结束阶段：若有角色体力<=0且未死亡，进行濒死求桃
@@ -10623,7 +10624,7 @@ const App: React.FC = () => {
           deckLength={deck.length}
           discardLength={discardPile.length}
           onShowDiscard={() => setShowDiscardViewer(true)}
-          disabled={!!dyingState || isProcessing}
+          disabled={!!dyingState || isProcessing > 0}
           phase={phase}
           isMyTurn={isMyTurn}
           isAiTakeover={isAiTakeover}
