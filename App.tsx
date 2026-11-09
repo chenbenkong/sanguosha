@@ -20,6 +20,10 @@ import { SkillChoiceModal, SkillChoiceRequest, SkillChoiceResult } from './src/c
 import { ReactionModal } from './src/components/game/ReactionModal';
 import { StartScreen } from './src/components/game/StartScreen';
 import { HeroSelectScreen } from './src/components/game/HeroSelectScreen';
+import { CenterDecks } from './src/components/game/CenterDecks';
+import { HandTray } from './src/components/game/HandTray';
+import { EnemySeats } from './src/components/game/EnemySeats';
+import { OwnSeatPanel } from './src/components/game/OwnSeatPanel';
 import { GameTopBar, UiDisplayMenu, UiRegion, BgmPref } from './src/components/game/GameTopBar';
 import { IconSpeaker, IconSun, IconMoon, IconBolt, IconBook, IconDice, IconMotion, IconArrowLeft, ThemeIcon, IconEye } from './src/components/Icons';
 import { useLayoutProfile } from './src/hooks/useLayoutProfile';
@@ -10428,270 +10432,43 @@ const App: React.FC = () => {
         />
 
         {/* 环形座位：桌面端绝对定位环绕牌桌；手机端为顶部横向压缩小卡 */}
-      <div data-region="seats" data-many={enemies.length >= 5 ? 'true' : 'false'} className={`relative w-full flex items-start justify-center gap-1 overflow-x-auto pt-[44px] pb-1 px-1 scrollbar-hide md:pt-0 md:pb-0 md:px-0 md:absolute md:top-0 md:left-0 md:right-0 md:h-[68vh] md:block md:overflow-visible`}>
-          {enemies.map((p, index) => {
-            // 顶部一行平铺全部敌人，左右两侧留给战报与出牌顺序条，中央卡池不被任何座位遮挡
-            const totalEnemies = enemies.length;
-            const baseW = layoutDensity === 'roomy' ? (sizeTier === 'xl' ? 208 : 196)
-              : layoutDensity === 'normal' ? 164
-              : layoutDensity === 'compact' ? 156
-              : layoutDensity === 'tight' ? 144 : 136;
-            // 座位保持基准宽度（不缩卡），中心间距 =（卡宽+12）× 1.17；视口放不下时退让（7 人局允许轻微压叠）
-            const seatW = baseW;
-            const inner = Math.max(320, viewport.w - 32);
-            const wantedPitch = Math.round((seatW + 12) * 1.17);
-            const fitPitch = totalEnemies > 1 ? Math.floor((inner - seatW) / (totalEnemies - 1)) : 0;
-            const seatPitch = totalEnemies > 1 ? Math.min(wantedPitch, Math.max(1, fitPitch)) : 0;
-            // 6 个对手（7 人局）在 1440 宽下必然贴边，用 26px 上下错位拉开视觉
-            const seatShift = totalEnemies >= 6 && index % 2 === 1 ? 26 : 0;
-            const side = 'top';
-            const offset = index - (totalEnemies - 1) / 2;
-            const leftPercent = `calc(50% + ${Math.round(offset * seatPitch)}px)`;
-            // 选中【杀】类牌时，超出攻击范围的目标灰显
-            const outOfRange = !p.isDead && isSelectingTarget && slashLikeActive && getDistance(me.id, p.id) > getAttackRange(me);
-            // 正处于「选择目标」流程时，给合法目标一个明确的候选标记
-            const selectableTarget = !p.isDead && (isSelectingTarget || isLijianMode || isJieyinMode || isJijiangMode
-              || (isRendeMode && rendeSelectedCardIds.length > 0) || isJiedaoMode);
-            
-            return (
-            <div 
-              key={p.id} 
-              className="ring-seat"
-              data-side={side}
-              data-seat-id={p.id}
-              style={{
-                '--seat-left': leftPercent,
-                '--seat-shift': `${seatShift}px`,
-              } as React.CSSProperties}
-            >
-              {/* 回合指示器 - 朱红小匾 */}
-              {turnIndex === p.id && (
-                <div className="absolute -top-3 left-1/2 -translate-x-1/2 z-30">
-                  <div className="bg-[#9e2b25] text-[#f7e7cf] text-[11px] px-3 py-0.5 rounded-full font-bold shadow-[0_2px_10px_rgba(158,43,37,0.5)] border border-[#c86b62]/70 whitespace-nowrap tracking-widest">
-                    回合中
-                  </div>
-                </div>
-              )}
-              
-              {/* 当前回合呼吸光晕：独立层只动 opacity，避免每帧重绘整张卡 */}
-              {turnIndex === p.id && !(dyingState && dyingState.isActive && dyingState.victimId === p.id) && (
-                <span className="turn-glow" aria-hidden="true" />
-              )}
-              
-              {/* 玩家卡牌容器 - 统一深墨描金；支持 Enter / Space 等价点击 */}
-              <div
-                role="button"
-                tabIndex={0}
-                aria-label={p.isDead ? `${p.hero.name}（已阵亡）` : `查看 ${p.hero.name} 的武将详情`}
-                onClick={() => {
-                  const selecting = isSelectingTarget || isLijianMode || isJieyinMode || isJijiangMode
-                    || (isRendeMode && rendeSelectedCardIds.length > 0) || (isJiedaoMode && !p.isDead);
-                  if (selecting) {
-                    handleTargetClick(p.id);
-                  } else if (!dyingState && !pendingReaction && !isProcessing) {
-                    setInspectPlayerId(p.id);
-                  }
-                }}
-                onKeyDown={(e) => {
-                  if (e.key !== 'Enter' && e.key !== ' ') return;
-                  e.preventDefault();
-                  const selecting = isSelectingTarget || isLijianMode || isJieyinMode || isJijiangMode
-                    || (isRendeMode && rendeSelectedCardIds.length > 0) || (isJiedaoMode && !p.isDead);
-                  if (selecting) {
-                    handleTargetClick(p.id);
-                  } else if (!dyingState && !pendingReaction && !isProcessing) {
-                    setInspectPlayerId(p.id);
-                  }
-                }}
-                title={p.isDead ? `${p.hero.name}（已阵亡）` : `点击查看 ${p.hero.name} 的武将详情`}
-                className={`
-                seat-card relative rounded-xl border-2 kingdom-frame hero-card ${KINGDOM_CLASS[p.hero.kingdom] ?? ''}
-                focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#e8cf94]
-                ${damageAnimTarget === p.id || healAnimTarget === p.id
-                  ? '' // 动画期间禁用过渡效果
-                  : 'transition-[transform,box-shadow,border-color] duration-300'
-                }
-                ${p.isDead
-                  ? 'bg-[#15110e]/95 border-[#4a3f33] opacity-55'
-                  : 'bg-[#1c1611]/95 border-[#8b7355]/45'
-                }
-                ${p.isDead ? 'is-dead' : ''}
-                ${p.identity === Identity.ZHUGONG ? 'is-lord-card' : ''}
-                ${dyingState && dyingState.isActive && dyingState.victimId === p.id ? 'is-dying' : ''}
-                ${turnIndex === p.id && !(dyingState && dyingState.isActive && dyingState.victimId === p.id) ? 'is-current-turn' : ''}
-                ${turnIndex === p.id
-                  ? (fxLevel === 'pure'
-                    ? 'border-[#e8cf94]/70'
-                    : 'border-[#c8a45c] shadow-[0_0_22px_rgba(200,164,92,0.30)] scale-105')
-                  : ''
-                }
-                ${(isSelectingTarget || isLijianMode || (isRendeMode && rendeSelectedCardIds.length > 0) || isJiedaoMode) && !p.isDead
-                  ? 'cursor-pointer hover:border-[#c86b62] hover:shadow-[0_0_18px_rgba(158,43,37,0.4)]'
-                  : ''
-                }
-                ${isLijianMode && lijianSelectedTargets.includes(p.id)
-                  ? 'ring-4 ring-red-500 scale-110'
-                  : ''
-                }
-                ${selectedCardIds.length > 0 && (() => {
-                  const card = me.hand.find(c => c.id === selectedCardIds[0]);
-                  return card?.name === CardName.TIESUO && tiesuoSelectedTargets.includes(p.id);
-                })()
-                  ? 'ring-4 ring-amber-500 scale-110'
-                  : ''
-                }
-                ${isRendeMode && rendeSelectedTarget === p.id
-                  ? 'ring-4 ring-green-500 scale-110'
-                  : ''
-                }
-                ${isJieyinMode && !p.isDead && p.hero.gender === 'male' && p.hp < p.maxHp
-                  ? 'ring-2 ring-emerald-500 cursor-pointer'
-                  : ''
-                }
-                ${isJiedaoMode && (jiedaoWeaponTarget === p.id || jiedaoVictimTarget === p.id)
-                  ? jiedaoWeaponTarget === p.id 
-                    ? 'ring-4 ring-blue-500 scale-110'
-                    : 'ring-4 ring-red-500 scale-110'
-                  : ''
-                }
-                ${damageAnimTarget === p.id && fxLevel !== 'pure' && fxLevel !== 'classic' ? 'animate-damage-shake' : ''}
-                ${healAnimTarget === p.id ? 'animate-heal-pulse' : ''}
-                ${outOfRange ? 'opacity-40 saturate-[0.6]' : ''}
-                ${selectableTarget && !outOfRange ? 'target-candidate' : ''}
-              `}>
-                {/* 合法目标候选标记：配合高亮描边，明确「可点」 */}
-                {selectableTarget && !outOfRange && (
-                  <span className="target-chip absolute -top-3 left-1/2 -translate-x-1/2 z-30 whitespace-nowrap">
-                    选择目标
-                  </span>
-                )}
-                {/* 势力色顶条：魏蓝 / 蜀红 / 吴绿 / 群金 */}
-                <span
-                  className="absolute top-0 left-2 right-2 h-[2px] rounded-full opacity-80"
-                  style={{ background: 'var(--k-main)' }}
-                />
-
-                {/* 伤害数字显示 */}
-                {damageNumber && damageNumber.targetId === p.id && (
-                  <div className="absolute -top-8 left-1/2 -translate-x-1/2 z-50 pointer-events-none">
-                    <div className="text-4xl font-bold text-red-500 animate-damage-float drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]" style={{ textShadow: '2px 2px 4px rgba(0,0,0,0.8)' }}>
-                      -{damageNumber.amount}
-                    </div>
-                  </div>
-                )}
-
-                {/* 治疗数字显示 */}
-                {healNumber && healNumber.targetId === p.id && (
-                  <div className="absolute -top-8 left-1/2 -translate-x-1/2 z-50 pointer-events-none">
-                    <div className="text-4xl font-bold text-green-500 animate-heal-float drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]" style={{ textShadow: '2px 2px 4px rgba(0,0,0,0.8)' }}>
-                      +{healNumber.amount}
-                    </div>
-                  </div>
-                )}
-
-                {/* 立绘铺满整张座位卡（官方对局座位牌构图）：信息改为浮层，立绘高度=卡高 */}
-                <div className={`seat-art ${
-                  healAnimTarget === p.id ? 'animate-heal-glow' :
-                  damageAnimTarget === p.id ? 'animate-damage-glow' : ''
-                } ${skillGlowId === p.id ? 'skill-glow' : ''} ${aiThinkingId === p.id ? 'ai-thinking' : ''}`}>
-                  <img
-                    src={p.hero.avatarUrl}
-                    alt={p.hero.name}
-                    loading="lazy"
-                    decoding="async"
-                    className="seat-art-img"
-                    onError={(e) => {
-                      const target = e.target as HTMLImageElement;
-                      target.src = `data:image/svg+xml;utf8,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256"><rect width="256" height="256" fill="#241b14"/><text x="128" y="158" font-size="96" fill="#c8a45c" text-anchor="middle" font-family="serif">${p.hero.name}</text></svg>`)}`;
-                    }}
-                  />
-                  <div className="seat-scrim" />
-
-                  {/* 阵亡遮罩 */}
-                  {p.isDead && (
-                    <div className="seat-dead">
-                      <span>阵亡</span>
-                    </div>
-                  )}
-
-                  {/* 势力 + 身份：卡面左上 / 右上角章 */}
-                  <div className="seat-topline">
-                    <span className="seat-kingdom">{p.hero.kingdom}</span>
-                    {(p.isRevealed || p.isHuman || p.identity === Identity.ZHUGONG || p.isDead) && (
-                      <span className={`seat-identity ${
-                        p.identity === Identity.ZHUGONG ? 'is-lord' :
-                        p.identity === Identity.ZHONGCHEN ? 'is-loyal' :
-                        p.identity === Identity.FANZEI ? 'is-rebel' :
-                        'is-spy'
-                      }`}>
-                        {p.identity === Identity.ZHUGONG ? '主' :
-                          p.identity === Identity.ZHONGCHEN ? '忠' :
-                          p.identity === Identity.FANZEI ? '反' : '内'
-                        }
-                      </span>
-                    )}
-                  </div>
-
-                  {/* 左侧竖排：武将名 + 技能名（官方牌面把名字做在左边缘） */}
-                  <div className="seat-name-rail">
-                    <span className="seat-name">{p.hero.name}</span>
-                    <span className="seat-skill">【{p.hero.skillName}】</span>
-                  </div>
-
-                  {/* 体力勾玉：固定在右上角安全区（身份章下方），绝不与左侧竖排姓名/技能相交 */}
-                  <div className="seat-hp-corner" title={`体力 ${p.hp}/${p.maxHp}`}>
-                    <div className="seat-pips">
-                      {Array.from({ length: p.maxHp }).map((_, i) => (
-                        <span key={i} className={`seat-pip ${i < p.hp ? (p.hp === 1 ? 'is-low' : 'is-on') : ''}`} />
-                      ))}
-                    </div>
-                  </div>
-                </div>
-                
-                {/* 底部信息层：手牌数 / 距离 / 装备四槽 / 判定区
-                    对局卡面不放称号（epithet）：只显示姓名与技能，避免重复占用卡面 */}
-                <div className="seat-info">
-                  <div className="seat-meta-row">
-                    <span className="seat-hand-count">手牌 <b className="tabular-nums">{p.hand.length}</b></span>
-                    <span className="seat-distance">距 {getDistance(me.id, p.id)}</span>
-                    {p.isDead && <span className="seat-dead-tag">阵亡</span>}
-                  </div>
-
-                  {/* 装备区：武器 / 防具 / +1 马 / -1 马 四槽常显，悬停显示全称 */}
-                  <div className="seat-equip">
-                    {[
-                      { key: 'weapon', label: '武', item: p.equipment?.weapon, tip: '武器' },
-                      { key: 'armor', label: '防', item: p.equipment?.armor, tip: '防具' },
-                      { key: 'horsePlus', label: '+1', item: p.equipment?.horsePlus, tip: '+1 马（防御马）' },
-                      { key: 'horseMinus', label: '−1', item: p.equipment?.horseMinus, tip: '-1 马（进攻马）' },
-                    ].map(slot => (
-                      <span
-                        key={slot.key}
-                        title={`${slot.tip}：${slot.item ? slot.item.name : '空'}`}
-                        aria-label={`${slot.tip}：${slot.item ? slot.item.name : '空'}`}
-                        className={`seat-equip-slot ${slot.item ? 'is-on' : ''}`}
-                      >
-                        {slot.label}
-                        {slot.item && <i className="seat-equip-dot" />}
-                      </span>
-                    ))}
-                  </div>
-
-                  {/* 判定区：乐 / 兵 / 电 / 链 逐张可见 */}
-                  {(p.isChained || p.isLeBuSiShu || p.isBingLiangCunDuan || p.isShandian) && (
-                    <div className="seat-judge" title="判定区">
-                      {p.isChained && <span className="is-chain" title="铁索连环">链</span>}
-                      {p.isLeBuSiShu && <span className="is-le" title="乐不思蜀">乐</span>}
-                      {p.isBingLiangCunDuan && <span className="is-bing" title="兵粮寸断">兵</span>}
-                      {p.isShandian && <span className="is-dian" title="闪电悬顶">电</span>}
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-            );
-          })}
-        </div>
+        <EnemySeats
+          enemies={enemies}
+          me={me}
+          layoutDensity={layoutDensity}
+          sizeTier={sizeTier}
+          viewportW={viewport.w}
+          turnIndex={turnIndex}
+          isSelectingTarget={isSelectingTarget}
+          slashLikeActive={slashLikeActive}
+          isLijianMode={isLijianMode}
+          isJieyinMode={isJieyinMode}
+          isJijiangMode={isJijiangMode}
+          isRendeMode={isRendeMode}
+          isJiedaoMode={isJiedaoMode}
+          rendeSelectedCardIds={rendeSelectedCardIds}
+          lijianSelectedTargets={lijianSelectedTargets}
+          tiesuoSelectedTargets={tiesuoSelectedTargets}
+          selectedCardIds={selectedCardIds}
+          rendeSelectedTarget={rendeSelectedTarget}
+          jiedaoWeaponTarget={jiedaoWeaponTarget}
+          jiedaoVictimTarget={jiedaoVictimTarget}
+          damageAnimTarget={damageAnimTarget}
+          healAnimTarget={healAnimTarget}
+          skillGlowId={skillGlowId}
+          aiThinkingId={aiThinkingId}
+          damageNumber={damageNumber}
+          healNumber={healNumber}
+          dyingVictimId={dyingState?.isActive ? dyingState.victimId : null}
+          dyingActive={!!(dyingState && dyingState.isActive)}
+          fxLevel={fxLevel}
+          isProcessing={isProcessing}
+          hasPendingReaction={!!pendingReaction}
+          getDistance={getDistance}
+          getAttackRange={getAttackRange}
+          onSeatClick={handleTargetClick}
+          onInspect={setInspectPlayerId}
+        />
       </div>
 
       {/* Middle: Field - 原版三国杀风格 */}
@@ -10722,114 +10499,13 @@ const App: React.FC = () => {
         <TurnRail players={players} turnIndex={turnIndex} collapsed={orderCollapsed} hidden={uiHidden.order} onCollapsedChange={setOrderCollapsedPersist} />
         <TurnStrip players={players} turnIndex={turnIndex} collapsed={orderCollapsed} hidden={uiHidden.order} onCollapsedChange={setOrderCollapsedPersist} />
 
-        <div data-region="center-decks" className="relative flex items-center gap-12 max-md:gap-6 z-[1]">
-           {/* 弃牌堆（点击查看明细） */}
-           <div className="relative group cursor-pointer" onClick={() => setShowDiscardViewer(true)} title="点击查看弃牌堆">
-              <div className={`text-sm text-center mb-2 font-ancient tracking-wider transition-colors ${theme === 'dark' ? 'text-stone-400 group-hover:text-yellow-500' : 'text-[#5c5854] group-hover:text-[#8b6914]'}`}>弃牌堆</div>
-              {discardPile.length > 0 ? (
-                 <div className="relative">
-                   {/* 压在下层的旧牌：给弃牌堆一点厚度 */}
-                   {discardPile.length > 1 && (
-                     <>
-                       <div className="absolute top-[7px] left-[7px] w-full h-full rounded-lg bg-[#191410] border border-[#5a4a38]/40 rotate-2" />
-                       <div className="absolute top-[3px] left-[3px] w-full h-full rounded-lg bg-[#221b16] border border-[#6a5642]/45 -rotate-1" />
-                     </>
-                   )}
-                   <div className="relative transition-transform duration-200 group-hover:scale-105">
-                     {/* 新牌入堆：从上方按下落定 */}
-                     <div key={discardPile[discardPile.length - 1].id} className="discard-arrive">
-                       <CardComponent card={discardPile[discardPile.length - 1]} disabled />
-                     </div>
-                   </div>
-                   <div
-                     key={`dc-${discardPile.length}`}
-                     className="discard-count absolute -bottom-3 -right-3 bg-gradient-to-br from-stone-600 to-stone-800 text-white text-sm font-bold w-8 h-8 rounded-full flex items-center justify-center border-2 border-stone-500 shadow-lg"
-                   >
-                     {discardPile.length}
-                   </div>
-                   {/* 查看提示 */}
-                   <div className="absolute inset-0 rounded-lg bg-black/0 group-hover:bg-black/30 transition-colors flex items-center justify-center pointer-events-none">
-                     <span className="opacity-0 group-hover:opacity-100 transition-opacity text-yellow-400 text-xs font-bold bg-black/70 px-2 py-1 rounded">查看</span>
-                   </div>
-                 </div>
-               ) : (
-                 <div className={`w-24 h-36 rounded-lg flex items-center justify-center border border-dashed ${theme === 'dark' ? 'border-[#6a5642]/60 text-[#7d6d56] bg-black/30' : 'border-[#c4a77d]/60 text-[#a09585] bg-[#f5f0eb]/40'}`}>
-                   <span className="font-ancient text-sm tracking-[0.2em] opacity-70">空</span>
-                 </div>
-               )}
-           </div>
-           
-           {/* 牌堆 - 与卡牌牌背统一的黑漆描金风格 */}
-           <div className="relative">
-              <div className={`text-sm text-center mb-2 font-ancient tracking-wider ${theme === 'dark' ? 'text-stone-400' : 'text-[#5c5854]'}`}>牌堆</div>
-              <div
-                key={deckFx ? `${deckFx.kind}-${deckFx.id}` : 'deck'}
-                className={`relative ${deckFx?.kind === 'tap' ? 'deck-tap' : ''} ${deckFx?.kind === 'shuffle' ? 'deck-shuffle' : ''}`}
-              >
-                {/* 堆叠厚度：随牌堆数量变化，抽得越少牌堆越薄 */}
-                {Array.from({ length: deck.length > 80 ? 3 : deck.length > 40 ? 2 : deck.length > 8 ? 1 : 0 }).map((_, i) => (
-                  <div
-                    key={i}
-                    className="absolute w-24 h-36 rounded-lg"
-                    style={{
-                      top: `${(i + 1) * 3}px`,
-                      left: `${(i + 1) * 2}px`,
-                      background: i % 2 === 0 ? '#221b16' : '#191410',
-                      border: '1px solid rgba(106, 86, 66, 0.45)',
-                      transform: `rotate(${i % 2 === 0 ? 1.4 : -0.9}deg)`,
-                      boxShadow: '0 4px 12px rgba(0,0,0,0.35)',
-                    }}
-                  />
-                ))}
-
-                {/* 主牌堆 */}
-                <div
-                  className="w-24 h-36 rounded-lg relative overflow-hidden shadow-[0_8px_24px_rgba(0,0,0,0.55)] border-2 border-[#8b7355]/70"
-                  style={{ background: 'linear-gradient(155deg, #2b2320 0%, #221b18 55%, #151110 100%)' }}
-                >
-                   {/* 云纹（内联 SVG，无外部请求） */}
-                   <div className="absolute inset-0 opacity-25" style={{
-                     backgroundImage: `url("data:image/svg+xml,%3Csvg width='40' height='40' viewBox='0 0 40 40' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M8 20 Q14 12 20 20 T32 20' stroke='%23c8a45c' stroke-width='0.8' fill='none'/%3E%3C/svg%3E")`,
-                     backgroundSize: '40px 40px'
-                   }}></div>
-
-                   {/* 双层描金内框 */}
-                   <div className="absolute inset-1.5 border border-[#c8a45c]/45 rounded"></div>
-                   <div className="absolute inset-3 border border-[#c8a45c]/20 rounded-sm"></div>
-
-                   {/* 中心朱印 */}
-                   <div className="absolute inset-0 flex items-center justify-center">
-                     <div
-                       className="w-12 h-12 rounded-md flex items-center justify-center -rotate-3 border border-[#c8a45c]/60 shadow-lg"
-                       style={{ background: 'linear-gradient(145deg, #9e2b25, #7a1f1a)' }}
-                     >
-                       <span className="font-ancient text-[#f3d9a4] text-2xl leading-none">殺</span>
-                     </div>
-                   </div>
-
-                   <div className="absolute bottom-2 inset-x-0 text-center text-[8px] tracking-[0.28em] text-[#c8a45c]/45">
-                     三国杀
-                   </div>
-                </div>
-
-                {/* 牌堆数量（低于10张时朱红告警） */}
-                <div className={`absolute -bottom-3 -right-3 w-10 h-10 rounded-full flex items-center justify-center border-2 shadow-lg transition-colors font-bold text-sm ${
-                  deck.length < 10
-                    ? 'bg-[#9e2b25] border-red-400/70 text-[#f7e7cf] ring-2 ring-red-500/30 animate-pulse'
-                    : 'bg-[#c8a45c] border-[#e0c07a]/80 text-[#2a1f14]'
-                }`}>
-                  {deck.length}
-                </div>
-              </div>
-
-              {/* 洗切提示：弃牌堆洗回牌堆时的短暂说明 */}
-              {deckFx?.kind === 'shuffle' && (
-                <div className="absolute -bottom-10 left-1/2 -translate-x-1/2 whitespace-nowrap font-ancient text-[11px] tracking-[0.18em] text-[#f2dca5] bg-black/75 border border-[#c8a45c]/40 px-2 py-0.5 rounded deck-fade">
-                  洗切中…
-                </div>
-              )}
-           </div>
-        </div>
+        <CenterDecks
+          theme={theme}
+          deckLength={deck.length}
+          discardPile={discardPile}
+          deckFx={deckFx}
+          onShowDiscard={() => setShowDiscardViewer(true)}
+        />
 
         {/* Advice Modal */}
         {advice && (
@@ -10852,173 +10528,22 @@ const App: React.FC = () => {
         {/* 玩家信息栏：自己固定牌桌下首（左侧），操作区靠右下 */}
         <div data-region="player-info" className="player-info-row flex flex-col md:flex-row md:justify-between md:items-start gap-1 md:gap-6 px-2 md:px-4 mb-1 md:mb-2">
           {/* 主视角座位：与敌方座位卡同一套卡面（势力框 + 全幅立绘 + 左竖姓名 + 右上勾玉 + 底部信息层） */}
-          <div
-            data-seat-id={0}
-            className={`
-              own-seat seat-card relative rounded-xl border-2 kingdom-frame hero-card ${KINGDOM_CLASS[me.hero.kingdom] ?? ''}
-              focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#e8cf94]
-              ${damageAnimTarget === 0 || healAnimTarget === 0
-                ? '' // 动画期间禁用过渡效果
-                : 'transition-[transform,box-shadow,border-color] duration-300'
-              }
-              ${me.isDead
-                ? 'bg-[#15110e]/95 border-[#4a3f33] opacity-55'
-                : 'bg-[#1c1611]/95 border-[#8b7355]/45'
-              }
-              ${me.isDead ? 'is-dead' : ''}
-              ${me.identity === Identity.ZHUGONG ? 'is-lord-card' : ''}
-              ${dyingState && dyingState.isActive && dyingState.victimId === me.id ? 'is-dying' : ''}
-              ${isMyTurn && !(dyingState && dyingState.isActive && dyingState.victimId === me.id) ? 'is-current-turn' : ''}
-              ${isMyTurn
-                ? (fxLevel === 'pure'
-                  ? 'border-[#e8cf94]/70'
-                  : 'border-[#c8a45c] shadow-[0_0_22px_rgba(200,164,92,0.30)] scale-105')
-                : ''
-              }
-              ${damageAnimTarget === 0 && fxLevel !== 'pure' && fxLevel !== 'classic' ? 'animate-damage-shake' : ''}
-              ${healAnimTarget === 0 ? 'animate-heal-pulse' : ''}
-            `}
-          >
-            {/* 当前回合呼吸光晕（独立层，只动 opacity） */}
-            {isMyTurn && !(dyingState && dyingState.isActive && dyingState.victimId === me.id) && (
-              <span className="turn-glow" aria-hidden="true" />
-            )}
-            {/* 势力色顶条：与座位卡一致 */}
-            <span
-              className="absolute top-0 left-2 right-2 h-[2px] rounded-full opacity-80"
-              style={{ background: 'var(--k-main)' }}
-            />
-
-            {/* 伤害数字显示 */}
-            {damageNumber && damageNumber.targetId === 0 && (
-              <div className="absolute -top-10 left-1/2 -translate-x-1/2 z-50 pointer-events-none">
-                <div className="text-4xl font-bold text-red-500 animate-damage-float drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]" style={{ textShadow: '2px 2px 4px rgba(0,0,0,0.8)' }}>
-                  -{damageNumber.amount}
-                </div>
-              </div>
-            )}
-
-            {/* 治疗数字显示 */}
-            {healNumber && healNumber.targetId === 0 && (
-              <div className="absolute -top-10 left-1/2 -translate-x-1/2 z-50 pointer-events-none">
-                <div className="text-4xl font-bold text-green-500 animate-heal-float drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]" style={{ textShadow: '2px 2px 4px rgba(0,0,0,0.8)' }}>
-                  +{healNumber.amount}
-                </div>
-              </div>
-            )}
-
-            <div
-              role="button"
-              tabIndex={0}
-              aria-label={`查看 ${me.hero.name} 的武将详情`}
-              onClick={() => { if (!dyingState && !pendingReaction) setInspectPlayerId(me.id); }}
-              onKeyDown={(e) => {
-                if (e.key !== 'Enter' && e.key !== ' ') return;
-                e.preventDefault();
-                if (!dyingState && !pendingReaction) setInspectPlayerId(me.id);
-              }}
-              title={`点击查看 ${me.hero.name} 的武将详情`}
-              className={`seat-art cursor-pointer ${
-                healAnimTarget === 0 ? 'animate-heal-glow' :
-                damageAnimTarget === 0 ? 'animate-damage-glow' : ''
-              } ${skillGlowId === 0 ? 'skill-glow' : ''} ${aiThinkingId === 0 ? 'ai-thinking' : ''}`}
-            >
-              <img
-                src={me.hero.avatarUrl}
-                alt={me.hero.name}
-                loading="eager"
-                decoding="async"
-                className="seat-art-img"
-                onError={(e) => {
-                  const target = e.target as HTMLImageElement;
-                  target.src = `data:image/svg+xml;utf8,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256"><rect width="256" height="256" fill="#241b14"/><text x="128" y="158" font-size="96" fill="#c8a45c" text-anchor="middle" font-family="serif">${me.hero.name}</text></svg>`)}`;
-                }}
-              />
-              <div className="seat-scrim" />
-
-              {/* 阵亡遮罩 */}
-              {me.isDead && (
-                <div className="seat-dead">
-                  <span>阵亡</span>
-                </div>
-              )}
-
-              {/* 势力 + 身份：与座位卡同一套角章 */}
-              <div className="seat-topline">
-                <span className="seat-kingdom">{me.hero.kingdom}</span>
-                <span data-tour="identity" className={`seat-identity ${
-                  me.identity === Identity.ZHUGONG ? 'is-lord' :
-                  me.identity === Identity.ZHONGCHEN ? 'is-loyal' :
-                  me.identity === Identity.FANZEI ? 'is-rebel' :
-                  'is-spy'
-                }`}>
-                  {me.identity === Identity.ZHUGONG ? '主' :
-                    me.identity === Identity.ZHONGCHEN ? '忠' :
-                    me.identity === Identity.FANZEI ? '反' : '内'
-                  }
-                </span>
-              </div>
-
-              {/* 左侧竖排：姓名 + 技能（与座位卡同字号，姓名独占一列，不被勾玉覆盖） */}
-              <div className="seat-name-rail">
-                <span className="seat-name">{me.hero.name}</span>
-                <span className="seat-skill">【{me.hero.skillName}】</span>
-              </div>
-
-              {/* 体力勾玉：右上角安全区，与姓名 0 重叠 */}
-              <div className="seat-hp-corner" title={`体力 ${me.hp}/${me.maxHp}`}>
-                <div className="seat-pips">
-                  {Array.from({ length: me.maxHp }).map((_, i) => (
-                    <span key={i} className={`seat-pip ${i < me.hp ? (me.hp === 1 ? 'is-low' : 'is-on') : ''}`} />
-                  ))}
-                </div>
-              </div>
-
-              {isMyTurn && (
-                <div data-tour="turn" className="own-turn-chip">我的回合</div>
-              )}
-            </div>
-
-            {/* 底部信息层：手牌 / 范围 / 装备四槽 / 判定区，与座位卡同一层级 */}
-            <div className="seat-info">
-              <div className="seat-meta-row">
-                <span className="seat-hand-count">手牌 <b className="tabular-nums">{me.hand.length}</b></span>
-                <span className="seat-distance">范围 {getAttackRange(me)}</span>
-                {me.isDead && <span className="seat-dead-tag">阵亡</span>}
-              </div>
-
-              <div data-tour="equipment" className="seat-equip">
-                {[
-                  { key: 'weapon', label: '武', item: me.equipment?.weapon, tip: '武器' },
-                  { key: 'armor', label: '防', item: me.equipment?.armor, tip: '防具' },
-                  { key: 'horsePlus', label: '+1', item: me.equipment?.horsePlus, tip: '+1 马（防御马）' },
-                  { key: 'horseMinus', label: '−1', item: me.equipment?.horseMinus, tip: '-1 马（进攻马）' },
-                ].map(slot => (
-                  <span
-                    key={slot.key}
-                    title={`${slot.tip}：${slot.item
-                      ? `${slot.item.name}${slot.key === 'weapon' ? `（范围 ${EQUIP_META[slot.item.name]?.range ?? 1}）` : ''}${EQUIP_META[slot.item.name]?.desc ? ` · ${EQUIP_META[slot.item.name]?.desc}` : ''}`
-                      : '空'}`}
-                    aria-label={`${slot.tip}：${slot.item ? slot.item.name : '空'}`}
-                    className={`seat-equip-slot ${slot.item ? 'is-on' : ''}`}
-                  >
-                    {slot.label}
-                    {slot.item && <i className="seat-equip-dot" />}
-                  </span>
-                ))}
-              </div>
-
-              {/* 判定区：乐 / 兵 / 电 / 链 逐张可见 */}
-              {(me.isChained || me.isLeBuSiShu || me.isBingLiangCunDuan || me.isShandian) && (
-                <div className="seat-judge" title="判定区">
-                  {me.isChained && <span className="is-chain" title="铁索连环">链</span>}
-                  {me.isLeBuSiShu && <span className="is-le" title="乐不思蜀">乐</span>}
-                  {me.isBingLiangCunDuan && <span className="is-bing" title="兵粮寸断">兵</span>}
-                  {me.isShandian && <span className="is-dian" title="闪电悬顶">电</span>}
-                </div>
-              )}
-            </div>
-          </div>
+          <OwnSeatPanel
+            me={me}
+            isMyTurn={isMyTurn}
+            dyingActive={!!(dyingState && dyingState.isActive)}
+            dyingVictimId={dyingState?.isActive ? dyingState.victimId : null}
+            hasPendingReaction={!!pendingReaction}
+            fxLevel={fxLevel}
+            damageAnimTarget={damageAnimTarget}
+            healAnimTarget={healAnimTarget}
+            damageNumber={damageNumber}
+            healNumber={healNumber}
+            skillGlowId={skillGlowId}
+            aiThinkingId={aiThinkingId}
+            attackRange={getAttackRange(me)}
+            onInspect={setInspectPlayerId}
+          />
 
             {/* Control Buttons - 操作按钮：托管已统一放在左上角，避免重复入口 */}
             <div data-tour="action-bar" className="action-bar flex flex-wrap gap-2 md:gap-3 items-center relative z-40">
@@ -11939,138 +11464,35 @@ const App: React.FC = () => {
             </div>
          </div>
 
-         {/* Hand Cards Area - 手牌区域
-             内层 w-max + mx-auto：牌少时居中，牌多时从左侧完整展示并可横向滚动，
-             避免 justify-center 在内容超宽时把最左边一张裁掉 */}
-         <div data-region="hand" className={`w-full overflow-x-auto overflow-y-visible px-2 sm:px-4 pb-1 scrollbar-hide flex relative ${compactHand ? 'pt-3' : 'pt-4 sm:pt-5'}`} style={{ zIndex: 10, minHeight: 'var(--hand-min)' }}>
-           {/* 手牌背景 - 白天模式移除遮罩 */}
-           {theme === 'dark' && (
-             <div className="absolute inset-x-4 bottom-0 h-32 rounded-t-2xl pointer-events-none bg-gradient-to-t from-[#0c0906]/85 to-transparent"></div>
-           )}
-           <div className="hand-tray" aria-hidden="true" />
-           {/* 手机端最近战报：塞在手牌上方的留白里，不压中央卡池 */}
-           <div className={`mobile-log ${uiHidden.log ? 'hidden' : 'md:hidden'}`}>
-             {logs.slice(-1).map(log => (
-               <div key={log.id} className="mobile-log-line">{log.text}</div>
-             ))}
-           </div>
-           {/* 左下角标：手牌数 + 弃牌堆（可查看，含张数） */}
-           <div className="absolute left-3 bottom-3 hidden md:flex items-center gap-3 z-20">
-             <div className="flex items-center gap-1.5 pointer-events-none">
-               <span className={`text-[10px] tracking-[0.28em] ${theme === 'dark' ? 'text-[#8f806a]' : 'text-[#9a8a70]'}`}>手牌</span>
-               <span className={`font-ancient text-lg leading-none ${theme === 'dark' ? 'text-[#e8cf94]' : 'text-[#8b6914]'}`}>{me.hand.length}</span>
-             </div>
-             <button
-               onClick={() => setShowDiscardViewer(true)}
-               disabled={!!dyingState || isProcessing}
-               className={`pointer-events-auto inline-flex items-center gap-1 px-2 py-1 rounded-[4px] border text-[10px] leading-none transition-colors ${
-                 theme === 'dark'
-                   ? 'bg-[#14100c]/80 border-[#8b7355]/45 text-[#c8bda8] hover:border-[#c8a45c] hover:text-[#e8cf94]'
-                   : 'bg-white/60 border-[#c4b8a8]/70 text-[#6b5a42] hover:border-[#a8842c]'
-               }`}
-               aria-label={`查看弃牌堆，共 ${discardPile.length} 张`}
-               title="查看弃牌堆"
-             >
-               <span className="opacity-70">弃牌堆</span>
-               <span className="font-bold tabular-nums text-[#e8cf94]">{discardPile.length}</span>
-             </button>
-           </div>
-
-           {/* 右下角标：牌堆剩余张数 */}
-           <div className="absolute right-3 bottom-3 hidden md:flex items-center gap-2 z-20">
-             <div
-               className={`inline-flex items-center gap-1 px-2 py-1 rounded-[4px] border text-[10px] leading-none ${
-                 theme === 'dark' ? 'bg-[#14100c]/80 border-[#8b7355]/45 text-[#c8bda8]' : 'bg-white/60 border-[#c4b8a8]/70 text-[#6b5a42]'
-               }`}
-               title="牌堆剩余张数"
-             >
-               <span className="opacity-70">牌堆</span>
-               <span className="font-bold tabular-nums text-[#e8cf94]">{deck.length}</span>
-             </div>
-           </div>
-
-           <div className="flex -space-x-2 sm:space-x-1 md:space-x-2 items-end px-4 pb-2 relative mx-auto shrink-0 w-max">
-             {me.hand.map((card, index) => {
-               // Selection Logic
-               const isSelected = (phase === GamePhase.DISCARD || isZhihengMode || (isLijianMode && lijianSelectedCardId === card.id) || isRendeMode)
-                 ? selectedCardIds.includes(card.id) || (isLijianMode && lijianSelectedCardId === card.id) || (isRendeMode && rendeSelectedCardIds.includes(card.id))
-                 : activeSelectedId === card.id;
-               // Playability Check for Visuals
-               let isPlayable = isMyTurn && !isAiTakeover;
-               if (phase === GamePhase.DISCARD && !isAiTakeover) isPlayable = true;
-               else if (phase !== GamePhase.ACTION && phase !== GamePhase.DISCARD) isPlayable = false;
-
-               // Reaction Mode
-               if (pendingReaction && !isAiTakeover) {
-                  // 检查是否为需要的牌或可以通过技能使用的牌
-                  const neededCard = pendingReaction.cardName;
-                  const canUseSkill = me.hero.name === '赵云'
-                    || (me.hero.name === '赵襄' && (me.meiyanMarks ?? 0) > 0);
-                  const skillCardName = neededCard === CardName.SHAN ? CardName.SHA : CardName.SHAN;
-                  // 「武圣」：红色牌可当【杀】打出
-                  const isWushengCard = canUseWusheng(me) && neededCard === CardName.SHA &&
-                    (card.suit === Suit.HEART || card.suit === Suit.DIAMOND);
-                  // 甄姬「倾国」：黑色牌可当【闪】打出
-                  const isQingguoCard = me.hero.name === '甄姬' && neededCard === CardName.SHAN &&
-                    (card.suit === Suit.SPADE || card.suit === Suit.CLUB);
-
-                  isPlayable = card.name === neededCard ||
-                    (canUseSkill && card.name === skillCardName) ||
-                    isWushengCard ||
-                    isQingguoCard ||
-                    (neededCard === CardName.WUXIE && card.name === CardName.WUXIE);
-               }
-
-               // When one is selected in ACTION phase (not Zhiheng mode, not Rende mode), disable others
-               const lockOthers = (phase === GamePhase.ACTION && !isAiTakeover && !isZhihengMode && !isRendeMode && !isZhangbaMode && selectedCardIds.length > 0);
-
-               // 检查是否为赵云且卡牌是杀或闪，以显示技能提示
-               const isZhaoyun = players[0]?.hero?.name === '赵云';
-               const canUseLongdan = isZhaoyun &&
-                                   ([CardName.SHA, CardName.SHAN].includes(card.name) && isPlayable);
-
-               // 扇形排列参数：以中间牌为轴，两侧牌旋转并下沉
-               const handCount = me.hand.length;
-               const offset = index - (handCount - 1) / 2;
-               const fanRot = Math.max(-24, Math.min(24, offset * 3.2));
-               const fanY = Math.abs(offset) * Math.abs(offset) * 1.6 - (layoutDensity === 'ultra' ? 6 : 0);
-
-               // 新摸到的牌：从牌堆方向飞入手牌区
-               const drawStartIndex = drawPulse ? me.hand.length - drawPulse.count : me.hand.length;
-               const isNewDrawn = index >= drawStartIndex;
-               return (
-                <div
-                  key={card.id}
-                  className={`
-                    fan-card origin-bottom relative shrink-0
-                    ${isSelected ? 'is-selected' : ''}
-                    ${lockOthers && !isSelected ? 'pointer-events-none' : ''}
-                  `}
-                  style={{
-                    '--fan-rot': `${fanRot}deg`,
-                    '--fan-y': `${fanY}px`,
-                  } as React.CSSProperties}
-                >
-                  <div
-                    className={isNewDrawn ? 'draw-in' : undefined}
-                    style={isNewDrawn ? { animationDelay: `${(index - drawStartIndex) * 70}ms` } : undefined}
-                  >
-                    <CardComponent
-                      card={card}
-                      selected={isSelected}
-                      disabled={!isPlayable || (lockOthers && !isSelected)}
-                      onClick={dispatchCardClick}
-                      canUseSkill={canUseLongdan}
-                      skillName="龙胆"
-                      small={isMobileHand}
-                      large={handLarge}
-                    />
-                  </div>
-                </div>
-               );
-             })}
-           </div>
-         </div>
+        <HandTray
+          theme={theme}
+          compactHand={compactHand}
+          uiHiddenLog={uiHidden.log}
+          lastLog={logs[logs.length - 1]}
+          me={me}
+          deckLength={deck.length}
+          discardLength={discardPile.length}
+          onShowDiscard={() => setShowDiscardViewer(true)}
+          disabled={!!dyingState || isProcessing}
+          phase={phase}
+          isMyTurn={isMyTurn}
+          isAiTakeover={isAiTakeover}
+          isZhihengMode={isZhihengMode}
+          isLijianMode={isLijianMode}
+          isRendeMode={isRendeMode}
+          isZhangbaMode={isZhangbaMode}
+          lijianSelectedCardId={lijianSelectedCardId}
+          selectedCardIds={selectedCardIds}
+          rendeSelectedCardIds={rendeSelectedCardIds}
+          activeSelectedId={activeSelectedId}
+          pendingReaction={pendingReaction}
+          canWusheng={canUseWusheng(me)}
+          drawPulse={drawPulse}
+          layoutDensity={layoutDensity}
+          isMobileHand={isMobileHand}
+          handLarge={handLarge}
+          onCardClick={dispatchCardClick}
+        />
       </div>
 
       {/* 对局中玩法说明 / 新手教学入口（右上角 ?） */}
