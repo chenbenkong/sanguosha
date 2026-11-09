@@ -10,6 +10,9 @@ import { HeroDetailModal } from './src/components/HeroDetailModal';
 import RulesDialog from './src/components/RulesDialog';
 import { GameSave, SAVE_VERSION, readSave, writeSave, clearSave, consumeSaveRejected, isSaveFinished } from './src/game/save';
 import { shuffle, rankValue, wuguKeepPriority } from './src/game/utils';
+import { LogPanel, PhasePanel, TurnRail, TurnStrip, ObjectiveStrip, MobilePhaseChip } from './src/components/game/GameHud';
+import { PlayerInspectModal } from './src/components/game/PlayerInspectModal';
+import { GameTopBar, UiDisplayMenu, UiRegion, BgmPref } from './src/components/game/GameTopBar';
 import { IconSpeaker, IconSun, IconMoon, IconBolt, IconBook, IconDice, IconMotion, IconArrowLeft, ThemeIcon, IconEye } from './src/components/Icons';
 import { useLayoutProfile } from './src/hooks/useLayoutProfile';
 import GameOverScreen from './src/components/GameOverScreen';
@@ -52,40 +55,10 @@ const FX_LABEL: Record<FxLevel, string> = {
 const FX_TAG: Record<FxLevel, string> = { classic: '典', pure: '净', subtle: '克', full: '全' };
 const FX_ORDER: FxLevel[] = ['classic', 'pure', 'subtle', 'full'];
 
-// 对局界面可收起/隐藏的固定显示项（持久化到 localStorage）
-type UiRegion = 'controls' | 'objective' | 'phase' | 'log' | 'order';
-const UI_REGION_ITEMS: { key: UiRegion; label: string }[] = [
-  { key: 'controls', label: '设置栏' },
-  { key: 'objective', label: '身份目标' },
-  { key: 'phase', label: '阶段指示' },
-  { key: 'log', label: '战报' },
-  { key: 'order', label: '出牌顺序' },
-];
-// 对局 BGM：auto = 随存活人数在战场/决战间切换；home = 始终用首页曲；battle = 始终战场曲
-type BgmPref = 'auto' | 'home' | 'battle';
-const BGM_PREF_LABEL: Record<BgmPref, string> = { auto: '随人数', home: '首页曲', battle: '战场曲' };
+// 对局界面可收起/隐藏的固定显示项：类型与文案统一维护在 GameTopBar 中
+// 对局 BGM 偏好同样由 GameTopBar 提供类型与文案
 
-// 战报仅依赖 logs 自身：独立 memo，避免读秒/动画等高频状态带动 40 行战报一起重渲染。
-// 只在 logs 引用变化（新增一条战报）时更新，内容、条数、字号与原实现完全一致。
-const LogRows = React.memo(function LogRows({ logs }: { logs: LogEntry[] }) {
-  return (
-    <>
-      {logs.slice(-40).map(log => (
-        <div key={log.id} className={`
-          px-3 py-1.5 rounded-sm text-[13px] leading-relaxed font-serif
-          ${log.type === 'danger' ? 'bg-[#3a1512]/60 text-[#f0c8c2] border-l-2 border-[#c86b62]' :
-            log.type === 'success' ? 'bg-[#2a2114]/60 text-[#f0e0b8] border-l-2 border-[#c8a45c]' :
-            log.type === 'skill' ? 'bg-[#1c2a33]/60 text-[#cfe0ee] border-l-2 border-[#8fb4d9]' :
-            log.type === 'chat' ? 'bg-[#2a2414]/60 text-[#f0e8c8] border-l-2 border-[#c8a45c]' :
-            log.type === 'warning' ? 'bg-[#33240f]/60 text-[#f0dcb8] border-l-2 border-[#c8963c]' :
-            'bg-[#1f1914]/60 text-[#cdc2b0] border-l-2 border-[#6a5642]'}
-        `}>
-          {log.text}
-        </div>
-      ))}
-    </>
-  );
-});
+// 战报行 / 战绩侧栏 / 阶段轨 / 出牌顺序 / 身份目标条已拆到 src/components/game/GameHud.tsx
 
 // 仅本地开发构建：定向测试探针开关（生产构建为 false，相关代码被裁剪）
 const DEV_BUILD = (import.meta as unknown as { env?: { DEV?: boolean } }).env?.DEV === true;
@@ -654,10 +627,6 @@ const App: React.FC = () => {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const bgmModeRef = useRef<'start' | 'battle' | 'climax'>('start');
   const audioReadyRef = useRef<boolean>(false);
-  const logsEndRef = useRef<HTMLDivElement>(null);
-  const logsContainerRef = useRef<HTMLDivElement>(null);
-  const isUserScrollingRef = useRef<boolean>(false);
-  const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   // 保存最新的players状态，避免闭包问题
   const playersRef = useRef<Player[]>([]);
   // 回合状态机去重：同一「回合+阶段」只推进一次，避免 isProcessing 抖动导致 AI 重复行动
@@ -2472,25 +2441,6 @@ const App: React.FC = () => {
       }
     }, 100);
   };
-
-  // Auto-scroll logs with user scroll detection
-  // 使用 requestAnimationFrame 优化日志滚动性能
-  useEffect(() => {
-    // 如果用户正在滚动，延迟滚动
-    if (isUserScrollingRef.current) {
-      return;
-    }
-    
-    // 立即滚动，减少延迟
-    if (logsContainerRef.current && logsEndRef.current) {
-      const container = logsContainerRef.current;
-      const target = logsEndRef.current;
-      container.scrollTo({
-        top: target.offsetTop - container.offsetTop,
-        behavior: 'smooth'
-      });
-    }
-  }, [logs]);
 
   // Main Loop Effect
   useEffect(() => {
@@ -11038,137 +10988,13 @@ const App: React.FC = () => {
       {inspectPlayerId !== null && (() => {
         const p = getPlayer(inspectPlayerId);
         if (!p) return null;
-        const knownIdentity = p.isHuman || p.isRevealed || p.identity === Identity.ZHUGONG;
         return (
-          <div className="absolute inset-0 z-[100] modal-mask flex items-center justify-center p-4" onClick={() => setInspectPlayerId(null)}>
-            <div className="modal-shell max-w-xl w-[92%] max-h-[85vh] overflow-y-auto p-6 scrollbar-thin" onClick={e => e.stopPropagation()}>
-              <div className="text-center mb-5">
-                <h3 className="modal-title text-3xl font-ancient mb-2">武将详情</h3>
-                <div className="w-24 modal-divider mx-auto"></div>
-              </div>
-              <div className="flex items-center gap-4 mb-5 p-4 bg-black/30 rounded-lg border border-[#8b7355]/30">
-                <div className="flex-none flex flex-col items-center gap-1.5">
-                  <img
-                    src={p.hero.avatarUrl}
-                    alt={p.hero.name}
-                    loading="eager"
-                    decoding="async"
-                    className={`w-20 h-[120px] rounded-lg border-2 object-cover ${p.isDead ? 'grayscale border-stone-600 opacity-70' : 'border-[#d4af37]/50'}`}
-                    onError={(e) => {
-                      const target = e.target as HTMLImageElement;
-                      target.src = `data:image/svg+xml;utf8,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256"><rect width="256" height="256" fill="#241b14"/><text x="128" y="158" font-size="96" fill="#c8a45c" text-anchor="middle" font-family="serif">${p.hero.name}</text></svg>`)}`;
-                    }}
-                  />
-                  <button
-                    onClick={() => { setInspectPlayerId(null); setPortraitHero(p.hero); }}
-                    className="text-[11px] px-2 py-0.5 rounded border border-[#c8a45c]/50 text-[#e8cf94] hover:bg-[#c8a45c]/15"
-                  >
-                    查看立绘
-                  </button>
-                  <button
-                    onClick={() => { setInspectPlayerId(null); setDetailPlayerId(p.id); setDetailHero(p.hero); }}
-                    className="text-[11px] px-2 py-0.5 rounded border border-[#c8a45c]/50 text-[#e8cf94] hover:bg-[#c8a45c]/15"
-                    aria-label={`查看 ${p.hero.name} 武将详情`}
-                  >
-                    武将详情
-                  </button>
-                </div>
-                <div className="flex-1">
-                  <h4 className="text-2xl font-bold text-[#d4af37] font-ancient flex items-center gap-2">
-                    {p.hero.name}
-                    {p.isDead && <span className="text-[#c86b62] text-sm border border-[#9e2b25] px-1.5 py-0.5 rounded">阵亡</span>}
-                  </h4>
-                  {/* 对局内小卡浮层不显示称号（epithet）：称号只在选将页/完整详情面板出现 */}
-                  <div className="flex flex-wrap items-center gap-2 mt-1.5 text-sm">
-                    <span className={`px-2 py-0.5 rounded text-xs font-bold ${
-                      p.hero.kingdom === '魏' ? 'bg-blue-900/60 text-blue-200' :
-                      p.hero.kingdom === '蜀' ? 'bg-red-900/60 text-red-200' :
-                      p.hero.kingdom === '吴' ? 'bg-green-900/60 text-green-200' :
-                      'bg-stone-700/60 text-stone-200'
-                    }`}>{p.hero.kingdom}</span>
-                    <span className="text-stone-400">{p.hero.gender === 'male' ? '男' : '女'}</span>
-                    <span className={p.hp <= 1 ? 'text-[#e8a99f]' : 'text-red-400'}>♥ {p.hp}/{p.maxHp}</span>
-                    <span className="text-stone-400">手牌 {p.hand.length}</span>
-                    <span className="text-[#c8a45c]">身份 {knownIdentity ? p.identity : '未知'}</span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="bg-gradient-to-r from-[#8b4513]/30 to-transparent p-4 rounded-lg border-l-4 border-[#d4af37] mb-4">
-                <h5 className="text-xl font-bold text-[#d4af37] mb-2 font-ancient">【{p.hero.skillName}】</h5>
-                <p className="text-stone-300 leading-relaxed text-sm">{p.hero.skillDesc}</p>
-                {p.hero.lordSkillName && (
-                  <div className="mt-3 pt-3 border-t border-[#8b7355]/30">
-                    <div className="text-base font-bold text-[#e8cf94] mb-1 font-ancient">主公技【{p.hero.lordSkillName}】</div>
-                    <p className="text-stone-300 leading-relaxed text-sm">{p.hero.lordSkillDesc}</p>
-                  </div>
-                )}
-              </div>
-
-              <div className="bg-black/20 p-4 rounded-lg border border-[#8b7355]/20 text-sm space-y-2.5">
-                <div>
-                  <div className="text-stone-500 mb-1.5">装备区</div>
-                  {([
-                    ['weapon', '武器'],
-                    ['armor', '防具'],
-                    ['horsePlus', '防御马'],
-                    ['horseMinus', '进攻马'],
-                  ] as const).map(([slot, label]) => {
-                    const c = p.equipment?.[slot];
-                    return c ? (
-                      <div key={slot} className="mb-1.5">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#c8a45c]/15 border border-[#c8a45c]/30 text-[#e8cf94]">{label}</span>
-                          <span className="text-[#f0dcae] font-bold text-[13px]">【{c.name}】</span>
-                          <span className="text-stone-500 text-[11px]">{c.suit}{c.rank}</span>
-                        </div>
-                        <p className="text-[11px] text-stone-400 leading-relaxed mt-0.5">{EQUIP_META[c.name]?.desc ?? c.description}</p>
-                      </div>
-                    ) : (
-                      <div key={slot} className="flex items-center gap-2 mb-1">
-                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-black/30 border border-[#8b7355]/30 text-stone-500">{label}</span>
-                        <span className="text-stone-600 text-[11px]">— 空</span>
-                      </div>
-                    );
-                  })}
-                </div>
-                {(p.judgeZone?.length ?? 0) > 0 && (
-                  <div>
-                    <div className="text-stone-500 mb-1">判定区（按放置先后逐张判定）</div>
-                    {(p.judgeZone ?? []).map(c => (
-                      <div key={c.id} className="text-[12px] leading-relaxed">
-                        <span className="text-[#f0dcae]">【{c.name}】</span>
-                        <span className="text-stone-500 text-[11px] ml-1">{c.suit}{c.rank}</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-                {(p.placedCards?.length ?? 0) > 0 && (
-                  <div className="flex gap-2"><span className="text-stone-500 w-16 shrink-0">武将牌上</span>
-                    <span className="text-stone-300">{p.placedCards!.map(c => `【${c.name}】`).join('')}</span>
-                  </div>
-                )}
-                {(p.isChained || p.isLeBuSiShu || p.isBingLiangCunDuan || p.isShandian) && (
-                  <div className="flex gap-2"><span className="text-stone-500 w-16 shrink-0">状态</span>
-                    <span className="text-[#e8cf94]">
-                      {[
-                        p.isChained ? '铁索横置' : '',
-                        p.isLeBuSiShu ? '乐不思蜀' : '',
-                        p.isBingLiangCunDuan ? '兵粮寸断' : '',
-                        p.isShandian ? '闪电' : '',
-                      ].filter(Boolean).join(' · ')}
-                    </span>
-                  </div>
-                )}
-              </div>
-
-              <div className="mt-6 flex justify-center">
-                <button onClick={() => setInspectPlayerId(null)} className="px-10 py-2.5 btn-gold font-ancient text-xl rounded-lg">
-                  关闭
-                </button>
-              </div>
-            </div>
-          </div>
+          <PlayerInspectModal
+            player={p}
+            onClose={() => setInspectPlayerId(null)}
+            onZoom={(target) => { setInspectPlayerId(null); setPortraitHero(target.hero); }}
+            onOpenDetail={(target) => { setInspectPlayerId(null); setDetailPlayerId(target.id); setDetailHero(target.hero); }}
+          />
         );
       })()}
 
@@ -11764,110 +11590,23 @@ const App: React.FC = () => {
       </div>
 
       {/* 左上身份目标条：对齐官方参考图左上角的「主×1 忠×1 反×2 内×1」与目标提示 */}
-      <div className={`objective-strip absolute top-2 left-[150px] z-[225] items-center gap-2 ${uiHidden.objective ? 'hidden' : 'hidden md:flex'}`}>
-        <span className="objective-seats">
-          {([
-            [Identity.ZHUGONG, '主'],
-            [Identity.ZHONGCHEN, '忠'],
-            [Identity.FANZEI, '反'],
-            [Identity.NEIJIAN, '内'],
-          ] as [Identity, string][]).map(([id, short]) => {
-            const n = [me, ...enemies].filter(p => p.identity === id).length;
-            return n > 0 ? (
-              <span key={id} className={`objective-chip is-${id}`}>{short}×{n}</span>
-            ) : null;
-          })}
-        </span>
-        <span className="objective-goal">
-          {me.identity === Identity.ZHUGONG ? '目标：剿灭反贼与内奸' :
-            me.identity === Identity.ZHONGCHEN ? '目标：护主，清除反贼' :
-            me.identity === Identity.FANZEI ? '目标：击杀主公' :
-            '目标：先清场，再与主公单挑'}
-        </span>
-      </div>
+      <ObjectiveStrip players={players} me={me} hidden={uiHidden.objective} />
 
       {/* 手机端紧凑阶段指示：放在顶部控制区中间的空档，避免压住牌桌与战报 */}
-      <div className={`${uiHidden.phase ? 'hidden' : 'md:hidden'} absolute top-2 left-[156px] z-[230]`}>
-        <div className="ui-panel relative overflow-hidden flex items-center gap-1.5 h-10 px-2.5 whitespace-nowrap">
-          <span className={`text-[11px] font-bold font-ancient tracking-[0.12em] ${theme === 'dark' ? 'text-[#e8cf94]' : 'text-[#6b4a1a]'}`}>
-            {phase.replace('回合', '').replace('阶段', '')}
-          </span>
-          {decisionLeft !== null && (
-            <span className={`text-[11px] font-bold tabular-nums ${decisionLeft <= 5 ? 'text-[#e0705f] animate-pulse' : theme === 'dark' ? 'text-[#c8a45c]' : 'text-[#8b6914]'}`}>
-              {decisionLeft}s
-            </span>
-          )}
-          {decisionLeft !== null && (
-            <span className="absolute bottom-0 left-0 right-0 h-[2px] bg-white/10">
-              <span
-                className={`block h-full transition-[width] duration-200 ease-linear ${decisionLeft <= 5 ? 'bg-[#e0705f]' : 'bg-[#c8a45c]'}`}
-                style={{ width: `${Math.max(0, Math.min(100, (decisionLeft / DECISION_SECONDS) * 100))}%` }}
-              />
-            </span>
-          )}
-        </div>
-      </div>
+      <MobilePhaseChip theme={theme} phase={phase} decisionLeft={decisionLeft} decisionSeconds={DECISION_SECONDS} hidden={uiHidden.phase} />
 
       {/* 界面显隐菜单：固定定位挂在根层，避免被牌桌/出牌顺序条的层叠上下文遮挡 */}
       {showUiMenu && (
-        <>
-          <div className="fixed inset-0 z-[380]" onClick={() => setShowUiMenu(false)} aria-hidden="true" />
-          <div
-            role="dialog"
-            aria-label="界面显示设置"
-            className={`fixed right-3 top-14 z-[390] w-48 rounded-lg border p-2 shadow-xl ${theme === 'dark' ? 'bg-[#1b1511]/95 border-[#8b7355]/50 text-[#e6d8bd]' : 'bg-[#faf6ee]/95 border-[#c4a77d]/70 text-[#4a3a22]'}`}
-          >
-            <div className="text-[11px] tracking-[0.25em] opacity-70 px-1 pb-1">界面显示</div>
-            {UI_REGION_ITEMS.map(item => {
-              const shown = !uiHidden[item.key];
-              return (
-                <button
-                  key={item.key}
-                  type="button"
-                  role="switch"
-                  aria-checked={shown}
-                  onClick={() => toggleUiRegion(item.key)}
-                  className="w-full flex items-center justify-between gap-2 px-2 py-1.5 rounded text-[12px] hover:bg-black/10"
-                >
-                  <span>{item.label}</span>
-                  <span className={`text-[10px] px-1.5 py-0.5 rounded border ${shown ? 'border-[#c8a45c]/70 text-[#c8a45c]' : 'border-current opacity-50'}`}>
-                    {shown ? '显示' : '隐藏'}
-                  </span>
-                </button>
-              );
-            })}
-            <div className={`h-px my-1.5 ${theme === 'dark' ? 'bg-[#8b7355]/40' : 'bg-[#c4a77d]/50'}`} />
-            <div className="text-[11px] tracking-[0.25em] opacity-70 px-1 pb-1">游戏速度</div>
-            <div className="flex gap-1 px-1 pb-1">
-              {([1, 2, 3] as const).map(v => (
-                <button
-                  key={v}
-                  type="button"
-                  onClick={() => setSpeedLevel(v)}
-                  aria-pressed={speedLevel === v}
-                  className={`flex-1 px-1 py-1 rounded text-[11px] border tabular-nums ${speedLevel === v ? 'border-[#c8a45c]/80 text-[#c8a45c]' : 'border-transparent opacity-60 hover:opacity-100'}`}
-                >
-                  ×{v}
-                </button>
-              ))}
-            </div>
-            <div className={`h-px my-1.5 ${theme === 'dark' ? 'bg-[#8b7355]/40' : 'bg-[#c4a77d]/50'}`} />
-            <div className="text-[11px] tracking-[0.25em] opacity-70 px-1 pb-1">对局音乐</div>
-            <div className="flex gap-1 px-1">
-              {(['auto', 'home', 'battle'] as BgmPref[]).map(v => (
-                <button
-                  key={v}
-                  type="button"
-                  onClick={() => chooseBgmPref(v)}
-                  aria-pressed={bgmPref === v}
-                  className={`flex-1 px-1 py-1 rounded text-[11px] border ${bgmPref === v ? 'border-[#c8a45c]/80 text-[#c8a45c]' : 'border-transparent opacity-60 hover:opacity-100'}`}
-                >
-                  {BGM_PREF_LABEL[v]}
-                </button>
-              ))}
-            </div>
-          </div>
-        </>
+        <UiDisplayMenu
+          theme={theme}
+          uiHidden={uiHidden}
+          speedLevel={speedLevel}
+          bgmPref={bgmPref}
+          onToggleRegion={toggleUiRegion}
+          onSetSpeed={setSpeedLevel}
+          onChooseBgm={chooseBgmPref}
+          onClose={() => setShowUiMenu(false)}
+        />
       )}
 
       {/* 顶部工具栏：桌面端不占竖向高度，座位环绝对定位覆盖牌桌舞台 */}
@@ -11876,74 +11615,24 @@ const App: React.FC = () => {
         <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-transparent via-yellow-700/50 to-transparent"></div>
 
         {/* 右上角控制组：帮助 / 速度 / 主题 / 静音 / 动效 / 特效，以及始终可见的「界面」显隐入口 */}
-        <div data-region="top-controls" className="absolute top-2 right-3 z-50 flex items-center gap-2">
-          {!uiHidden.controls && (
-            <>
-              <button
-                onClick={() => setShowRules(true)}
-                className="ui-icon-btn font-bold"
-                title="玩法说明与新手教学"
-                aria-label="玩法说明与新手教学"
-              >
-                <span className="text-base leading-none">?</span>
-              </button>
-              <button
-                onClick={() => setSpeedLevel(speedLevel === 1 ? 2 : speedLevel === 2 ? 3 : 1)}
-                className="ui-icon-btn game-settings-hide font-bold text-sm tracking-wider"
-                title="切换游戏速度"
-                aria-label={`切换游戏速度，当前 ${speedLevel} 倍`}
-              >
-                <IconBolt />
-                <span className="tabular-nums">×{speedLevel}</span>
-              </button>
-              <button
-                onClick={toggleTheme}
-                className="ui-icon-btn game-settings-hide"
-                title={theme === 'dark' ? '切换到白天模式' : '切换到黑夜模式'}
-                aria-label={theme === 'dark' ? '切换到白天模式' : '切换到黑夜模式'}
-              >
-                <ThemeIcon theme={theme} />
-              </button>
-              <button
-                onClick={toggleMotion}
-                className="ui-icon-btn game-settings-hide"
-                title={motionOn ? '关闭动效' : '开启动效'}
-                aria-label={motionOn ? '关闭动效' : '开启动效'}
-              >
-                <IconMotion off={!motionOn} />
-              </button>
-              <button
-                onClick={cycleFx}
-                className="ui-icon-btn game-settings-hide flex-col !gap-0.5"
-                title={`${FX_LABEL[fxLevel]}（点击切换）`}
-                aria-label={`特效强度：${FX_LABEL[fxLevel]}，点击切换`}
-              >
-                <span className="text-[12px] leading-none font-bold">特效</span>
-                <span className="text-[10px] leading-none opacity-75">{FX_TAG[fxLevel]}</span>
-              </button>
-            </>
-          )}
-          {/* 静音始终可见：收起设置栏后仍能随时开关声音 */}
-          <button
-            onClick={toggleMute}
-            className="ui-icon-btn"
-            title={isMuted ? '开启音乐' : '静音'}
-            aria-label={isMuted ? '开启音乐' : '静音'}
-          >
-            <IconSpeaker muted={isMuted} />
-          </button>
-          <button
-            type="button"
-            onClick={() => setShowUiMenu(v => !v)}
-            className="ui-icon-btn"
-            title="界面显示设置"
-            aria-label="界面显示设置"
-            aria-expanded={showUiMenu}
-            aria-haspopup="dialog"
-          >
-            <IconEye off={uiHidden.controls || uiHidden.objective || uiHidden.phase || uiHidden.log || uiHidden.order} />
-          </button>
-        </div>
+        <GameTopBar
+          theme={theme}
+          controlsHidden={uiHidden.controls}
+          anyRegionHidden={uiHidden.controls || uiHidden.objective || uiHidden.phase || uiHidden.log || uiHidden.order}
+          isMuted={isMuted}
+          motionOn={motionOn}
+          speedLevel={speedLevel}
+          fxLabel={FX_LABEL[fxLevel]}
+          fxTag={FX_TAG[fxLevel]}
+          uiMenuOpen={showUiMenu}
+          onShowRules={() => setShowRules(true)}
+          onCycleSpeed={() => setSpeedLevel(speedLevel === 1 ? 2 : speedLevel === 2 ? 3 : 1)}
+          onToggleTheme={toggleTheme}
+          onToggleMute={toggleMute}
+          onToggleMotion={toggleMotion}
+          onCycleFx={cycleFx}
+          onToggleUiMenu={() => setShowUiMenu(v => !v)}
+        />
 
         {/* 环形座位：桌面端绝对定位环绕牌桌；手机端为顶部横向压缩小卡 */}
       <div data-region="seats" data-many={enemies.length >= 5 ? 'true' : 'false'} className={`relative w-full flex items-start justify-center gap-1 overflow-x-auto pt-[44px] pb-1 px-1 scrollbar-hide md:pt-0 md:pb-0 md:px-0 md:absolute md:top-0 md:left-0 md:right-0 md:h-[68vh] md:block md:overflow-visible`}>
@@ -12216,142 +11905,17 @@ const App: React.FC = () => {
       <div data-region="field" className="flex-1 relative flex items-center justify-center w-full">
         
         {/* Logs - 战况记录：可折叠侧栏（桌面端） */}
-        <div data-region="log" className={`absolute left-2 ${uiHidden.log ? 'hidden' : 'hidden md:flex'} z-30 transition-[width] duration-200 ${logCollapsed ? 'log-collapsed w-10' : 'w-[340px]'}`}>
-          {logCollapsed ? (
-            <button
-              onClick={() => setLogCollapsed(false)}
-              className="log-panel w-full h-full flex flex-col items-center justify-center gap-2"
-              aria-label="展开战况记录"
-              title="展开战况记录"
-            >
-              <span className="text-[13px] tracking-[0.3em] text-[#d9c49a]" style={{ writingMode: 'vertical-rl' }}>战况记录</span>
-              <span className="text-[13px] tabular-nums px-1.5 py-0.5 rounded bg-black/40 text-[#e8cf94] border border-[#8b7355]/40">{logs.length}</span>
-            </button>
-          ) : (
-           <div className="log-panel h-full w-full flex flex-col overflow-hidden">
-             {/* 标题栏 */}
-             <div className="flex-none px-3 py-2 border-b border-[#8b7355]/25 bg-black/25">
-               <div className="flex items-center gap-2">
-                 <span className="w-[3px] h-4 rounded-sm bg-gradient-to-b from-[#f0d894] to-[#a8842c]" />
-                 <span className="text-[13px] font-bold tracking-[0.2em] text-[#d9c49a]">战况记录</span>
-                 <span className="text-[13px] tabular-nums text-[#8f806a]">{logs.length}</span>
-                 <button
-                   onClick={() => setLogCollapsed(true)}
-                   className="ml-auto text-[13px] px-1.5 py-0.5 rounded border border-[#8b7355]/50 text-[#d9c49a] hover:bg-white/10"
-                   aria-label="收起战况记录"
-                   title="收起战况记录"
-                 >
-                   收起 ‹
-                 </button>
-               </div>
-             </div>
-             {/* 可滚动日志内容 */}
-             <div 
-               ref={logsContainerRef}
-               role="log"
-               aria-live="polite"
-               aria-label="战况记录"
-               className="flex-1 overflow-y-auto p-2 space-y-1.5 scrollbar-thin scrollbar-thumb-stone-600 scrollbar-track-transparent"
-               onScroll={() => {
-                 // 用户开始滚动
-                 isUserScrollingRef.current = true;
-                 
-                 // 清除之前的定时器
-                 if (scrollTimeoutRef.current) {
-                   clearTimeout(scrollTimeoutRef.current);
-                 }
-                 
-                 // 1秒后恢复自动滚动（减少延迟）
-                 scrollTimeoutRef.current = setTimeout(() => {
-                   isUserScrollingRef.current = false;
-                   // 自动滚动到最新记录（只在容器内滚动）
-                   if (logsContainerRef.current && logsEndRef.current) {
-                     const container = logsContainerRef.current;
-                     const target = logsEndRef.current;
-                     container.scrollTo({
-                       top: target.offsetTop - container.offsetTop,
-                       behavior: 'smooth'
-                     });
-                   }
-                 }, 1000);
-               }}
-               onMouseEnter={() => {
-                 // 鼠标进入日志区域，标记为用户正在查看
-                 isUserScrollingRef.current = true;
-               }}
-               onMouseLeave={() => {
-                 // 鼠标离开日志区域，0.5秒后恢复自动滚动（更快恢复）
-                 if (scrollTimeoutRef.current) {
-                   clearTimeout(scrollTimeoutRef.current);
-                 }
-                 scrollTimeoutRef.current = setTimeout(() => {
-                   isUserScrollingRef.current = false;
-                   if (logsContainerRef.current && logsEndRef.current) {
-                     const container = logsContainerRef.current;
-                     const target = logsEndRef.current;
-                     container.scrollTo({
-                       top: target.offsetTop - container.offsetTop,
-                       behavior: 'smooth'
-                     });
-                   }
-                 }, 500);
-               }}
-             >
-               {/* 只渲染最近 40 条：独立 memo 组件，仅在 logs 变化时更新 */}
-               <LogRows logs={logs} />
-               <div ref={logsEndRef} />
-             </div>
-           </div>
-          )}
-        </div>
+        <LogPanel logs={logs} collapsed={logCollapsed} hidden={uiHidden.log} onCollapsedChange={setLogCollapsed} />
 
         {/* Phase Indicator - 五阶段进度轨（底部居中，紧邻手牌条上方） */}
-        <div className={`phase-panel ${uiHidden.phase ? 'hidden' : 'hidden md:flex'} ui-panel absolute left-1/2 -translate-x-1/2 top-[63%] px-5 py-2.5 z-30 flex-col items-center ${theme === 'dark' ? 'shadow-[0_6px_24px_rgba(0,0,0,0.55)]' : ''}`}>
-          <div className={`text-[15px] mb-1.5 tracking-[0.2em] ${theme === 'dark' ? 'text-[#9a8b74]' : 'text-[#8a7a60]'}`}>
-            当前阶段 · <span className="text-[#e8cf94]">{getPlayer(turnIndex)?.hero.name}</span>
-          </div>
-          <div className="flex items-center gap-1">
-            {[GamePhase.START, GamePhase.JUDGE, GamePhase.DRAW, GamePhase.ACTION, GamePhase.DISCARD, GamePhase.END].map((ph, i) => {
-              const phIndex = [GamePhase.START, GamePhase.JUDGE, GamePhase.DRAW, GamePhase.ACTION, GamePhase.DISCARD, GamePhase.END].indexOf(phase);
-              const active = ph === phase;
-              const passed = phIndex >= 0 && i < phIndex;
-              const short = ph.replace('回合', '').replace('阶段', '');
-              return (
-                <div key={ph} className="flex items-center gap-1">
-                  {i > 0 && <div className={`w-3 h-px ${passed || active ? (theme === 'dark' ? 'bg-yellow-600' : 'bg-[#8b6914]') : (theme === 'dark' ? 'bg-stone-600' : 'bg-[#d8d3ce]')}`}></div>}
-                  <div className={`
-                    px-2 py-1 rounded text-[15px] font-bold font-ancient transition-all duration-300
-                    ${active
-                      ? theme === 'dark'
-                        ? 'bg-gradient-to-b from-yellow-500 to-yellow-700 text-white shadow-[0_0_10px_rgba(234,179,8,0.5)] scale-110'
-                        : 'bg-gradient-to-b from-[#c9a86c] to-[#a08050] text-white shadow-[0_0_10px_rgba(184,149,106,0.5)] scale-110'
-                      : passed
-                        ? theme === 'dark' ? 'text-yellow-600/70' : 'text-[#8b6914]/70'
-                        : theme === 'dark' ? 'text-stone-500' : 'text-[#b0aba5]'
-                    }
-                  `}>
-                    {short}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-
-          {/* 决策读秒：只在轮到自己出牌/弃牌且未托管时出现 */}
-          {decisionLeft !== null && (
-            <div className="mt-2 flex items-center gap-2">
-              <div className={`flex-1 h-1 rounded-full overflow-hidden ${theme === 'dark' ? 'bg-white/10' : 'bg-black/10'}`}>
-                <div
-                  className={`h-full rounded-full transition-[width] duration-200 ease-linear ${decisionLeft <= 5 ? 'bg-[#e0705f]' : theme === 'dark' ? 'bg-[#d4af37]' : 'bg-[#a8842c]'}`}
-                  style={{ width: `${Math.max(0, Math.min(100, (decisionLeft / DECISION_SECONDS) * 100))}%` }}
-                />
-              </div>
-              <span className={`text-[14px] font-bold tabular-nums tracking-wider ${decisionLeft <= 5 ? 'text-[#e0705f] animate-pulse' : theme === 'dark' ? 'text-[#e8cf94]' : 'text-[#8b6914]'}`}>
-                {decisionLeft}s
-              </span>
-            </div>
-          )}
-        </div>
+        <PhasePanel
+          theme={theme}
+          phase={phase}
+          playerName={getPlayer(turnIndex)?.hero.name ?? ''}
+          decisionLeft={decisionLeft}
+          decisionSeconds={DECISION_SECONDS}
+          hidden={uiHidden.phase}
+        />
 
         {/* 中央牌桌：静态椭圆绒面，给牌堆与结算一个视觉落点 */}
         <div data-region="felt" className="table-felt z-0" aria-hidden="true" />
@@ -12362,83 +11926,8 @@ const App: React.FC = () => {
 
         {/* Center Decks - 牌堆和弃牌堆 - 原版三国杀风格 */}
         {/* 出牌顺序：右侧竖向顺序条（桌面）；手机端折叠为一条横排 */}
-        <div data-region="turn-rail" data-count={players.length} data-collapsed={orderCollapsed ? 'true' : 'false'} className={`${uiHidden.order ? 'hidden' : 'hidden md:flex'} flex-col`}>
-          {orderCollapsed ? (
-            <button
-              type="button"
-              onClick={() => setOrderCollapsedPersist(false)}
-              className="turn-rail-mini"
-              aria-label="展开出牌顺序"
-              aria-expanded={false}
-              title="展开出牌顺序"
-            >
-              <span className="turn-rail-mini-idx">{Math.max(1, players.findIndex(p => p.id === turnIndex) + 1)}</span>
-              {players.find(p => p.id === turnIndex) && (
-                <img className="turn-rail-mini-avatar" src={players.find(p => p.id === turnIndex)!.hero.avatarUrl} alt="" />
-              )}
-              <span className="turn-rail-mini-hint">顺序</span>
-            </button>
-          ) : (
-            <>
-              <div className="turn-rail-head">
-                <span>出牌顺序</span>
-                <button
-                  type="button"
-                  onClick={() => setOrderCollapsedPersist(true)}
-                  className="turn-rail-fold"
-                  aria-label="收起出牌顺序"
-                  aria-expanded={true}
-                  title="收起出牌顺序"
-                >收</button>
-              </div>
-              {players.map((p, i) => {
-                const isCur = turnIndex === p.id;
-                const nextId = players[(turnIndex + 1) % Math.max(1, players.length)]?.id;
-                const state = p.isDead ? '阵亡' : isCur ? '当前' : p.id === nextId ? '下家' : p.id < turnIndex ? '已行动' : '待行动';
-                return (
-                  <div key={p.id} className={`turn-rail-row ${KINGDOM_CLASS[p.hero.kingdom] || 'kingdom-qun'}`} data-active={isCur ? 'true' : 'false'} data-dead={p.isDead ? 'true' : 'false'} title={`${p.hero.name} · ${p.hero.kingdom} · ${state}`}>
-                    <span className="turn-rail-idx">{i + 1}</span>
-                    <img className="turn-rail-avatar" src={p.hero.avatarUrl} alt="" />
-                    <span className="turn-rail-name">{p.hero.name}</span>
-                    <span className="turn-rail-state">{state}</span>
-                  </div>
-                );
-              })}
-            </>
-          )}
-        </div>
-        <div data-region="turn-strip" data-collapsed={orderCollapsed ? 'true' : 'false'} className={`${uiHidden.order ? 'hidden' : 'md:hidden flex'} items-center gap-1`}>
-          {orderCollapsed ? (
-            <button
-              type="button"
-              onClick={() => setOrderCollapsedPersist(false)}
-              className={`turn-strip-mini ${KINGDOM_CLASS[players.find(p => p.id === turnIndex)?.hero.kingdom ?? ''] || 'kingdom-qun'}`}
-              aria-label="展开出牌顺序"
-              aria-expanded={false}
-              title="展开出牌顺序"
-            >
-              <span className="turn-strip-mini-tag">顺序</span>
-              <span className="turn-strip-mini-name">{players.find(p => p.id === turnIndex)?.hero.name ?? '—'}</span>
-              <span className="turn-strip-mini-arrow" aria-hidden="true">▾</span>
-            </button>
-          ) : (
-            <>
-              {players.map((p) => (
-                <span key={p.id} className={`turn-chip ${KINGDOM_CLASS[p.hero.kingdom] || 'kingdom-qun'}`} data-active={turnIndex === p.id ? 'true' : 'false'}>
-                  {p.hero.name}
-                </span>
-              ))}
-              <button
-                type="button"
-                onClick={() => setOrderCollapsedPersist(true)}
-                className="turn-strip-fold"
-                aria-label="收起出牌顺序"
-                aria-expanded={true}
-                title="收起出牌顺序"
-              >▴</button>
-            </>
-          )}
-        </div>
+        <TurnRail players={players} turnIndex={turnIndex} collapsed={orderCollapsed} hidden={uiHidden.order} onCollapsedChange={setOrderCollapsedPersist} />
+        <TurnStrip players={players} turnIndex={turnIndex} collapsed={orderCollapsed} hidden={uiHidden.order} onCollapsedChange={setOrderCollapsedPersist} />
 
         <div data-region="center-decks" className="relative flex items-center gap-12 max-md:gap-6 z-[1]">
            {/* 弃牌堆（点击查看明细） */}
