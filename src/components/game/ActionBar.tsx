@@ -1,126 +1,15 @@
 import React from 'react';
 import { Card, CardName, CardType, GamePhase, Identity, Player, Suit } from '../../../types';
 import { IconBook } from '../Icons';
+import { useGameApi } from '../../game/GameApiContext';
 
 /**
  * 出牌阶段操作栏。
  * 注意：这里保留了对局内的 96 个实时依赖（模式开关/技能结算函数/玩家状态），
  * 属于「从 App 抽出的接线层」，不是纯展示组件；后续做状态单一入口时再收敛。
  */
-export interface ActionBarProps {
-  hasUsedAnxu: boolean;
-  hasUsedChongxu: boolean;
-  hasUsedFanjian: boolean;
-  hasUsedGanlu: boolean;
-  hasUsedJiaozhao: boolean;
-  hasUsedJieyin: boolean;
-  hasUsedLijian: boolean;
-  hasUsedMiaoJian: boolean;
-  hasUsedQiangwu: boolean;
-  hasUsedQingcheng: boolean;
-  hasUsedQingnang: boolean;
-  hasUsedXueji: boolean;
-  hasUsedYanjiao: boolean;
-  hasUsedZhiheng: boolean;
-  isAiTakeover: boolean;
-  isAnxuMode: boolean;
-  isFanjianMode: boolean;
-  isGanluMode: boolean;
-  isGuoseMode: boolean;
-  isJieyinMode: boolean;
-  isJijiangMode: boolean;
-  isLijianMode: boolean;
-  isMyTurn: boolean;
-  isQingchengMode: boolean;
-  isQingnangMode: boolean;
-  isQixiMode: boolean;
-  isRendeMode: boolean;
-  isSelectingTarget: boolean;
-  isZhangbaMode: boolean;
-  isZhihengMode: boolean;
-  selectedCardIds: string[];
-  rendeSelectedCardIds: string[];
-  lijianSelectedTargets: number[];
-  tiesuoSelectedTargets: number[];
-  players: Player[];
-  me: Player;
-  phase: GamePhase;
-  theme: 'dark' | 'light';
-  dyingState: unknown;
-  isProcessing: number;
-  jiaozhaoPending: { ownerId: number; cardId: string; declared: CardName; level: number } | null;
-  zhangbaPending: unknown;
-  qiangwuPoint: number | null;
-  guohuanghouLevel: number;
-  jiedaoVictimTarget: number | null;
-  jiedaoWeaponTarget: number | null;
-  lijianSelectedCardId: string | null;
-  rendeSelectedTarget: number | null;
-  chongxuUsedRef: React.MutableRefObject<any>;
-  miaoJianUsedRef: React.MutableRefObject<any>;
-  playersRef: React.MutableRefObject<Player[]>;
-  rendeGivenRef: React.MutableRefObject<any>;
-  rendeHealedRef: React.MutableRefObject<any>;
-  setActiveSelectedId: React.Dispatch<React.SetStateAction<any>>;
-  setAnxuTargets: React.Dispatch<React.SetStateAction<any>>;
-  setGanluTargets: React.Dispatch<React.SetStateAction<any>>;
-  setHasUsedChongxu: React.Dispatch<React.SetStateAction<any>>;
-  setHasUsedLijian: React.Dispatch<React.SetStateAction<any>>;
-  setHasUsedMiaoJian: React.Dispatch<React.SetStateAction<any>>;
-  setHasUsedZhiheng: React.Dispatch<React.SetStateAction<any>>;
-  setHealAnimTarget: React.Dispatch<React.SetStateAction<any>>;
-  setHealNumber: React.Dispatch<React.SetStateAction<any>>;
-  setIsAnxuMode: React.Dispatch<React.SetStateAction<any>>;
-  setIsFanjianMode: React.Dispatch<React.SetStateAction<any>>;
-  setIsGanluMode: React.Dispatch<React.SetStateAction<any>>;
-  setIsGuoseMode: React.Dispatch<React.SetStateAction<any>>;
-  setIsJieyinMode: React.Dispatch<React.SetStateAction<any>>;
-  setIsJijiangMode: React.Dispatch<React.SetStateAction<any>>;
-  setIsLijianMode: React.Dispatch<React.SetStateAction<any>>;
-  setIsProcessing: React.Dispatch<React.SetStateAction<any>>;
-  setIsQingchengMode: React.Dispatch<React.SetStateAction<any>>;
-  setIsQingnangMode: React.Dispatch<React.SetStateAction<any>>;
-  setIsQixiMode: React.Dispatch<React.SetStateAction<any>>;
-  setIsRendeMode: React.Dispatch<React.SetStateAction<any>>;
-  setIsSelectingTarget: React.Dispatch<React.SetStateAction<any>>;
-  setIsZhangbaMode: React.Dispatch<React.SetStateAction<any>>;
-  setIsZhihengMode: React.Dispatch<React.SetStateAction<any>>;
-  setJieyinTarget: React.Dispatch<React.SetStateAction<any>>;
-  setLijianSelectedCardId: React.Dispatch<React.SetStateAction<any>>;
-  setLijianSelectedTargets: React.Dispatch<React.SetStateAction<any>>;
-  setPlayers: React.Dispatch<React.SetStateAction<any>>;
-  setQingnangCardId: React.Dispatch<React.SetStateAction<any>>;
-  setRendeSelectedCardIds: React.Dispatch<React.SetStateAction<any>>;
-  setRendeSelectedTarget: React.Dispatch<React.SetStateAction<any>>;
-  setSelectedCardIds: React.Dispatch<React.SetStateAction<any>>;
-  setZhangbaPending: React.Dispatch<React.SetStateAction<any>>;
-  addLog: (...args: any[]) => any;
-  activateQiangwu: (...args: any[]) => any;
-  canReach: (...args: any[]) => any;
-  delay: (...args: any[]) => any;
-  discardCards: (...args: any[]) => any;
-  doYanjiao: (...args: any[]) => any;
-  drawCards: (...args: any[]) => any;
-  endTurn: (...args: any[]) => any;
-  excessCards: (...args: any[]) => any;
-  executeDuel: (...args: any[]) => any;
-  getPlayer: (...args: any[]) => any;
-  handleAskStrategy: (...args: any[]) => any;
-  handleConfirmPlay: (...args: any[]) => any;
-  handleDiscardConfirm: (...args: any[]) => any;
-  mutateHand: (...args: any[]) => any;
-  performJiling: (...args: any[]) => any;
-  requestSkillChoice: (...args: any[]) => any;
-  resolveCardEffect: (...args: any[]) => any;
-  resolveJiaozhao: (...args: any[]) => any;
-  resolveJiaozhaoUse: (...args: any[]) => any;
-  resolveKurou: (...args: any[]) => any;
-  resolveXueji: (...args: any[]) => any;
-  showSkillBanner: (...args: any[]) => any;
-  updatePlayer: (...args: any[]) => any;
-}
 
-export const ActionBar: React.FC<ActionBarProps> = (props) => {
+export const ActionBar: React.FC = () => {
   const {
     activateQiangwu,
     addLog,
@@ -232,7 +121,7 @@ export const ActionBar: React.FC<ActionBarProps> = (props) => {
     tiesuoSelectedTargets,
     updatePlayer,
     zhangbaPending,
-  } = props;
+  } = useGameApi();
   return (
     <>
             <div data-tour="action-bar" className="action-bar flex flex-wrap gap-2 md:gap-3 items-center relative z-40">

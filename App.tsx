@@ -12,6 +12,8 @@ import { GameSave, SAVE_VERSION, readSave, writeSave, clearSave, consumeSaveReje
 import { shuffle, rankValue, wuguKeepPriority } from './src/game/utils';
 import { useGameState, setPlayers, setDeck, setDiscardPile, setTurnIndex, setPhase, setWinnerSide } from './src/game/gameStore';
 import { countExemptHandCards, computeDiscardExcess, evaluateWinnerSide, nextAliveTurnIndex, seatDistance, suddenDeathDamage, targetProtection } from './src/game/rules';
+import { GameApiProvider } from './src/game/GameApiContext';
+import type { GameApi } from './src/game/gameApi';
 import { LogPanel, PhasePanel, TurnRail, TurnStrip, ObjectiveStrip, MobilePhaseChip } from './src/components/game/GameHud';
 import { PlayerInspectModal } from './src/components/game/PlayerInspectModal';
 import { SkillInfoModal } from './src/components/game/SkillInfoModal';
@@ -10019,7 +10021,122 @@ const App: React.FC = () => {
   const isMobileHand = viewport.w < 768;
   const handLarge = !isMobileHand && layoutDensity !== 'ultra';
 
+  // 对局接线对象：由 App 一次性组装，对局内组件通过 useGameApi() 读取
+  const gameApi: GameApi = {
+    hasUsedAnxu,
+    hasUsedChongxu,
+    hasUsedFanjian,
+    hasUsedGanlu,
+    hasUsedJiaozhao,
+    hasUsedJieyin,
+    hasUsedLijian,
+    hasUsedMiaoJian,
+    hasUsedQiangwu,
+    hasUsedQingcheng,
+    hasUsedQingnang,
+    hasUsedXueji,
+    hasUsedYanjiao,
+    hasUsedZhiheng,
+    isAiTakeover,
+    isAnxuMode,
+    isFanjianMode,
+    isGanluMode,
+    isGuoseMode,
+    isJieyinMode,
+    isJijiangMode,
+    isLijianMode,
+    isMyTurn,
+    isQingchengMode,
+    isQingnangMode,
+    isQixiMode,
+    isRendeMode,
+    isSelectingTarget,
+    isZhangbaMode,
+    isZhihengMode,
+    selectedCardIds,
+    rendeSelectedCardIds,
+    lijianSelectedTargets,
+    tiesuoSelectedTargets,
+    players,
+    me,
+    phase,
+    theme,
+    dyingState,
+    isProcessing,
+    jiaozhaoPending,
+    zhangbaPending,
+    qiangwuPoint,
+    guohuanghouLevel,
+    jiedaoVictimTarget,
+    jiedaoWeaponTarget,
+    lijianSelectedCardId,
+    rendeSelectedTarget,
+    chongxuUsedRef,
+    miaoJianUsedRef,
+    playersRef,
+    rendeGivenRef,
+    rendeHealedRef,
+    setActiveSelectedId,
+    setAnxuTargets,
+    setGanluTargets,
+    setHasUsedChongxu,
+    setHasUsedLijian,
+    setHasUsedMiaoJian,
+    setHasUsedZhiheng,
+    setHealAnimTarget,
+    setHealNumber,
+    setIsAnxuMode,
+    setIsFanjianMode,
+    setIsGanluMode,
+    setIsGuoseMode,
+    setIsJieyinMode,
+    setIsJijiangMode,
+    setIsLijianMode,
+    setIsProcessing,
+    setIsQingchengMode,
+    setIsQingnangMode,
+    setIsQixiMode,
+    setIsRendeMode,
+    setIsSelectingTarget,
+    setIsZhangbaMode,
+    setIsZhihengMode,
+    setJieyinTarget,
+    setLijianSelectedCardId,
+    setLijianSelectedTargets,
+    setPlayers,
+    setQingnangCardId,
+    setRendeSelectedCardIds,
+    setRendeSelectedTarget,
+    setSelectedCardIds,
+    setZhangbaPending,
+    addLog,
+    activateQiangwu,
+    canReach,
+    delay,
+    discardCards,
+    doYanjiao,
+    drawCards,
+    endTurn,
+    excessCards,
+    executeDuel,
+    getPlayer,
+    handleAskStrategy,
+    handleConfirmPlay,
+    handleDiscardConfirm,
+    mutateHand,
+    performJiling,
+    requestSkillChoice,
+    resolveCardEffect,
+    resolveJiaozhao,
+    resolveJiaozhaoUse,
+    resolveKurou,
+    resolveXueji,
+    showSkillBanner,
+    updatePlayer,
+  };
+
   return (
+    <GameApiProvider value={gameApi}>
     <div
       data-density={layoutDensity}
       data-size-tier={sizeTier}
@@ -10501,118 +10618,7 @@ const App: React.FC = () => {
           />
 
         {/* Control Buttons - 操作按钮：托管已统一放在左上角，避免重复入口 */}
-        <ActionBar
-          hasUsedAnxu={hasUsedAnxu}
-          hasUsedChongxu={hasUsedChongxu}
-          hasUsedFanjian={hasUsedFanjian}
-          hasUsedGanlu={hasUsedGanlu}
-          hasUsedJiaozhao={hasUsedJiaozhao}
-          hasUsedJieyin={hasUsedJieyin}
-          hasUsedLijian={hasUsedLijian}
-          hasUsedMiaoJian={hasUsedMiaoJian}
-          hasUsedQiangwu={hasUsedQiangwu}
-          hasUsedQingcheng={hasUsedQingcheng}
-          hasUsedQingnang={hasUsedQingnang}
-          hasUsedXueji={hasUsedXueji}
-          hasUsedYanjiao={hasUsedYanjiao}
-          hasUsedZhiheng={hasUsedZhiheng}
-          isAiTakeover={isAiTakeover}
-          isAnxuMode={isAnxuMode}
-          isFanjianMode={isFanjianMode}
-          isGanluMode={isGanluMode}
-          isGuoseMode={isGuoseMode}
-          isJieyinMode={isJieyinMode}
-          isJijiangMode={isJijiangMode}
-          isLijianMode={isLijianMode}
-          isMyTurn={isMyTurn}
-          isQingchengMode={isQingchengMode}
-          isQingnangMode={isQingnangMode}
-          isQixiMode={isQixiMode}
-          isRendeMode={isRendeMode}
-          isSelectingTarget={isSelectingTarget}
-          isZhangbaMode={isZhangbaMode}
-          isZhihengMode={isZhihengMode}
-          selectedCardIds={selectedCardIds}
-          rendeSelectedCardIds={rendeSelectedCardIds}
-          lijianSelectedTargets={lijianSelectedTargets}
-          tiesuoSelectedTargets={tiesuoSelectedTargets}
-          players={players}
-          me={me}
-          phase={phase}
-          theme={theme}
-          dyingState={dyingState}
-          isProcessing={isProcessing}
-          jiaozhaoPending={jiaozhaoPending}
-          zhangbaPending={zhangbaPending}
-          qiangwuPoint={qiangwuPoint}
-          guohuanghouLevel={guohuanghouLevel}
-          jiedaoVictimTarget={jiedaoVictimTarget}
-          jiedaoWeaponTarget={jiedaoWeaponTarget}
-          lijianSelectedCardId={lijianSelectedCardId}
-          rendeSelectedTarget={rendeSelectedTarget}
-          chongxuUsedRef={chongxuUsedRef}
-          miaoJianUsedRef={miaoJianUsedRef}
-          playersRef={playersRef}
-          rendeGivenRef={rendeGivenRef}
-          rendeHealedRef={rendeHealedRef}
-          setActiveSelectedId={setActiveSelectedId}
-          setAnxuTargets={setAnxuTargets}
-          setGanluTargets={setGanluTargets}
-          setHasUsedChongxu={setHasUsedChongxu}
-          setHasUsedLijian={setHasUsedLijian}
-          setHasUsedMiaoJian={setHasUsedMiaoJian}
-          setHasUsedZhiheng={setHasUsedZhiheng}
-          setHealAnimTarget={setHealAnimTarget}
-          setHealNumber={setHealNumber}
-          setIsAnxuMode={setIsAnxuMode}
-          setIsFanjianMode={setIsFanjianMode}
-          setIsGanluMode={setIsGanluMode}
-          setIsGuoseMode={setIsGuoseMode}
-          setIsJieyinMode={setIsJieyinMode}
-          setIsJijiangMode={setIsJijiangMode}
-          setIsLijianMode={setIsLijianMode}
-          setIsProcessing={setIsProcessing}
-          setIsQingchengMode={setIsQingchengMode}
-          setIsQingnangMode={setIsQingnangMode}
-          setIsQixiMode={setIsQixiMode}
-          setIsRendeMode={setIsRendeMode}
-          setIsSelectingTarget={setIsSelectingTarget}
-          setIsZhangbaMode={setIsZhangbaMode}
-          setIsZhihengMode={setIsZhihengMode}
-          setJieyinTarget={setJieyinTarget}
-          setLijianSelectedCardId={setLijianSelectedCardId}
-          setLijianSelectedTargets={setLijianSelectedTargets}
-          setPlayers={setPlayers}
-          setQingnangCardId={setQingnangCardId}
-          setRendeSelectedCardIds={setRendeSelectedCardIds}
-          setRendeSelectedTarget={setRendeSelectedTarget}
-          setSelectedCardIds={setSelectedCardIds}
-          setZhangbaPending={setZhangbaPending}
-          addLog={addLog}
-          activateQiangwu={activateQiangwu}
-          canReach={canReach}
-          delay={delay}
-          discardCards={discardCards}
-          doYanjiao={doYanjiao}
-          drawCards={drawCards}
-          endTurn={endTurn}
-          excessCards={excessCards}
-          executeDuel={executeDuel}
-          getPlayer={getPlayer}
-          handleAskStrategy={handleAskStrategy}
-          handleConfirmPlay={handleConfirmPlay}
-          handleDiscardConfirm={handleDiscardConfirm}
-          mutateHand={mutateHand}
-          performJiling={performJiling}
-          requestSkillChoice={requestSkillChoice}
-          resolveCardEffect={resolveCardEffect}
-          resolveJiaozhao={resolveJiaozhao}
-          resolveJiaozhaoUse={resolveJiaozhaoUse}
-          resolveKurou={resolveKurou}
-          resolveXueji={resolveXueji}
-          showSkillBanner={showSkillBanner}
-          updatePlayer={updatePlayer}
-        />
+        <ActionBar />
         </div>
 
         <HandTray
@@ -10668,6 +10674,7 @@ const App: React.FC = () => {
         </div>
       )}
    </div>
+    </GameApiProvider>
  );
 };
 
