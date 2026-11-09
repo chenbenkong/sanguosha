@@ -38,9 +38,7 @@ export const HandTray: React.FC<{
   drawPulse, layoutDensity, isMobileHand, handLarge, onCardClick,
 }) => (
   <div data-region="hand" className={`w-full overflow-x-auto overflow-y-visible px-2 sm:px-4 pb-1 scrollbar-hide flex relative ${compactHand ? 'pt-3' : 'pt-4 sm:pt-5'}`} style={{ zIndex: 10, minHeight: 'var(--hand-min)' }}>
-    {theme === 'dark' && (
-      <div className="absolute inset-x-4 bottom-0 h-32 rounded-t-2xl pointer-events-none bg-gradient-to-t from-[#0c0906]/85 to-transparent"></div>
-    )}
+    <div className="absolute inset-x-4 bottom-0 h-32 rounded-t-2xl pointer-events-none bg-gradient-to-t from-[color-mix(in_srgb,var(--surface-0)_85%,transparent)] to-transparent"></div>
     <div className="hand-tray" aria-hidden="true" />
     <div className={`mobile-log ${uiHiddenLog ? 'hidden' : 'md:hidden'}`}>
       {lastLog && <div key={lastLog.id} className="mobile-log-line">{lastLog.text}</div>}
@@ -48,34 +46,28 @@ export const HandTray: React.FC<{
 
     <div className="absolute left-3 bottom-3 hidden md:flex items-center gap-3 z-20">
       <div className="flex items-center gap-1.5 pointer-events-none">
-        <span className={`text-[10px] tracking-[0.28em] ${theme === 'dark' ? 'text-[#8f806a]' : 'text-[#9a8a70]'}`}>手牌</span>
-        <span className={`font-ancient text-lg leading-none ${theme === 'dark' ? 'text-[#e8cf94]' : 'text-[#8b6914]'}`}>{me.hand.length}</span>
+        <span className="hand-count-label text-[var(--fs-11)] tracking-[0.28em]">手牌</span>
+        <span className="hand-count-value font-ancient text-[var(--fs-20)] leading-none">{me.hand.length}</span>
       </div>
       <button
         onClick={onShowDiscard}
         disabled={disabled}
-        className={`pointer-events-auto inline-flex items-center gap-1 px-2 py-1 rounded-[4px] border text-[10px] leading-none transition-colors ${
-          theme === 'dark'
-            ? 'bg-[#14100c]/80 border-[#8b7355]/45 text-[#c8bda8] hover:border-[#c8a45c] hover:text-[#e8cf94]'
-            : 'bg-white/60 border-[#c4b8a8]/70 text-[#6b5a42] hover:border-[#a8842c]'
-        }`}
+        className="pointer-events-auto hand-chip inline-flex items-center gap-1 px-2 py-1 rounded-[4px] border text-[var(--fs-11)] leading-none transition-colors hover:text-[var(--gold-strong)]"
         aria-label={`查看弃牌堆，共 ${discardLength} 张`}
         title="查看弃牌堆"
       >
         <span className="opacity-70">弃牌堆</span>
-        <span className="font-bold tabular-nums text-[#e8cf94]">{discardLength}</span>
+        <b className="font-bold tabular-nums">{discardLength}</b>
       </button>
     </div>
 
     <div className="absolute right-3 bottom-3 hidden md:flex items-center gap-2 z-20">
       <div
-        className={`inline-flex items-center gap-1 px-2 py-1 rounded-[4px] border text-[10px] leading-none ${
-          theme === 'dark' ? 'bg-[#14100c]/80 border-[#8b7355]/45 text-[#c8bda8]' : 'bg-white/60 border-[#c4b8a8]/70 text-[#6b5a42]'
-        }`}
+        className="hand-chip inline-flex items-center gap-1 px-2 py-1 rounded-[4px] border text-[var(--fs-11)] leading-none"
         title="牌堆剩余张数"
       >
         <span className="opacity-70">牌堆</span>
-        <span className="font-bold tabular-nums text-[#e8cf94]">{deckLength}</span>
+        <b className="font-bold tabular-nums">{deckLength}</b>
       </div>
     </div>
 

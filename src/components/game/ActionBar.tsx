@@ -288,7 +288,7 @@ export const ActionBar: React.FC = () => {
                       </button>
                     )}
                     {players[0].hero.name === '张星彩' && qiangwuPoint !== null && (
-                      <span className="px-2 py-1 rounded border border-[#d4af37]/50 text-[#f0d38a] text-sm font-ancient whitespace-nowrap">
+                      <span className="px-2 py-1 rounded border border-[var(--line-strong)] text-[var(--gold-strong)] text-[var(--fs-13)] font-ancient whitespace-nowrap">
                         枪舞 · 判定 {qiangwuPoint}
                       </span>
                     )}
@@ -645,8 +645,8 @@ export const ActionBar: React.FC = () => {
                                addLog('请选择【杀】的目标', 'info');
                              }}
                              className={`px-4 py-2 rounded-lg font-ancient text-base border-2 ${selectedCardIds.length === 2
-                               ? 'bg-[#9e2b25] text-[#f7e7cf] border-[#c86b62] hover:bg-[#b0322b]'
-                               : 'bg-[#1a1512] text-[#5a5248] border-[#3a3229] cursor-not-allowed'}`}
+                               ? 'action-btn-active'
+                               : 'action-btn-disabled'}`}
                            >
                              当【杀】使用
                            </button>
@@ -952,7 +952,7 @@ export const ActionBar: React.FC = () => {
                              setLijianSelectedTargets([]);
                            }}
                            disabled={lijianSelectedTargets.length !== 2 || !!dyingState || !!isProcessing}
-                           className={`bg-[#33212a] hover:bg-[#402a34] text-[#f0d0e0] px-5 py-2 rounded-lg border border-[#a9737f]/70 hover:border-[#d98a8a] hover:text-white transition-colors font-ancient text-base shadow-lg
+                           className={`bg-[rgba(var(--cinnabar-rgb)/0.30)] hover:bg-[rgba(var(--cinnabar-rgb)/0.44)] text-[var(--on-cinnabar)] px-5 py-2 rounded-lg border border-[var(--cinnabar-soft)] hover:border-[var(--gold-strong)] hover:text-[var(--ink-strong)] transition-colors font-ancient text-base shadow-lg
                              ${lijianSelectedTargets.length !== 2 || dyingState || isProcessing ? 'opacity-50 cursor-not-allowed' : ''}`}
                          >
                            确认离间
@@ -997,7 +997,7 @@ export const ActionBar: React.FC = () => {
                   const over = picked > excess;
                   return (
                     <div className="flex items-center gap-3">
-                      <span className={`text-xs font-bold tabular-nums tracking-wide ${over ? 'text-[#e0705f]' : exact ? 'text-[#e8cf94]' : theme === 'dark' ? 'text-stone-400' : 'text-[#6b6459]'}`}>
+                      <span className={`text-xs font-bold tabular-nums tracking-wide ${over ? 'text-[var(--danger)]' : exact ? 'text-[var(--gold-strong)]' : 'text-[var(--ink-mute)]'}`}>
                         需弃置 {Math.max(0, excess)} 张 · 已选 {picked} 张
                       </span>
                       <button
@@ -1007,7 +1007,7 @@ export const ActionBar: React.FC = () => {
                           px-8 py-2.5 rounded-lg text-xl font-ancient tracking-[0.14em] border
                           ${exact && !dyingState && !isProcessing
                             ? 'btn-gold'
-                            : 'bg-[#1a1512] text-[#5a5248] border-[#3a3229] cursor-not-allowed'}
+                            : 'action-btn-disabled'}
                         `}
                       >
                         弃 牌
@@ -1023,8 +1023,8 @@ export const ActionBar: React.FC = () => {
                     disabled={!!dyingState || isProcessing > 0}
                     className={`px-4 py-2 rounded-lg text-sm font-bold transition-colors border
                       ${(dyingState || isProcessing > 0) 
-                        ? 'bg-[#1a1512] text-[#5a5248] border-[#3a3229] cursor-not-allowed opacity-50' 
-                        : 'bg-[#221b16] text-[#c8bda8] border-[#6a5642] hover:border-[#c8a45c] hover:text-[#e8cf94]'}
+                        ? 'action-btn-disabled opacity-50'
+                        : 'action-btn-idle'}
                     `}
                   >
                     取消选择

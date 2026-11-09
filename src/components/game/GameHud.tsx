@@ -7,15 +7,12 @@ const LogRows = React.memo(function LogRows({ logs }: { logs: LogEntry[] }) {
   return (
     <>
       {logs.slice(-40).map(log => (
-        <div key={log.id} className={`
-          px-3 py-1.5 rounded-sm text-[13px] leading-relaxed font-serif
-          ${log.type === 'danger' ? 'bg-[#3a1512]/60 text-[#f0c8c2] border-l-2 border-[#c86b62]' :
-            log.type === 'success' ? 'bg-[#2a2114]/60 text-[#f0e0b8] border-l-2 border-[#c8a45c]' :
-            log.type === 'skill' ? 'bg-[#1c2a33]/60 text-[#cfe0ee] border-l-2 border-[#8fb4d9]' :
-            log.type === 'chat' ? 'bg-[#2a2414]/60 text-[#f0e8c8] border-l-2 border-[#c8a45c]' :
-            log.type === 'warning' ? 'bg-[#33240f]/60 text-[#f0dcb8] border-l-2 border-[#c8963c]' :
-            'bg-[#1f1914]/60 text-[#cdc2b0] border-l-2 border-[#6a5642]'}
-        `}>
+        <div
+          key={log.id}
+          data-type={log.type === 'danger' || log.type === 'success' || log.type === 'skill'
+            || log.type === 'chat' || log.type === 'warning' ? log.type : 'info'}
+          className="log-line px-3 py-1.5 rounded-sm text-[var(--fs-13)] leading-relaxed font-serif"
+        >
           {log.text}
         </div>
       ))}
@@ -64,19 +61,19 @@ export const LogPanel: React.FC<{
           aria-label="展开战况记录"
           title="展开战况记录"
         >
-          <span className="text-[13px] tracking-[0.3em] text-[#d9c49a]" style={{ writingMode: 'vertical-rl' }}>战况记录</span>
-          <span className="text-[13px] tabular-nums px-1.5 py-0.5 rounded bg-black/40 text-[#e8cf94] border border-[#8b7355]/40">{logs.length}</span>
+          <span className="text-[var(--fs-13)] tracking-[0.3em] log-head-title" style={{ writingMode: 'vertical-rl' }}>战况记录</span>
+          <span className="log-head-count text-[var(--fs-13)] tabular-nums px-1.5 py-0.5 rounded border border-[var(--line)] bg-[rgba(var(--gold-rgb)/0.08)]">{logs.length}</span>
         </button>
       ) : (
         <div className="log-panel h-full w-full flex flex-col overflow-hidden">
-          <div className="flex-none px-3 py-2 border-b border-[#8b7355]/25 bg-black/25">
+          <div className="log-head flex-none px-3 py-2 border-b">
             <div className="flex items-center gap-2">
-              <span className="w-[3px] h-4 rounded-sm bg-gradient-to-b from-[#f0d894] to-[#a8842c]" />
-              <span className="text-[13px] font-bold tracking-[0.2em] text-[#d9c49a]">战况记录</span>
-              <span className="text-[13px] tabular-nums text-[#8f806a]">{logs.length}</span>
+              <span className="w-[3px] h-4 rounded-sm bg-gradient-to-b from-[var(--gold-strong)] to-[var(--gold-deep)]" />
+              <span className="log-head-title text-[var(--fs-13)] font-bold tracking-[0.2em]">战况记录</span>
+              <span className="log-head-count text-[var(--fs-13)] tabular-nums">{logs.length}</span>
               <button
                 onClick={() => onCollapsedChange(true)}
-                className="ml-auto text-[13px] px-1.5 py-0.5 rounded border border-[#8b7355]/50 text-[#d9c49a] hover:bg-white/10"
+                className="ml-auto text-[var(--fs-13)] px-1.5 py-0.5 rounded border border-[var(--line)] log-head-title hover:bg-[rgba(var(--gold-rgb)/0.12)]"
                 aria-label="收起战况记录"
                 title="收起战况记录"
               >
@@ -116,9 +113,9 @@ export const PhasePanel: React.FC<{
 }> = ({ theme, phase, playerName, decisionLeft, decisionSeconds, hidden }) => {
   const phIndex = PHASES.indexOf(phase);
   return (
-    <div className={`phase-panel ${hidden ? 'hidden' : 'hidden md:flex'} ui-panel absolute left-1/2 -translate-x-1/2 top-[63%] px-5 py-2.5 z-30 flex-col items-center ${theme === 'dark' ? 'shadow-[0_6px_24px_rgba(0,0,0,0.55)]' : ''}`}>
-      <div className={`text-[15px] mb-1.5 tracking-[0.2em] ${theme === 'dark' ? 'text-[#9a8b74]' : 'text-[#8a7a60]'}`}>
-        当前阶段 · <span className="text-[#e8cf94]">{playerName}</span>
+    <div className={`phase-panel ${hidden ? 'hidden' : 'hidden md:flex'} absolute left-1/2 -translate-x-1/2 top-[63%] px-5 py-2.5 z-30 flex-col items-center`}>
+      <div className="phase-panel-label text-[var(--fs-14)] mb-1.5 tracking-[0.2em]">
+        当前阶段 · <span className="phase-panel-name">{playerName}</span>
       </div>
       <div className="flex items-center gap-1">
         {PHASES.map((ph, i) => {
@@ -127,18 +124,12 @@ export const PhasePanel: React.FC<{
           const short = ph.replace('回合', '').replace('阶段', '');
           return (
             <div key={ph} className="flex items-center gap-1">
-              {i > 0 && <div className={`w-3 h-px ${passed || active ? (theme === 'dark' ? 'bg-yellow-600' : 'bg-[#8b6914]') : (theme === 'dark' ? 'bg-stone-600' : 'bg-[#d8d3ce]')}`}></div>}
-              <div className={`
-                px-2 py-1 rounded text-[15px] font-bold font-ancient transition-all duration-300
-                ${active
-                  ? theme === 'dark'
-                    ? 'bg-gradient-to-b from-yellow-500 to-yellow-700 text-white shadow-[0_0_10px_rgba(234,179,8,0.5)] scale-110'
-                    : 'bg-gradient-to-b from-[#c9a86c] to-[#a08050] text-white shadow-[0_0_10px_rgba(184,149,106,0.5)] scale-110'
-                  : passed
-                    ? theme === 'dark' ? 'text-yellow-600/70' : 'text-[#8b6914]/70'
-                    : theme === 'dark' ? 'text-stone-500' : 'text-[#b0aba5]'
-                }
-              `}>
+              {i > 0 && <div className="phase-link w-3 h-px" data-state={passed || active ? 'passed' : 'idle'}></div>}
+              <div
+                className="phase-step px-2 py-1 rounded text-[var(--fs-14)] font-bold font-ancient transition-[transform,color,background-color] duration-300"
+                data-state={active ? 'active' : passed ? 'passed' : 'idle'}
+                style={active ? { transform: 'scale(1.1)' } : undefined}
+              >
                 {short}
               </div>
             </div>
@@ -147,13 +138,13 @@ export const PhasePanel: React.FC<{
       </div>
       {decisionLeft !== null && (
         <div className="mt-2 flex items-center gap-2">
-          <div className={`flex-1 h-1 rounded-full overflow-hidden ${theme === 'dark' ? 'bg-white/10' : 'bg-black/10'}`}>
+          <div className="phase-meter flex-1 h-1 rounded-full overflow-hidden">
             <div
-              className={`h-full rounded-full transition-[width] duration-200 ease-linear ${decisionLeft <= 5 ? 'bg-[#e0705f]' : theme === 'dark' ? 'bg-[#d4af37]' : 'bg-[#a8842c]'}`}
+              className={`phase-meter-fill h-full rounded-full transition-[width] duration-200 ease-linear ${decisionLeft <= 5 ? 'is-low' : ''}`}
               style={{ width: `${Math.max(0, Math.min(100, (decisionLeft / decisionSeconds) * 100))}%` }}
             />
           </div>
-          <span className={`text-[14px] font-bold tabular-nums tracking-wider ${decisionLeft <= 5 ? 'text-[#e0705f] animate-pulse' : theme === 'dark' ? 'text-[#e8cf94]' : 'text-[#8b6914]'}`}>
+          <span className={`phase-clock text-[var(--fs-13)] font-bold tabular-nums tracking-wider ${decisionLeft <= 5 ? 'is-low animate-pulse' : ''}`}>
             {decisionLeft}s
           </span>
         </div>
@@ -298,19 +289,19 @@ export const MobilePhaseChip: React.FC<{
   hidden: boolean;
 }> = ({ theme, phase, decisionLeft, decisionSeconds, hidden }) => (
   <div className={`${hidden ? 'hidden' : 'md:hidden'} absolute top-2 left-[156px] z-[230]`}>
-    <div className="ui-panel relative overflow-hidden flex items-center gap-1.5 h-10 px-2.5 whitespace-nowrap">
-      <span className={`text-[11px] font-bold font-ancient tracking-[0.12em] ${theme === 'dark' ? 'text-[#e8cf94]' : 'text-[#6b4a1a]'}`}>
+    <div className="phase-panel relative overflow-hidden flex items-center gap-1.5 h-10 px-2.5 whitespace-nowrap">
+      <span className="phase-panel-name text-[var(--fs-11)] font-bold font-ancient tracking-[0.12em]">
         {phase.replace('回合', '').replace('阶段', '')}
       </span>
       {decisionLeft !== null && (
-        <span className={`text-[11px] font-bold tabular-nums ${decisionLeft <= 5 ? 'text-[#e0705f] animate-pulse' : theme === 'dark' ? 'text-[#c8a45c]' : 'text-[#8b6914]'}`}>
+        <span className={`phase-clock text-[var(--fs-11)] font-bold tabular-nums ${decisionLeft <= 5 ? 'is-low animate-pulse' : ''}`}>
           {decisionLeft}s
         </span>
       )}
       {decisionLeft !== null && (
-        <span className="absolute bottom-0 left-0 right-0 h-[2px] bg-white/10">
+        <span className="phase-meter absolute bottom-0 left-0 right-0 h-[2px]">
           <span
-            className={`block h-full transition-[width] duration-200 ease-linear ${decisionLeft <= 5 ? 'bg-[#e0705f]' : 'bg-[#c8a45c]'}`}
+            className={`phase-meter-fill block h-full transition-[width] duration-200 ease-linear ${decisionLeft <= 5 ? 'is-low' : ''}`}
             style={{ width: `${Math.max(0, Math.min(100, (decisionLeft / decisionSeconds) * 100))}%` }}
           />
         </span>

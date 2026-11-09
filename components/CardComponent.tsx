@@ -129,8 +129,7 @@ const CardComponent: React.FC<CardProps> = ({ card, onClick, disabled, selected,
     return (
       <div
         className={`
-          relative rounded-lg overflow-hidden card-shadow
-          border-2 border-[#8b7355]/70
+          relative rounded-lg overflow-hidden card-frame border-2
           ${small ? 'w-12 h-18' : large ? 'w-28 h-40 md:w-36 md:h-52' : 'w-20 h-28 md:w-24 md:h-36'}
           transition-transform duration-200
         `}
@@ -178,8 +177,8 @@ const CardComponent: React.FC<CardProps> = ({ card, onClick, disabled, selected,
         ${small ? 'w-[82px] h-[118px]' : large ? 'w-[106px] h-[152px]' : 'w-[96px] h-[144px]'}
         mx-1 mb-2
         ${selected
-          ? 'ring-4 ring-yellow-500 z-30 shadow-[0_10px_30px_rgba(0,0,0,0.55),0_0_20px_rgba(234,179,8,0.45)]'
-          : `card-shadow border ${isRed ? 'border-[#c98a7a]' : 'border-[#9a8a6a]'}`}
+          ? 'card-frame is-selected z-30'
+          : 'card-frame border'}
         ${disabled ? 'opacity-60 grayscale-[0.8]' : 'cursor-pointer'}
         ${canUseSkill && !disabled ? 'ring-2 ring-blue-500 animate-pulse' : ''}
       `}
@@ -228,17 +227,17 @@ const CardComponent: React.FC<CardProps> = ({ card, onClick, disabled, selected,
             className="absolute inset-x-0 bottom-0 h-1/2 pointer-events-none"
             style={{ background: 'linear-gradient(180deg, rgba(255,250,240,0) 0%, rgba(255,250,240,0.26) 72%, rgba(255,250,240,0.58) 100%)' }}
           />
-          <div className="absolute inset-x-0 bottom-0 h-px bg-[#c8a45c]/45 pointer-events-none" />
+          <div className="absolute inset-x-0 bottom-0 h-px bg-[rgba(var(--gold-rgb)/0.45)] pointer-events-none" />
         </div>
       )}
 
       {/* 外层描金细框 */}
-      <div className="absolute inset-1 rounded-md border border-[#8a6f3c]/40 pointer-events-none z-10"></div>
-      <div className="absolute inset-1.5 rounded-[5px] border border-[#8a6f3c]/25 pointer-events-none z-10">
-        <div className="absolute -top-px -left-px w-2.5 h-2.5 border-t border-l border-[#8a6f3c]/60"></div>
-        <div className="absolute -top-px -right-px w-2.5 h-2.5 border-t border-r border-[#8a6f3c]/60"></div>
-        <div className="absolute -bottom-px -left-px w-2.5 h-2.5 border-b border-l border-[#8a6f3c]/60"></div>
-        <div className="absolute -bottom-px -right-px w-2.5 h-2.5 border-b border-r border-[#8a6f3c]/60"></div>
+      <div className="absolute inset-1 rounded-md border border-[rgba(var(--gold-rgb)/0.40)] pointer-events-none z-10"></div>
+      <div className="absolute inset-1.5 rounded-[5px] border border-[rgba(var(--gold-rgb)/0.25)] pointer-events-none z-10">
+        <div className="absolute -top-px -left-px w-2.5 h-2.5 border-t border-l border-[rgba(var(--gold-rgb)/0.60)]"></div>
+        <div className="absolute -top-px -right-px w-2.5 h-2.5 border-t border-r border-[rgba(var(--gold-rgb)/0.60)]"></div>
+        <div className="absolute -bottom-px -left-px w-2.5 h-2.5 border-b border-l border-[rgba(var(--gold-rgb)/0.60)]"></div>
+        <div className="absolute -bottom-px -right-px w-2.5 h-2.5 border-b border-r border-[rgba(var(--gold-rgb)/0.60)]"></div>
       </div>
       {/* 纸张光泽 */}
       <div className="absolute inset-0 bg-gradient-to-b from-white/20 via-transparent to-transparent pointer-events-none"></div>

@@ -62,10 +62,10 @@ export const SkillInfoModal: React.FC<{
           <div className="w-32 modal-divider mx-auto"></div>
         </div>
 
-        <div className="flex items-center gap-4 mb-6 p-4 bg-black/30 rounded-lg border border-[#8b7355]/30">
+        <div className="flex items-center gap-4 mb-6 p-4 bg-[rgba(var(--gold-rgb)/0.06)] rounded-lg border border-[var(--line)]">
           <img src={me.hero.avatarUrl} alt={me.hero.name} loading="eager" decoding="async" className="w-20 h-[120px] rounded-lg border-2 border-[#d4af37]/50 object-cover" />
           <div>
-            <h4 className="text-2xl font-bold text-[#d4af37] font-ancient">{me.hero.name}</h4>
+            <h4 className="text-2xl font-bold text-[var(--gold)] font-ancient">{me.hero.name}</h4>
             {/* 对局内技能说明浮层不显示称号（epithet） */}
             <div className="flex items-center gap-2 mt-1">
               <span className={`px-2 py-0.5 rounded text-xs font-bold ${KINGDOM_BADGE[me.hero.kingdom] ?? 'bg-stone-700/60 text-stone-200'}`}>
@@ -78,18 +78,18 @@ export const SkillInfoModal: React.FC<{
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div className="space-y-4">
-            <div className="bg-gradient-to-r from-[#8b4513]/30 to-transparent p-4 rounded-lg border-l-4 border-[#d4af37]">
-              <h5 className="text-xl font-bold text-[#d4af37] mb-2 font-ancient">【{me.hero.skillName}】</h5>
+            <div className="bg-gradient-to-r from-[rgba(var(--gold-rgb)/0.18)] to-transparent p-4 rounded-lg border-l-4 border-[var(--gold)]">
+              <h5 className="text-xl font-bold text-[var(--gold)] mb-2 font-ancient">【{me.hero.skillName}】</h5>
               <p className="text-stone-300 leading-relaxed">{me.hero.skillDesc}</p>
               {me.hero.lordSkillName && (
-                <div className="mt-3 pt-3 border-t border-[#8b7355]/30">
-                  <div className="text-base font-bold text-[#e8cf94] mb-1 font-ancient">主公技【{me.hero.lordSkillName}】</div>
+                <div className="mt-3 pt-3 border-t border-[var(--line-soft)]">
+                  <div className="text-base font-bold text-[var(--gold-strong)] mb-1 font-ancient">主公技【{me.hero.lordSkillName}】</div>
                   <p className="text-stone-300 leading-relaxed">{me.hero.lordSkillDesc}</p>
                 </div>
               )}
             </div>
 
-            <div className="bg-black/20 p-4 rounded-lg border border-[#8b7355]/20">
+            <div className="bg-[rgba(var(--gold-rgb)/0.05)] p-4 rounded-lg border border-[var(--line-soft)]">
               <h6 className="text-lg font-bold text-amber-400 mb-3 flex items-center gap-2">
                 <span>💡</span> 使用示例
               </h6>
@@ -123,9 +123,9 @@ export const SkillInfoModal: React.FC<{
           </div>
 
           {me.hand.length > 0 && (
-            <div className="bg-gradient-to-b from-[#1a1510] to-[#0f0f0f] p-4 rounded-lg border border-[#d4af37]/30">
-              <h6 className="text-lg font-bold text-[#d4af37] mb-4 flex items-center gap-2 font-ancient">
-                <span className="w-[3px] h-5 rounded-sm bg-gradient-to-b from-[#f0d894] to-[#a8842c]" />
+            <div className="bg-gradient-to-b from-[#1a1510] to-[#0f0f0f] p-4 rounded-lg border border-[var(--line)]">
+              <h6 className="text-lg font-bold text-[var(--gold)] mb-4 flex items-center gap-2 font-ancient">
+                <span className="w-[3px] h-5 rounded-sm bg-gradient-to-b from-[var(--gold-strong)] to-[var(--gold-deep)]" />
                 当前手牌使用效果
               </h6>
               <div className="grid grid-cols-1 gap-3 max-h-[400px] overflow-y-auto">
@@ -136,7 +136,7 @@ export const SkillInfoModal: React.FC<{
                     </div>
                     <div className="flex-1 min-w-0 -ml-1">
                       <div className="flex items-center gap-2 mb-1">
-                        <span className="text-[#d4af37] font-bold font-ancient">{card.name}</span>
+                        <span className="text-[var(--gold)] font-bold font-ancient">{card.name}</span>
                         <span className="text-stone-500 text-xs">{card.rank}</span>
                         <span className={`text-xs px-1.5 py-0.5 rounded ${
                           card.type === CardType.BASIC ? 'bg-stone-700 text-stone-300' :
