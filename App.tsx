@@ -515,6 +515,8 @@ const App: React.FC = () => {
   const [portraitHero, setPortraitHero] = useState<Hero | null>(null);
   // 武将详情面板（选将页 / 对局内）
   const [detailHero, setDetailHero] = useState<Hero | null>(null);
+  // 对局内打开详情时记录角色 id，用于展示实时状态（选将页为 null）
+  const [detailPlayerId, setDetailPlayerId] = useState<number | null>(null);
   // 对局战报折叠（桌面）
   const [logCollapsed, setLogCollapsed] = useState<boolean>(true);
   // 出牌顺序条折叠（桌面竖条 / 手机顶部横条共用同一偏好，默认展开）
@@ -10395,7 +10397,7 @@ const App: React.FC = () => {
             {pagedHeroes.map(hero => (
               <button
                 key={hero.id}
-                onClick={() => { setSelectedHero(hero); setDetailHero(hero); }}
+                onClick={() => { setSelectedHero(hero); setDetailPlayerId(null); setDetailHero(hero); }}
                 className={`hero-pick hero-card group text-left kingdom-frame ${KINGDOM_CLASS[hero.kingdom] ?? ''}`}
                 aria-pressed={selectedHero?.id === hero.id}
                 aria-label={`选择 ${hero.name}`}
@@ -10520,7 +10522,7 @@ const App: React.FC = () => {
                         查看立绘
                       </button>
                       <button
-                        onClick={() => setDetailHero(selectedHero)}
+                        onClick={() => { setDetailPlayerId(null); setDetailHero(selectedHero); }}
                         className={`flex-none text-[11px] px-2 py-0.5 rounded border ${theme === 'dark' ? 'border-[#c8a45c]/50 text-[#e8cf94] hover:bg-[#c8a45c]/15' : 'border-[#a8842c]/50 text-[#6b4a1a] hover:bg-[#c8a45c]/15'}`}
                         aria-label={`查看 ${selectedHero.name} 武将详情`}
                       >
@@ -11037,8 +11039,6 @@ const App: React.FC = () => {
         const p = getPlayer(inspectPlayerId);
         if (!p) return null;
         const knownIdentity = p.isHuman || p.isRevealed || p.identity === Identity.ZHUGONG;
-        const equipNames = [p.equipment?.weapon, p.equipment?.armor, p.equipment?.horsePlus, p.equipment?.horseMinus]
-          .filter(Boolean).map(c => c!.name);
         return (
           <div className="absolute inset-0 z-[100] modal-mask flex items-center justify-center p-4" onClick={() => setInspectPlayerId(null)}>
             <div className="modal-shell max-w-xl w-[92%] max-h-[85vh] overflow-y-auto p-6 scrollbar-thin" onClick={e => e.stopPropagation()}>
@@ -11066,7 +11066,7 @@ const App: React.FC = () => {
                     查看立绘
                   </button>
                   <button
-                    onClick={() => { setInspectPlayerId(null); setDetailHero(p.hero); }}
+                    onClick={() => { setInspectPlayerId(null); setDetailPlayerId(p.id); setDetailHero(p.hero); }}
                     className="text-[11px] px-2 py-0.5 rounded border border-[#c8a45c]/50 text-[#e8cf94] hover:bg-[#c8a45c]/15"
                     aria-label={`查看 ${p.hero.name} 武将详情`}
                   >
@@ -11105,10 +11105,49 @@ const App: React.FC = () => {
                 )}
               </div>
 
-              <div className="bg-black/20 p-4 rounded-lg border border-[#8b7355]/20 text-sm space-y-2">
-                <div className="flex gap-2"><span className="text-stone-500 w-16 shrink-0">装备</span>
-                  <span className="text-stone-300">{equipNames.length ? equipNames.join('、') : '无'}</span>
+              <div className="bg-black/20 p-4 rounded-lg border border-[#8b7355]/20 text-sm space-y-2.5">
+                <div>
+                  <div className="text-stone-500 mb-1.5">装备区</div>
+                  {([
+                    ['weapon', '武器'],
+                    ['armor', '防具'],
+                    ['horsePlus', '防御马'],
+                    ['horseMinus', '进攻马'],
+                  ] as const).map(([slot, label]) => {
+                    const c = p.equipment?.[slot];
+                    return c ? (
+                      <div key={slot} className="mb-1.5">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#c8a45c]/15 border border-[#c8a45c]/30 text-[#e8cf94]">{label}</span>
+                          <span className="text-[#f0dcae] font-bold text-[13px]">【{c.name}】</span>
+                          <span className="text-stone-500 text-[11px]">{c.suit}{c.rank}</span>
+                        </div>
+                        <p className="text-[11px] text-stone-400 leading-relaxed mt-0.5">{EQUIP_META[c.name]?.desc ?? c.description}</p>
+                      </div>
+                    ) : (
+                      <div key={slot} className="flex items-center gap-2 mb-1">
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-black/30 border border-[#8b7355]/30 text-stone-500">{label}</span>
+                        <span className="text-stone-600 text-[11px]">— 空</span>
+                      </div>
+                    );
+                  })}
                 </div>
+                {(p.judgeZone?.length ?? 0) > 0 && (
+                  <div>
+                    <div className="text-stone-500 mb-1">判定区（按放置先后逐张判定）</div>
+                    {(p.judgeZone ?? []).map(c => (
+                      <div key={c.id} className="text-[12px] leading-relaxed">
+                        <span className="text-[#f0dcae]">【{c.name}】</span>
+                        <span className="text-stone-500 text-[11px] ml-1">{c.suit}{c.rank}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {(p.placedCards?.length ?? 0) > 0 && (
+                  <div className="flex gap-2"><span className="text-stone-500 w-16 shrink-0">武将牌上</span>
+                    <span className="text-stone-300">{p.placedCards!.map(c => `【${c.name}】`).join('')}</span>
+                  </div>
+                )}
                 {(p.isChained || p.isLeBuSiShu || p.isBingLiangCunDuan || p.isShandian) && (
                   <div className="flex gap-2"><span className="text-stone-500 w-16 shrink-0">状态</span>
                     <span className="text-[#e8cf94]">
@@ -11139,7 +11178,9 @@ const App: React.FC = () => {
       {/* 武将详情（对局内点击座位 → 武将详情） */}
       <HeroDetailModal
         hero={detailHero}
-        onClose={() => setDetailHero(null)}
+        player={detailPlayerId != null ? (players.find(x => x.id === detailPlayerId) ?? null) : null}
+        sealed={detailPlayerId != null ? isSkillSealed(detailPlayerId) : false}
+        onClose={() => { setDetailHero(null); setDetailPlayerId(null); }}
         onZoom={(h) => setPortraitHero(h)}
       />
 

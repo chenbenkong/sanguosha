@@ -1,10 +1,15 @@
 import React, { useEffect } from 'react';
-import { Hero } from '../../types';
+import { Hero, Player, Identity } from '../../types';
+import { EQUIP_META } from '../../constants';
 import { getHeroDetail, SkillTag } from '../game/heroDetail';
 import { heroPortrait2x } from '../game/utils';
 
 interface HeroDetailModalProps {
   hero: Hero | null;
+  /** 对局内打开时传入实时角色状态（体力/手牌/装备/判定区/标记等），选将页为 null */
+  player?: Player | null;
+  /** 该角色当前是否处于技能封印（由对局侧的 isSkillSealed 计算） */
+  sealed?: boolean;
   onClose: () => void;
   /** 选中该武将（留在选将页） */
   onSelect?: (hero: Hero) => void;
@@ -13,6 +18,14 @@ interface HeroDetailModalProps {
   /** 打开 2x 立绘大图 */
   onZoom?: (hero: Hero) => void;
 }
+
+const SLOT_LABEL: Record<string, string> = { weapon: '武器', armor: '防具', horsePlus: '防御马', horseMinus: '进攻马' };
+const SLOT_ORDER = ['weapon', 'armor', 'horsePlus', 'horseMinus'] as const;
+const JUDGE_DESC: Record<string, string> = {
+  '乐不思蜀': '判定：非红桃则跳过出牌阶段',
+  '兵粮寸断': '判定：非梅花则跳过摸牌阶段',
+  '闪电': '判定：黑桃 2~9 受到 3 点雷电伤害，否则传递给下一名角色',
+};
 
 const TAG_STYLE: Record<SkillTag, string> = {
   锁定技: 'bg-[#3a2f14] text-[#f0d894] border-[#c8a45c]/60',
@@ -32,7 +45,7 @@ const Star: React.FC<{ on: boolean }> = ({ on }) => (
  * + 定位与难度 + 实战提示 + 出战/选择/关闭。
  * 桌面居中大弹窗，手机全屏抽屉，正文可滚动、按钮固定可见。
  */
-export const HeroDetailModal: React.FC<HeroDetailModalProps> = ({ hero, onClose, onSelect, onStart, onZoom }) => {
+export const HeroDetailModal: React.FC<HeroDetailModalProps> = ({ hero, player, sealed, onClose, onSelect, onStart, onZoom }) => {
   useEffect(() => {
     if (!hero) return;
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
@@ -42,6 +55,20 @@ export const HeroDetailModal: React.FC<HeroDetailModalProps> = ({ hero, onClose,
 
   if (!hero) return null;
   const { profile, skills } = getHeroDetail(hero);
+  // 对局实时状态（仅当传入 player 时渲染）
+  const judgeZone = player?.judgeZone ?? [];
+  const equipCount = player ? SLOT_ORDER.filter(s => player.equipment?.[s]).length : 0;
+  const identityKnown = !!player && (player.isHuman || player.isRevealed || player.identity === Identity.ZHUGONG);
+  const marks = player ? [
+    player.meiyanMarks ? `梅影 ×${player.meiyanMarks}` : '',
+    player.miaoJianLevel ? `妙剑 Lv.${player.miaoJianLevel}` : '',
+    player.lianHuaLevel ? `莲华 Lv.${player.lianHuaLevel}` : '',
+    player.juMarks ? `疽 ×${player.juMarks}` : '',
+    player.hasKui ? '傀' : '',
+    ...(player.zhangMarks ?? []).map(m => `法箓·${m}`),
+  ].filter(Boolean) : [];
+  const grantedSkills = player?.grantedSkills ?? [];
+  const placedCards = player?.placedCards ?? [];
 
   return (
     <div
@@ -92,6 +119,75 @@ export const HeroDetailModal: React.FC<HeroDetailModalProps> = ({ hero, onClose,
 
         {/* 正文：桌面左右分栏，手机上下滚动 */}
         <div className="flex-1 min-h-0 overflow-y-auto scrollbar-thin px-4 md:px-6 py-4">
+          {/* 对局实时状态：体力 / 手牌 / 装备明细 / 判定区 / 标记 */}
+          {player && (
+            <div className="mb-4 rounded-lg border border-[#c8a45c]/35 bg-[#1a1410]/80 p-3 md:p-4">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="w-[3px] h-3.5 rounded-sm bg-gradient-to-b from-[#f0d894] to-[#a8842c]" />
+                <span className="text-xs font-bold tracking-[0.18em] text-[#d9c49a]">当前状态</span>
+                <span className={`text-sm font-bold ${player.hp <= 1 ? 'text-[#e8a99f]' : 'text-[#e8cf94]'}`}>♥ {player.hp}/{player.maxHp}</span>
+                <span className="text-[11px] md:text-xs text-[#a99a80]">手牌 {player.hand.length} · 装备 {equipCount} · 判定 {judgeZone.length}</span>
+                <span className="text-[11px] md:text-xs text-[#a99a80]">身份 {identityKnown ? player.identity : '未知'}</span>
+                {player.isDead && (
+                  <span className="px-1.5 py-0.5 rounded text-[10px] border border-[#9e2b25]/70 bg-[#2a1512] text-[#f0b8b0]">阵亡</span>
+                )}
+                {sealed && (
+                  <span className="px-1.5 py-0.5 rounded text-[10px] border border-[#8b7355]/60 bg-[#241b14] text-[#d9c49a]">技能封印</span>
+                )}
+                {player.generalRevealed === false && (
+                  <span className="px-1.5 py-0.5 rounded text-[10px] border border-[#8f7ad0]/60 bg-[#241a3a] text-[#c8b8f0]">武将暗置</span>
+                )}
+                {player.isChained && (
+                  <span className="px-1.5 py-0.5 rounded text-[10px] border border-[#6a8aa0]/60 bg-[#14283a] text-[#b8d8f0]">铁索横置</span>
+                )}
+              </div>
+
+              <div className="mt-2.5 space-y-1.5">
+                {SLOT_ORDER.map(slot => {
+                  const c = player.equipment?.[slot];
+                  return (
+                    <div key={slot} className="flex items-start gap-2">
+                      <span className="flex-none w-14 text-center text-[10px] md:text-[11px] px-1 py-0.5 rounded bg-[#c8a45c]/10 border border-[#c8a45c]/30 text-[#e8cf94]">
+                        {SLOT_LABEL[slot]}
+                      </span>
+                      {c ? (
+                        <div className="min-w-0">
+                          <div className="text-[12px] md:text-[13px] leading-tight">
+                            <span className="text-[#f0dcae] font-bold">【{c.name}】</span>
+                            <span className="text-[#a99a80] text-[11px] ml-1">{c.suit}{c.rank}</span>
+                          </div>
+                          <div className="text-[11px] leading-relaxed text-[#a99a80]">{EQUIP_META[c.name]?.desc ?? c.description}</div>
+                        </div>
+                      ) : (
+                        <span className="text-[11px] text-[#6a5642] leading-5">— 空</span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+
+              {judgeZone.length > 0 && (
+                <div className="mt-2.5 pt-2 border-t border-[#8b7355]/25">
+                  <div className="text-[11px] text-[#9a8b74] mb-1">判定区（按放置先后逐张判定）</div>
+                  {judgeZone.map(c => (
+                    <div key={c.id} className="text-[12px] leading-relaxed">
+                      <span className="text-[#f0dcae]">【{c.name}】</span>
+                      <span className="text-[11px] text-[#a99a80] ml-1">{c.suit}{c.rank} · {JUDGE_DESC[c.name] ?? '延时锦囊'}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {(marks.length > 0 || grantedSkills.length > 0 || placedCards.length > 0) && (
+                <div className="mt-2.5 pt-2 border-t border-[#8b7355]/25 flex flex-wrap gap-x-3 gap-y-1 text-[11px]">
+                  {marks.length > 0 && <span className="text-[#e8cf94]">标记：{marks.join('、')}</span>}
+                  {placedCards.length > 0 && <span className="text-[#c8bda8]">置于武将牌上：{placedCards.map(c => `【${c.name}】`).join('')}</span>}
+                  {grantedSkills.length > 0 && <span className="text-[#b8d8f0]">临时技能：{grantedSkills.join('、')}</span>}
+                </div>
+              )}
+            </div>
+          )}
+
           <div className="flex flex-col md:flex-row gap-4 md:gap-6">
             {/* 2:3 立绘 + 放大 */}
             <div className="flex-none w-full md:w-[300px] lg:w-[340px]">
