@@ -912,7 +912,6 @@ export const HEROES: Hero[] = [
     skillName: '护关',
     skillDesc: '当一名角色于其出牌阶段内使用第一张牌时，若此牌为红色，你可以声明一个花色，令此花色的牌本回合不计入该角色的手牌上限。',
     gender: 'female',
-    pending: true,
   },
   {
     id: 'wangtao',
@@ -924,7 +923,6 @@ export const HEROES: Hero[] = [
     skillName: '护关 / 摇佩',
     skillDesc: '护关：当一名角色于其出牌阶段内使用第一张牌时，若此牌为红色，你可以声明一个花色，令此花色的牌本回合不计入该角色的手牌上限。摇佩：其他角色的弃牌阶段结束时，若你本回合发动过「护关」，你可以弃置其本阶段未弃置过花色的一张牌，然后令你与其中的一名角色回复1点体力，另一名角色摸两张牌。',
     gender: 'female',
-    pending: true,
   },
   {
     id: 'liuyan',
@@ -996,7 +994,6 @@ export const HEROES: Hero[] = [
     skillName: '芳妒 / 节行',
     skillDesc: '芳妒：锁定技，你的回合外，当你本回合第一次受到普通伤害/属性伤害后，你回复1点体力/随机获得伤害来源的一张手牌。节行：当你的体力值变化后，你可以摸一张牌（此牌不计入你本回合的手牌上限）。',
     gender: 'female',
-    pending: true,
   },
   {
     id: 'xielingyu',

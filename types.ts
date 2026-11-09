@@ -150,6 +150,8 @@ export interface Player {
   caiShiMode?: 'limitOther' | 'limitSelf' | null;
   /** 王元姬「尚俭」本回合失去的牌数（每回合开始清零） */
   lostCardsThisTurn?: number;
+  /** 王悦 / 王桃「护关」：本回合被声明不计入手牌上限的花色 */
+  huguanSuit?: Suit;
   /** 王元姬「谦冲」本回合选择的无次数/无距离限制牌型 */
   qianchongType?: 'basic' | 'trick' | 'equip' | null;
   /** 周妃「箜声」置于武将牌上的牌 */

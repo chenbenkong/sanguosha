@@ -149,9 +149,10 @@ describe('getHeroDetail', () => {
     }
   });
 
-  test('第六批 30 名新女将标记为 pending 且走 PENDING_PROFILE', () => {
+  test('第六批新女将中尚未实装的标记为 pending 且走 PENDING_PROFILE', () => {
     const pend = HEROES.filter(h => h.pending);
-    expect(pend.length).toBe(30);
+    // 王悦/王桃/袁姬 的技能已实装并解除 pending；实装一名就少一名
+    expect(pend.length).toBe(27);
     expect(pend.every(h => h.gender === 'female')).toBe(true);
     for (const h of pend) {
       const d = getHeroDetail(h);
