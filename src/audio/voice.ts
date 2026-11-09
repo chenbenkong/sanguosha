@@ -9,6 +9,11 @@ const CARD_SLUG: Record<string, string> = {
   '借刀杀人': 'jiedao', '闪电': 'shandian',
   '青釭剑': 'qinggang', '青龙偃月刀': 'qinglong', '方天画戟': 'fangtian', '诸葛连弩': 'zhuge',
   '八卦阵': 'bagua', '仁王盾': 'renwang', '赤兔': 'chitu', '大宛': 'dawan', '的卢': 'dilu', '绝影': 'jueying',
+  // 其余装备台词：来源开源项目 noname（yusanshi/noname，本地托管非商用）；
+  // 其中「紫骍」在 noname 中的音频 slug 为 zixin
+  '丈八蛇矛': 'zhangba', '贯石斧': 'guanshi', '雌雄双股剑': 'cixiong', '寒冰剑': 'hanbing',
+  '麒麟弓': 'qilin', '古锭刀': 'guding', '朱雀羽扇': 'zhuque', '藤甲': 'tengjia',
+  '白银狮子': 'baiyin', '爪黄飞电': 'zhuahuang', '紫骍': 'zixin',
 };
 
 const SKILL_SLUG: Record<string, string> = {
