@@ -10,6 +10,7 @@ import { HeroDetailModal } from './src/components/HeroDetailModal';
 import RulesDialog from './src/components/RulesDialog';
 import { GameSave, SAVE_VERSION, readSave, writeSave, clearSave, consumeSaveRejected, isSaveFinished } from './src/game/save';
 import { shuffle, rankValue, wuguKeepPriority } from './src/game/utils';
+import { useGameState, setPlayers, setDeck, setDiscardPile, setTurnIndex, setPhase, setWinnerSide } from './src/game/gameStore';
 import { LogPanel, PhasePanel, TurnRail, TurnStrip, ObjectiveStrip, MobilePhaseChip } from './src/components/game/GameHud';
 import { PlayerInspectModal } from './src/components/game/PlayerInspectModal';
 import { SkillInfoModal } from './src/components/game/SkillInfoModal';
@@ -90,9 +91,9 @@ const App: React.FC = () => {
 
 
   // --- Game State ---
-  const [deck, setDeck] = useState<Card[]>([]);
+  // 对局核心状态统一收敛在 src/game/gameStore.ts（单一写入口），这里只订阅快照
+  const { deck, discardPile, players, turnIndex, phase, winnerSide } = useGameState();
   const deckRef = useRef<Card[]>([]); // 用于获取最新的牌堆状态
-  const [discardPile, setDiscardPile] = useState<Card[]>([]);
   const discardPileRef = useRef<Card[]>([]); // 用于获取最新的弃牌堆状态
 
   // 牌堆动作提示：摸牌时牌堆「弹一下」，洗切时整堆抖动
@@ -130,10 +131,6 @@ const App: React.FC = () => {
     discardPileRef.current = discardPile;
   }, [discardPile]);
   
-  const [players, setPlayers] = useState<Player[]>([]);
-  const [turnIndex, setTurnIndex] = useState<number>(0); 
-  const [phase, setPhase] = useState<GamePhase>(GamePhase.START);
-  const [winnerSide, setWinnerSide] = useState<WinnerSide | null>(null);
   const [isProcessing, setIsProcessing] = useState(0); // 全局状态锁计数，防止结算期间进行其他操作
   const isGameOverRef = useRef<boolean>(false); // 游戏结束标志，防止重复触发
   const gameStartedAtRef = useRef<number>(0); // 本局开始时间，用于结算页「用时」
@@ -4101,7 +4098,7 @@ const App: React.FC = () => {
                   discardPileRef.current = dp;
                   setDiscardPile(dp);
                 }
-                const reshuffled = shuffle(deckRef.current);
+                const reshuffled = shuffle<Card>(deckRef.current);
                 setDeck(reshuffled);
                 deckRef.current = reshuffled;
                 addLog('【伏诛】结算完毕，牌堆重新洗牌', 'info');
