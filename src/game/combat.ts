@@ -1,6 +1,6 @@
 import React from 'react';
 import type { Card, EquipmentSlot, Player } from '../../types';
-import { canHuguan } from './skills-batch6';
+import { canHuguan, tianzeCanStrike, cilvDrawCount } from './skills-batch6';
 import { CardName, CardType, GamePhase, Identity, Suit } from '../../types';
 import { EQUIP_META } from '../../constants';
 import { setDeck, setDiscardPile } from './gameStore';
@@ -252,6 +252,26 @@ export const createCombatEngine = (deps: CombatDeps): CombatEngine => {
             await delay(300);
           }
         }
+        // 张宁「天则」②：其他角色出牌阶段使用的第一张黑色手牌结算后，
+        // 张宁可弃置一张黑色牌对其造成 1 点伤害
+        {
+          const zn = playersRef.current.find(x => !x.isDead && x.hero.name === '张宁' && skillsOn(x.id));
+          if (zn && tianzeCanStrike(card, 1, source.id, zn)) {
+            const blackCard = zn.hand.find(c => c.suit === Suit.SPADE || c.suit === Suit.CLUB);
+            if (blackCard) {
+              mutateHand(zn.id, h => h.filter(c => c.id !== blackCard.id));
+              setDiscardPile(prev => {
+                const next = [...prev, blackCard];
+                discardPileRef.current = next;
+                return next;
+              });
+              addLog(`【天则】张宁弃置黑色【${blackCard.name}】，对 ${source.hero.name} 造成 1 点伤害`, 'skill');
+              showSkillBanner('张宁', '天则');
+              await delay(400);
+              await takeDamage(source.id, zn.id, 1, blackCard);
+            }
+          }
+        }
         if (card.name === CardName.SHA) {
           const enabler = playersRef.current.find(p => hasGrantedSkill(p, '勇决')
             && p.hero.kingdom === source.hero.kingdom && p.id !== source.id);
@@ -297,6 +317,22 @@ export const createCombatEngine = (deps: CombatDeps): CombatEngine => {
           }
         } else {
           yuejianPendingRef.current.set(card.id, bf.id);
+        }
+      }
+    }
+
+    // 朱佩兰「辞虑」：成为普通锦囊牌的目标后，可摸（剩余选项数）张牌
+    // 选项随发动次数递减：3 → 2 → 1 → 0，全部用尽后不再触发
+    {
+      const zp = playersRef.current.find(x => !x.isDead && x.hero.name === '朱佩兰' && skillsOn(x.id));
+      if (zp && zp.id !== source.id && card.type === CardType.SCROLL && targets.some(t => t.id === zp.id)) {
+        const remaining = 3 - (zp.cilvUsed ?? 0);
+        if (remaining > 0) {
+          drawCards(zp.id, cilvDrawCount(remaining));
+          updatePlayer(zp.id, { cilvUsed: (zp.cilvUsed ?? 0) + 1 });
+          addLog(`【辞虑】朱佩兰成为【${card.name}】的目标，摸 ${remaining} 张牌（剩余选项 ${remaining - 1}）`, 'skill');
+          showSkillBanner('朱佩兰', '辞虑');
+          await delay(300);
         }
       }
     }

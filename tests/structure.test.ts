@@ -109,7 +109,7 @@ describe('.tsx 文件行数体检', () => {
 
 describe('定时器与 effect 清理体检（只报告）', () => {
   test('setTimeout / setInterval 调用点统计为真实数字（架构重构后实测 89 / 6）', () => {
-    expect(timers.setTimeout).toBe(89);
+    expect(timers.setTimeout).toBe(90);
     expect(timers.setInterval).toBe(6);
     expect(timers.clearTimeout).toBe(12);
     expect(timers.clearInterval).toBe(7);

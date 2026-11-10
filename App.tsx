@@ -12,7 +12,7 @@ import { GameSave, SAVE_VERSION, readSave, writeSave, clearSave, consumeSaveReje
 import { shuffle, rankValue, wuguKeepPriority } from './src/game/utils';
 import { useGameState, setPlayers, setDeck, setDiscardPile, setTurnIndex, setPhase, setWinnerSide } from './src/game/gameStore';
 import { countExemptHandCards, computeDiscardExcess, evaluateWinnerSide, nextAliveTurnIndex, seatDistance, suddenDeathDamage, targetProtection } from './src/game/rules';
-import { jiexingTriggers, countHuguanExempt } from './src/game/skills-batch6';
+import { jiexingTriggers, countHuguanExempt, tianzeDraws, shengduDrawCount, nifuAdjust } from './src/game/skills-batch6';
 import { isAlly as isAllyImpl, isEnemy as isEnemyImpl } from './src/game/ai/relations';
 import { isSkillSealed as isSkillSealedImpl, skillsOn as skillsOnImpl } from './src/game/ai/skillGate';
 import { pickAITarget as pickAITargetImpl } from './src/game/ai/targeting';
@@ -1354,6 +1354,22 @@ const App: React.FC = () => {
       playersRef.current = updated;
       return updated;
     });
+
+    // 董绾「生妒」：带标记的角色摸牌后，董绾摸「标记数 × 其摸牌数」张，然后移去标记
+    // （董绾自己摸牌不触发；用 setTimeout 延迟，避免在 drawCards 内递归调用自身）
+    if (drawn.length > 0) {
+      const dw = playersRef.current.find(x => !x.isDead && x.hero.name === '董绾' && skillsOn(x.id));
+      const marked = playersRef.current.find(x => x.id === playerId && (x.shengduMarks ?? 0) > 0);
+      if (dw && marked && dw.id !== playerId) {
+        const extra = shengduDrawCount(marked.shengduMarks ?? 0, drawn.length);
+        updatePlayer(playerId, { shengduMarks: 0 });
+        if (extra > 0) {
+          addLog(`【生妒】${marked.hero.name} 摸 ${drawn.length} 张牌，董绾摸 ${extra} 张`, 'skill');
+          showSkillBanner('董绾', '生妒');
+          setTimeout(() => { drawCardsRef.current?.(dw.id, extra); }, 0);
+        }
+      }
+    }
 
     // 玩家自己摸牌时，让新牌从牌堆方向飞入手牌
     if (playerId === 0 && drawn.length > 0) {
@@ -3899,6 +3915,25 @@ const App: React.FC = () => {
           }
         }
 
+        // 严夫人「匿伏」（锁定技）：一名角色的结束阶段，将其手牌调整为三张
+        if (endingPlayer && !endingPlayer.isDead && endingPlayer.hero.name === '严夫人' && skillsOn(endingPlayer.id)) {
+          const diff = nifuAdjust(endingPlayer.hand.length);
+          if (diff > 0) {
+            addLog(`【匿伏】${endingPlayer.hero.name} 手牌不足三张，摸 ${diff} 张`, 'skill');
+            showSkillBanner('严夫人', '匿伏');
+            drawCards(endingPlayer.id, diff);
+          } else if (diff < 0) {
+            const toDiscard = [...endingPlayer.hand]
+              .sort((a, b) => rankValue(a.rank) - rankValue(b.rank))
+              .slice(0, -diff);
+            if (toDiscard.length) {
+              addLog(`【匿伏】${endingPlayer.hero.name} 手牌超过三张，弃置 ${toDiscard.length} 张`, 'skill');
+              showSkillBanner('严夫人', '匿伏');
+              discardCards(endingPlayer.id, toDiscard);
+            }
+          }
+        }
+
         // 貂蝉「闭月」：回合结束时摸一张牌
         if (endingPlayer && !endingPlayer.isDead && endingPlayer.hero.name === '貂蝉') {
           addLog(`${endingPlayer.hero.name} 发动「闭月」，摸一张牌`, 'skill');
@@ -6261,6 +6296,17 @@ const App: React.FC = () => {
       mutateHand(playerId, hand => [...hand, finalCard]);
       addLog(`${playerName} 发动「天妒」，获得判定牌【${finalCard.name}】`, 'skill');
       showSkillBanner(playerName, '天妒');
+    }
+    // 张宁「天则」①：其他角色的黑色判定牌生效后，张宁摸一张牌
+    {
+      const zn = playersRef.current.find(x => !x.isDead && x.hero.name === '张宁' && skillsOn(x.id));
+      const judgeOwner = playersRef.current.find(x => x.id === playerId) ?? null;
+      if (zn && judgeOwner && tianzeDraws(finalCard, judgeOwner, zn)) {
+        drawCards(zn.id, 1);
+        addLog(`【天则】${judgeOwner.hero.name} 判定为黑色（${finalCard.suit}），张宁摸一张牌`, 'skill');
+        showSkillBanner('张宁', '天则');
+        await delay(300);
+      }
     }
     return finalCard;
   };
