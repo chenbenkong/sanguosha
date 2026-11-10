@@ -26,7 +26,7 @@ import { FX_LABEL, FX_ORDER, FX_TAG } from './src/game/fx';
 import type { FxLevel } from './src/game/fx';
 import { createCombatEngine } from './src/game/combat';
 import './src/game/skills';
-import { dispatchTurnEnd } from './src/game/skills/dispatch';
+import { dispatchTurnEnd, dispatchJudge, dispatchDrawBonus } from './src/game/skills/dispatch';
 import type { CombatDeps, CombatEngine } from './src/game/combat';
 import { GameApiProvider } from './src/game/GameApiContext';
 import type { GameApi } from './src/game/gameApi';
@@ -2963,7 +2963,27 @@ const App: React.FC = () => {
         // 周瑜「英姿」：摸牌阶段额外摸一张
         const fumianExtra = currentPlayer.hero.name === '吴苋' && currentPlayer.fumianChoice === 1 && skillsOn(currentPlayer.id)
           ? (currentPlayer.fumianValue1 ?? 1) : 0;
-        const drawCount = (currentPlayer.hero.name === '周瑜' ? 3 : 2) + fumianExtra;
+        let drawCount = (currentPlayer.hero.name === '周瑜' ? 3 : 2) + fumianExtra;
+        // 技能注册表：摸牌阶段的额外摸牌（新技能只需注册 drawPhaseBonus）
+        const regDrawBonus = dispatchDrawBonus({
+          players: playersRef.current,
+          turnOwner: currentPlayer,
+          draw: (pid: number, n: number) => drawCardsRef.current!(pid, n),
+          discard: (pid: number, cards: Card[]) => discardCards(pid, cards),
+          heal: (pid: number, n: number) => recoverHp(pid, n),
+          damage: async (victimId: number, sourceId: number, amount: number, cd?: Card) => {
+            if (combatEngine) await combatEngine.takeDamage(victimId, sourceId, amount, cd);
+          },
+          gainCard: (fromId: number, toId: number, cd: Card) => {
+            mutateHand(fromId, h => h.filter(c => c.id !== cd.id));
+            mutateHand(toId, h => [...h, cd]);
+          },
+          log: (t: string) => addLog(t, 'skill'),
+          banner: (h: string, sk: string) => showSkillBanner(h, sk),
+          delay: (ms: number) => delay(ms),
+          skillsOn: (pid: number) => skillsOn(pid),
+        });
+        drawCount += regDrawBonus;
         if (fumianExtra > 0) {
           addLog(`【福绵】吴苋摸牌阶段额外摸 ${fumianExtra} 张牌`, 'skill');
           showSkillBanner('吴苋', '福绵');
@@ -6331,6 +6351,31 @@ const App: React.FC = () => {
     addLog(`⚖️ ${playerName} 的【${reason}】判定：${finalCard.suit} ${rankDisplay}（判定牌：【${judgmentCard.name}】）${isXiaoqiao && finalCard.suit !== judgmentCard.suit ? '，触发「红颜」视为红桃' : ''}${zhenyiNote}${guicaiNote}`, 'warning');
     showJudgmentVisual(finalCard, playerName, reason);
     await delay(1600);
+    // 技能注册表：判定牌生效后（新技能只需注册 afterJudge，不必在此加分支）
+    {
+      const judgeSkillDeps = {
+        players: playersRef.current,
+        turnOwner: playersRef.current.find(x => x.id === turnOwnerIdRef.current),
+        draw: (pid: number, n: number) => drawCardsRef.current!(pid, n),
+        discard: (pid: number, cards: Card[]) => discardCards(pid, cards),
+        heal: (pid: number, n: number) => recoverHp(pid, n),
+        damage: async (victimId: number, sourceId: number, amount: number, cd?: Card) => {
+          if (combatEngine) await combatEngine.takeDamage(victimId, sourceId, amount, cd);
+        },
+        gainCard: (fromId: number, toId: number, cd: Card) => {
+          mutateHand(fromId, h => h.filter(c => c.id !== cd.id));
+          mutateHand(toId, h => [...h, cd]);
+        },
+        log: (t: string) => addLog(t, 'skill'),
+        banner: (h: string, sk: string) => showSkillBanner(h, sk),
+        delay: (ms: number) => delay(ms),
+        skillsOn: (pid: number) => skillsOn(pid),
+      };
+      const judgeOwner = playersRef.current.find(x => x.id === playerId);
+      if (judgeOwner) {
+        await dispatchJudge(judgeSkillDeps, { owner: judgeOwner, card: finalCard, reason });
+      }
+    }
     // 郭嘉「天妒」：判定牌生效后获得之
     if (playerName === '郭嘉') {
       mutateHand(playerId, hand => [...hand, finalCard]);
