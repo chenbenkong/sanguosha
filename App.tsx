@@ -25,6 +25,8 @@ import { GameOverRoute, SelectRoute, StartRoute } from './src/screens/Routes';
 import { FX_LABEL, FX_ORDER, FX_TAG } from './src/game/fx';
 import type { FxLevel } from './src/game/fx';
 import { createCombatEngine } from './src/game/combat';
+import './src/game/skills';
+import { dispatchTurnEnd } from './src/game/skills/dispatch';
 import type { CombatDeps, CombatEngine } from './src/game/combat';
 import { GameApiProvider } from './src/game/GameApiContext';
 import type { GameApi } from './src/game/gameApi';
@@ -3910,6 +3912,27 @@ const App: React.FC = () => {
 
         // 张春华「伤逝」：回合结束时，手牌少于已损失体力则补至该值
         const endingPlayer = getPlayer(turnIndex);
+        // 技能注册表：回合结束时机统一分发（新技能只需注册，不必在此加分支）
+        if (endingPlayer) {
+          await dispatchTurnEnd({
+            players: playersRef.current,
+            turnOwner: endingPlayer,
+            draw: (pid: number, n: number) => drawCardsRef.current!(pid, n),
+            discard: (pid: number, cards: Card[]) => discardCards(pid, cards),
+            heal: (pid: number, n: number) => recoverHp(pid, n),
+            damage: async (victimId: number, sourceId: number, amount: number, cd?: Card) => {
+              if (combatEngine) await combatEngine.takeDamage(victimId, sourceId, amount, cd);
+            },
+            gainCard: (fromId: number, toId: number, cd: Card) => {
+              mutateHand(fromId, h => h.filter(c => c.id !== cd.id));
+              mutateHand(toId, h => [...h, cd]);
+            },
+            log: (t: string) => addLog(t, 'skill'),
+            banner: (h: string, sk: string) => showSkillBanner(h, sk),
+            delay: (ms: number) => delay(ms),
+            skillsOn: (pid: number) => skillsOn(pid),
+          }, endingPlayer);
+        }
         if (endingPlayer && !endingPlayer.isDead && endingPlayer.hero.name === '张春华') {
           const lostHp = endingPlayer.maxHp - endingPlayer.hp;
           const deficit = lostHp - endingPlayer.hand.length;
