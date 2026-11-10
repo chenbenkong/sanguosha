@@ -150,6 +150,8 @@ export interface Player {
   caiShiMode?: 'limitOther' | 'limitSelf' | null;
   /** 王元姬「尚俭」本回合失去的牌数（每回合开始清零） */
   lostCardsThisTurn?: number;
+  /** 唐姬「抗歌」守护对象 id */
+  kanggeTargetId?: number | null;
   /** 朱佩兰「辞虑」已消耗的选项数（初始 0，最多 3） */
   cilvUsed?: number;
   /** 董绾「生妒」标记数：具有该标记的角色摸牌后，董绾按倍数摸牌 */

@@ -390,6 +390,7 @@ const App: React.FC = () => {
   // 第六批新增武将的「本回合/本轮首次」去重集合
   const fangduUsedRef = useRef<Set<string>>(new Set()); // 袁姬「芳妒」
   const lingleUsedRef = useRef<Set<string>>(new Set()); // 孙翎鸾「聆乐」
+  const kanggeRescueRef = useRef<Set<number>>(new Set()); // 唐姬「抗歌」救援每轮限一次
   const fangzongDisabledTurnRef = useRef<number>(-1); // 花鬘「芳踪」失效的回合
   const fumianTargetUsedRef = useRef<boolean>(false); // 吴苋「福绵」本回合额外目标已用
   const cangHuiUsedRef = useRef<boolean>(false); // 孙鲁班「谮毁」本回合已发动
@@ -3918,6 +3919,19 @@ const App: React.FC = () => {
           }
         }
 
+        // 唐姬「抗歌」：自己的第一个回合开始时，选择一名其他角色作为守护对象
+        if (endingPlayer && !endingPlayer.isDead && endingPlayer.hero.name === '唐姬'
+            && skillsOn(endingPlayer.id) && endingPlayer.kanggeTargetId == null
+            && (turnCountRef.current <= playersRef.current.length)) {
+          const others = playersRef.current.filter(p => !p.isDead && p.id !== endingPlayer.id);
+          if (others.length > 0) {
+            const chosen = [...others].sort((a, b) => b.hp - a.hp)[0];
+            updatePlayer(endingPlayer.id, { kanggeTargetId: chosen.id });
+            addLog(`【抗歌】唐姬选择 ${chosen.hero.name} 作为守护对象`, 'skill');
+            showSkillBanner('唐姬', '抗歌');
+          }
+        }
+
         // 严夫人「匿伏」（锁定技）：一名角色的结束阶段，将其手牌调整为三张
         if (endingPlayer && !endingPlayer.isDead && endingPlayer.hero.name === '严夫人' && skillsOn(endingPlayer.id)) {
           const diff = nifuAdjust(endingPlayer.hand.length);
@@ -6406,6 +6420,7 @@ const App: React.FC = () => {
     turnOwnerIdRef,
     fangduUsedRef,
     lingleUsedRef,
+    kanggeRescueRef,
     fumianTargetUsedRef,
     fxFly,
     gainThreeTypes,
