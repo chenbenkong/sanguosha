@@ -26,7 +26,7 @@ import { FX_LABEL, FX_ORDER, FX_TAG } from './src/game/fx';
 import type { FxLevel } from './src/game/fx';
 import { createCombatEngine } from './src/game/combat';
 import './src/game/skills';
-import { dispatchTurnEnd, dispatchJudge, dispatchDrawBonus } from './src/game/skills/dispatch';
+import { dispatchTurnEnd, dispatchTurnStart, dispatchJudge, dispatchDrawBonus } from './src/game/skills/dispatch';
 import type { SkillChoiceReq } from './src/game/skills/dispatch';
 import type { CombatDeps, CombatEngine } from './src/game/combat';
 import { GameApiProvider } from './src/game/GameApiContext';
@@ -2485,6 +2485,37 @@ const App: React.FC = () => {
         });
         // 通用：他人回合开始的技能 / 虚拟牌钩子
         await runTurnStartHooks(currentPlayer);
+          // 技能注册表：回合开始时机（新技能只需注册 onTurnStart，不必在此加分支）
+          await dispatchTurnStart({
+            players: playersRef.current,
+            turnOwner: currentPlayer,
+            draw: (pid: number, c: number) => drawCardsRef.current!(pid, c),
+            discard: (pid: number, cards: Card[]) => discardCards(pid, cards),
+            heal: (pid: number, c: number) => recoverHp(pid, c),
+            damage: async (vid: number, sid: number, amt: number, cd?: Card) => {
+              if (combatEngine) await combatEngine.takeDamage(vid, sid, amt, cd);
+            },
+            gainCard: (fromId: number, toId: number, cd: Card) => {
+              mutateHand(fromId, h => h.filter(c => c.id !== cd.id));
+              mutateHand(toId, h => [...h, cd]);
+            },
+            log: (t: string) => addLog(t, 'skill'),
+            banner: (h: string, sk: string) => showSkillBanner(h, sk),
+            delay: (ms: number) => delay(ms),
+            skillsOn: (pid: number) => skillsOn(pid),
+            requestChoice: (req: SkillChoiceReq) => requestSkillChoice({
+              skill: req.title,
+              owner: '技能',
+              title: req.title,
+              hint: req.hint,
+              mode: req.mode,
+              choices: req.choices,
+              targets: req.targets,
+              min: req.min,
+              max: req.max,
+              cancelLabel: req.cancelLabel,
+            }, !isAiTakeoverRef.current),
+          }, currentPlayer);
         hetaishouKillsRef.current = 0; // 「戚乱」本回合击杀数
         ganluUsedRef.current = false;
         setHasUsedGanlu(false);
@@ -7606,7 +7637,11 @@ const App: React.FC = () => {
         filteredCount={filteredHeroes.length}
         pagedHeroes={pagedHeroes}
         selectedHero={selectedHero}
-        onPickHero={(h) => { setSelectedHero(h); setDetailPlayerId(null); setDetailHero(h); }}
+        // 点选武将：只做「选中」，不再顺带弹出详情面板。
+        // 之前这里同时 setDetailHero(h)，导致每点一次卡片就弹一层详情弹窗盖住
+        // 底部的「确认出战」，玩家必须再关一次弹窗才能出战。
+        // 详情仍可通过卡片上的「武将详情」按钮或详情弹窗内的入口打开。
+        onPickHero={(h) => { setSelectedHero(h); setDetailPlayerId(null); }}
         onOpenDetail={(h) => { setDetailPlayerId(null); setDetailHero(h); }}
         onOpenPortrait={setPortraitHero}
         onStart={startGame}
