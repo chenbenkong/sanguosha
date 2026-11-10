@@ -1,6 +1,6 @@
 import React from 'react';
 import type { Card, EquipmentSlot, Player } from '../../types';
-import { canHuguan, tianzeCanStrike, cilvDrawCount, fangduEffect } from './skills-batch6';
+import { canHuguan, tianzeCanStrike, cilvDrawCount, fangduEffect, yuanditriggers } from './skills-batch6';
 import { CardName, CardType, GamePhase, Identity, Suit } from '../../types';
 import { EQUIP_META } from '../../constants';
 import { setDeck, setDiscardPile } from './gameStore';
@@ -45,6 +45,8 @@ export interface CombatDeps {
   turnOwnerIdRef: React.RefObject<number>;
   /** 第六批：芳妒「本回合首次」去重 */
   fangduUsedRef: React.RefObject<Set<string>>;
+  /** 唐姬「抗歌」救援每轮限一次去重 */
+  kanggeRescueRef: React.RefObject<Set<number>>;
   /** 第六批：聆乐「本轮首次」去重 */
   lingleUsedRef: React.RefObject<Set<string>>;
   fumianTargetUsedRef: React.RefObject<boolean>;
@@ -156,6 +158,7 @@ export const createCombatEngine = (deps: CombatDeps): CombatEngine => {
     turnOwnerIdRef,
     fangduUsedRef,
     lingleUsedRef,
+    kanggeRescueRef,
     fumianTargetUsedRef,
     fxFly,
     gainThreeTypes,
@@ -248,6 +251,22 @@ export const createCombatEngine = (deps: CombatDeps): CombatEngine => {
       const key = `${source.id}-${turnCountRef.current}`;
       if (!firstUsedCardRef.current.has(key)) {
         firstUsedCardRef.current.add(key);
+        // 谢灵毓「元嫡」：其他角色于其出牌阶段使用第一张牌，若未指定除其以外的目标，
+        // 谢灵毓可令双方各摸一张（AI 与托管自动选择此收益项）
+        {
+          const xl = playersRef.current.find(x => !x.isDead && x.hero.name === '谢灵毓' && skillsOn(x.id));
+          if (xl && xl.id !== source.id) {
+            const targetsOthers = targets.some(t => t.id !== source.id);
+            if (yuanditriggers(targetsOthers, 1)) {
+              drawCards(xl.id, 1);
+              drawCards(source.id, 1);
+              addLog(`【元嫡】${source.hero.name} 的首张牌未指定他人，谢灵毓与其各摸一张牌`, 'skill');
+              showSkillBanner('谢灵毓', '元嫡');
+              await delay(300);
+            }
+          }
+        }
+
         // 王悦 / 王桃「护关」：出牌阶段使用的第一张牌为红色时，可声明一个花色
         // 令该花色本回合不计入其手牌上限（AI 与托管自动选当前手牌最多的花色）
         if ((source.hero.name === '王悦' || source.hero.name === '王桃') && skillsOn(source.id) && canHuguan(card)) {
@@ -2685,6 +2704,22 @@ export const createCombatEngine = (deps: CombatDeps): CombatEngine => {
       addLog(`${source.hero.name} 发动「虎啸」，摸一张牌`, 'skill');
       showSkillBanner(source.hero.name, '虎啸');
       drawCards(sourceId, 1);
+    }
+
+    // 唐姬「抗歌」②：守护对象进入濒死时，唐姬可令其将体力回复至 1 点（每轮限一次）
+    {
+      const victimNow = getPlayer(victimId);
+      if (victimNow && victimNow.hp <= 0) {
+        const tj = playersRef.current.find(x => !x.isDead && x.hero.name === '唐姬'
+          && skillsOn(x.id) && x.kanggeTargetId === victimId && x.id !== victimId);
+        if (tj && !kanggeRescueRef.current.has(tj.id)) {
+          kanggeRescueRef.current.add(tj.id);
+          updatePlayer(victimId, { hp: 1 });
+          addLog(`【抗歌】唐姬守护 ${victimNow.hero.name}，令其将体力回复至 1 点`, 'skill');
+          showSkillBanner('唐姬', '抗歌');
+          await delay(400);
+        }
+      }
     }
 
     // 袁姬「芳妒」（锁定技）：回合外本回合第一次受到伤害后，
