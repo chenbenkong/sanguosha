@@ -2982,7 +2982,7 @@ const App: React.FC = () => {
           banner: (h: string, sk: string) => showSkillBanner(h, sk),
           delay: (ms: number) => delay(ms),
           skillsOn: (pid: number) => skillsOn(pid),
-        });
+        }, currentPlayer.id);
         drawCount += regDrawBonus;
         if (fumianExtra > 0) {
           addLog(`【福绵】吴苋摸牌阶段额外摸 ${fumianExtra} 张牌`, 'skill');

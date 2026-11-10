@@ -149,16 +149,12 @@ describe('getHeroDetail', () => {
     }
   });
 
-  test('第六批新女将中尚未实装的标记为 pending 且走 PENDING_PROFILE', () => {
+  test('第六批 30 名新女将全部实装，无 pending', () => {
     const pend = HEROES.filter(h => h.pending);
-    // 王悦/王桃/袁姬 的技能已实装并解除 pending；实装一名就少一名
-    expect(pend.length).toBe(16);
-    expect(pend.every(h => h.gender === 'female')).toBe(true);
-    for (const h of pend) {
-      const d = getHeroDetail(h);
-      expect(d.profile.pack).toBe('新将·技能实装中');
-      expect(d.skills.length).toBeGreaterThan(0);
-    }
+    // 30 名新将的技能均已通过技能注册表实装
+    expect(pend.length).toBe(0);
+    expect(HEROES.length).toBe(99);
+    expect(HEROES.filter(h => h.gender === 'female').length).toBe(78);
   });
 
   test('有 profile 条目的武将使用自己的条目', () => {

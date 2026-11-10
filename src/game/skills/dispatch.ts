@@ -108,11 +108,12 @@ export const dispatchAfterDealDamage = async (deps: DispatchDeps, ev: DamageEven
   }
 };
 
-/** 摸牌阶段额外摸牌数（累加） */
-export const dispatchDrawBonus = (deps: DispatchDeps): number => {
+/** 摸牌阶段额外摸牌数（只统计摸牌者本人的技能） */
+export const dispatchDrawBonus = (deps: DispatchDeps, drawerId: number): number => {
   let total = 0;
   for (const { def, fn } of skillHook('drawPhaseBonus')) {
     for (const self of ownersOf(deps, def.hero)) {
+      if (self.id !== drawerId) continue;
       total += fn(ctxFor(deps, self, def.hero, def.skill));
     }
   }
