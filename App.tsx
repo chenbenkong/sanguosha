@@ -685,6 +685,8 @@ const App: React.FC = () => {
   const turnLiveRef = useRef<number>(turnIndex);
   // 推进心跳：addLog / 阶段开始时刷新，供卡死看门狗判断
   const progressAtRef = useRef<number>(Date.now());
+  // 同一回合内「看门狗重推进」的累计次数：超过上限说明在死循环，不再重试
+  const nudgeCountRef = useRef<number>(0);
   const stallKeyRef = useRef<string>('');
   const stallCountRef = useRef<number>(0);
   // AI 回合节奏：1 倍速下额外放慢，2/3 倍速保持原速
@@ -1620,6 +1622,8 @@ const App: React.FC = () => {
     initAudio();
     isGameOverRef.current = false; // 重置结束标志，支持"再来一局"
     turnStepRef.current = '';
+    nudgeCountRef.current = 0;
+    stallCountRef.current = 0;
     aiTurnActiveRef.current = false;
     chainWaveRef.current = null;
     // 开新局前结束所有挂起的旧交互，避免上一局的 Promise/弹窗残留到新局
@@ -2390,6 +2394,8 @@ const App: React.FC = () => {
     // 同一「回合 + 阶段」只推进一次：isProcessing 从 1 回到 0 时不再重复触发
     const stepKey = `${screen}-${turnIndex}-${phase}-${isAiTakeover ? 'auto' : 'human'}`;
     if (turnStepRef.current === stepKey) return;
+    // 进入新的「回合+阶段」组合，重置看门狗的重推进计数
+    if (!stepKey.startsWith(`${turnLiveRef.current}-`)) nudgeCountRef.current = 0;
     // 同一「回合+阶段」已有结算链在跑：禁止并发启动第二条
     // （并发链会各写一次阶段，后写的那条把阶段写回上一阶段，而该阶段已被去重跳过 → 永久停摆）
     const activeStep = activeStepRef.current;
@@ -4411,11 +4417,21 @@ const App: React.FC = () => {
       if (stallKeyRef.current !== key) { stallKeyRef.current = key; stallCountRef.current = 0; }
       stallCountRef.current += 1;
       progressAtRef.current = Date.now();
+      // 重推进次数上限：skill 若每次都把本阶段卡住，重推进只会无限循环
+      // （表现就是「自动快速死循环」+ 战报刷屏）。超过上限后不再重试，直接收尾。
       if (stallCountRef.current <= 2) {
         addLog('检测到结算停滞，已自动重新推进本阶段', 'warning');
         activeStepRef.current = null;
         turnStepRef.current = '';
         setIsProcessing(0);
+        nudgeCountRef.current += 1;
+        if (nudgeCountRef.current > 6) {
+          // 同一回合内反复卡住，说明有东西在死循环：停止重推进，避免刷屏锁死
+          addLog('本回合重复停滞过多，已停止自动重推进（请结束本回合）', 'danger');
+          stallCountRef.current = 99;
+          setPhase(GamePhase.END);
+          return;
+        }
         setLoopNudge(n => n + 1);
       } else {
         addLog('本阶段连续停滞，强制结束本回合', 'danger');

@@ -68,6 +68,39 @@ const memOf = (hero: string, skill: string): Record<string, unknown> => {
   return m;
 };
 
+/**
+ * 递归深度保护。
+ *
+ * 技能可以调用 ctx.damage / ctx.draw 等，而这些动作又会在引擎里触发新的分发
+ * （伤害→afterDamage→技能→伤害…）。正常对局里这类连锁只有几层，但一旦某个技能
+ * 编写有误（或规则边界没卡住），就会退化成无限递归：
+ * 表现为「页面卡死 + 战报疯狂刷屏」——正是玩家反馈的「自动快速死循环」。
+ *
+ * 这里做两件事：
+ *  1. 超过 MAX_DEPTH 直接停止继续分发（宁可少结算一次，也不能锁死页面）
+ *  2. 同一个「时机 + 触发者」在一轮里只分发一次，切断自激环
+ */
+const MAX_DEPTH = 8;
+let depth = 0;
+const inFlight = new Set<string>();
+
+const withGuard = async <T>(
+  key: string,
+  fn: () => Promise<T>,
+  fallback?: T,
+): Promise<T | undefined> => {
+  if (depth >= MAX_DEPTH) return fallback;
+  if (inFlight.has(key)) return fallback;
+  inFlight.add(key);
+  depth += 1;
+  try {
+    return await fn();
+  } finally {
+    depth -= 1;
+    inFlight.delete(key);
+  }
+};
+
 /** 对某个武将构造上下文 */
 const ctxFor = (deps: DispatchDeps, self: Player, hero: string, skill: string): SkillContext => ({
   self,
@@ -124,29 +157,35 @@ export const dispatchJudge = async (deps: DispatchDeps, ev: JudgeEvent): Promise
 
 /** 一张牌结算完成后 */
 export const dispatchCardUsed = async (deps: DispatchDeps, ev: CardUsedEvent): Promise<void> => {
+  await withGuard(`card-${ev.source.id}-${ev.card.id}`, async () => {
   for (const { def, fn } of skillHook('afterCardUsed')) {
     for (const self of ownersOf(deps, def.hero)) {
       await fn(ctxFor(deps, self, def.hero, def.skill), ev);
     }
   }
+  });
 };
 
 /** 受到伤害后 */
 export const dispatchAfterDamage = async (deps: DispatchDeps, ev: DamageEvent): Promise<void> => {
+  await withGuard(`dmg-${ev.victim.id}-${ev.source?.id ?? -1}`, async () => {
   for (const { def, fn } of skillHook('afterDamage')) {
     for (const self of ownersOf(deps, def.hero)) {
       await fn(ctxFor(deps, self, def.hero, def.skill), ev);
     }
   }
+  });
 };
 
 /** 造成伤害后 */
 export const dispatchAfterDealDamage = async (deps: DispatchDeps, ev: DamageEvent): Promise<void> => {
+  await withGuard(`deal-${ev.source?.id ?? -1}-${ev.victim.id}`, async () => {
   for (const { def, fn } of skillHook('afterDealDamage')) {
     for (const self of ownersOf(deps, def.hero)) {
       await fn(ctxFor(deps, self, def.hero, def.skill), ev);
     }
   }
+  });
 };
 
 /** 摸牌阶段额外摸牌数（只统计摸牌者本人的技能） */
