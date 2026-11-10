@@ -1,7 +1,7 @@
 import React from 'react';
 import type { Card, EquipmentSlot, Player } from '../../types';
 import { canHuguan, tianzeCanStrike, cilvDrawCount, fangduEffect, yuanditriggers } from './skills-batch6';
-import { dispatchAfterDamage, dispatchAfterDealDamage } from './skills/dispatch';
+import { dispatchAfterDamage, dispatchAfterDealDamage, dispatchCardUsed } from './skills/dispatch';
 import { CardName, CardType, GamePhase, Identity, Suit } from '../../types';
 import { EQUIP_META } from '../../constants';
 import { setDeck, setDiscardPile } from './gameStore';
@@ -1517,6 +1517,29 @@ export const createCombatEngine = (deps: CombatDeps): CombatEngine => {
     }
   } finally {
     setIsProcessing(p => Math.max(0, p - 1));
+    // 技能注册表：一张牌结算完成后的时机（afterCardUsed）
+    try {
+      const usedCount = [...firstUsedCardRef.current].filter(k => k.startsWith(`${source.id}-`)).length;
+      await dispatchCardUsed({
+        players: playersRef.current,
+        turnOwner: playersRef.current.find(p => p.id === turnOwnerIdRef.current),
+        draw: (pid: number, c: number) => drawCards(pid, c),
+        discard: (pid: number, cards: Card[]) => discardCards(pid, cards),
+        heal: (pid: number, c: number) => recoverHp(pid, c),
+        damage: async (vid: number, sid: number, amt: number, cd?: Card) => { await takeDamage(vid, sid, amt, cd); },
+        gainCard: (fromId: number, toId: number, cd: Card) => {
+          mutateHand(fromId, h => h.filter(c => c.id !== cd.id));
+          mutateHand(toId, h => [...h, cd]);
+        },
+        log: (t: string) => addLog(t, 'skill'),
+        banner: (h: string, sk: string) => showSkillBanner(h, sk),
+        delay: (ms: number) => delay(ms),
+        skillsOn: (pid: number) => skillsOn(pid),
+        requestChoice: deps.requestChoice,
+      }, { source, card, targets, usedCount });
+    } catch (e) {
+      addLog('技能结算异常：' + String(e), 'warning');
+    }
     // 孙鲁育「魅步」止息：使用锦囊牌后，若使用者正处于自己的出牌阶段，立即结束出牌阶段
     const zx = zhixiRef.current;
     if (zx && zx.id === source.id && card.type === CardType.SCROLL) {
