@@ -1064,7 +1064,6 @@ export const HEROES: Hero[] = [
     skillName: '聆乐 / 盻睇',
     skillDesc: '聆乐：锁定技，当一名角色造成其本轮的第一次伤害后，你摸一张牌（若此时为其回合外，你改为摸X张牌，X为本回合全场造成的伤害值）。盻睇：出牌阶段，你可以选择一名本回合未造成过伤害的其他角色，然后你本阶段使用下一张牌时，视为由其使用。',
     gender: 'female',
-    pending: true,
   },
   {
     id: 'zhangxuan',

@@ -1,6 +1,6 @@
 import React from 'react';
 import type { Card, EquipmentSlot, Player } from '../../types';
-import { canHuguan, tianzeCanStrike, cilvDrawCount } from './skills-batch6';
+import { canHuguan, tianzeCanStrike, cilvDrawCount, fangduEffect } from './skills-batch6';
 import { CardName, CardType, GamePhase, Identity, Suit } from '../../types';
 import { EQUIP_META } from '../../constants';
 import { setDeck, setDiscardPile } from './gameStore';
@@ -41,6 +41,12 @@ export interface CombatDeps {
   fengpoBoostRef: React.RefObject<Record<string, number>>;
   fengpoUsedRef: React.RefObject<boolean>;
   firstUsedCardRef: React.RefObject<Set<string>>;
+  /** 第六批：当前回合角色 id（芳妒要求「回合外」） */
+  turnOwnerIdRef: React.RefObject<number>;
+  /** 第六批：芳妒「本回合首次」去重 */
+  fangduUsedRef: React.RefObject<Set<string>>;
+  /** 第六批：聆乐「本轮首次」去重 */
+  lingleUsedRef: React.RefObject<Set<string>>;
   fumianTargetUsedRef: React.RefObject<boolean>;
   fxFly: boolean;
   gainThreeTypes: (ownerId: number) => void;
@@ -147,6 +153,9 @@ export const createCombatEngine = (deps: CombatDeps): CombatEngine => {
     fengpoBoostRef,
     fengpoUsedRef,
     firstUsedCardRef,
+    turnOwnerIdRef,
+    fangduUsedRef,
+    lingleUsedRef,
     fumianTargetUsedRef,
     fxFly,
     gainThreeTypes,
@@ -2676,6 +2685,48 @@ export const createCombatEngine = (deps: CombatDeps): CombatEngine => {
       addLog(`${source.hero.name} 发动「虎啸」，摸一张牌`, 'skill');
       showSkillBanner(source.hero.name, '虎啸');
       drawCards(sourceId, 1);
+    }
+
+    // 袁姬「芳妒」（锁定技）：回合外本回合第一次受到伤害后，
+    // 普通伤害回复 1 点体力；属性伤害随机获得伤害来源一张手牌
+    {
+      const yj = getPlayer(victimId);
+      if (yj && yj.hero.name === '袁姬' && skillsOn(victimId) && sourceId >= 0 && sourceId !== victimId
+          && turnOwnerIdRef.current !== victimId) {
+        const key = `fangdu-${victimId}-${turnCountRef.current}`;
+        if (!fangduUsedRef.current.has(key)) {
+          fangduUsedRef.current.add(key);
+          if (fangduEffect(dmgNature) === 'heal') {
+            recoverHp(victimId, 1);
+            addLog(`【芳妒】袁姬于回合外首次受到普通伤害，回复 1 点体力`, 'skill');
+          } else {
+            const attacker = getPlayer(sourceId);
+            if (attacker && attacker.hand.length > 0) {
+              const got = attacker.hand[Math.floor(Math.random() * attacker.hand.length)];
+              mutateHand(sourceId, h => h.filter(c => c.id !== got.id));
+              mutateHand(victimId, h => [...h, got]);
+              addLog(`【芳妒】袁姬受到属性伤害，获得 ${attacker.hero.name} 的【${got.name}】`, 'skill');
+            } else {
+              addLog('【芳妒】袁姬受到属性伤害，但伤害来源没有手牌', 'info');
+            }
+          }
+          showSkillBanner('袁姬', '芳妒');
+        }
+      }
+    }
+
+    // 孙翎鸾「聆乐」（锁定技）：一名角色造成其本轮的第一次伤害后，孙翎鸾摸一张
+    {
+      const sl = playersRef.current.find(x => !x.isDead && x.hero.name === '孙翎鸾' && skillsOn(x.id));
+      if (sl && sourceId >= 0 && sl.id !== sourceId) {
+        const key = `lingle-${sourceId}-${turnCountRef.current}`;
+        if (!lingleUsedRef.current.has(key)) {
+          lingleUsedRef.current.add(key);
+          drawCards(sl.id, 1);
+          addLog(`【聆乐】孙翎鸾在 ${source?.hero.name ?? '某角色'} 造成本轮首次伤害后摸一张牌`, 'skill');
+          showSkillBanner('孙翎鸾', '聆乐');
+        }
+      }
     }
 
     // 郭嘉「遗计」：受到伤害后摸两张牌

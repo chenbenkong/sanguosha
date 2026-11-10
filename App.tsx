@@ -387,6 +387,9 @@ const App: React.FC = () => {
   const hongyiUsedRef = useRef<boolean>(false); // 羊徽瑜「弘仪」本回合已发动
   const firstUsedCardRef = useRef<Set<string>>(new Set()); // 通用：每名角色每回合的第一张牌
   const turnOwnerIdRef = useRef<number>(-1); // 当前回合角色（供明置锁定等机制使用）
+  // 第六批新增武将的「本回合/本轮首次」去重集合
+  const fangduUsedRef = useRef<Set<string>>(new Set()); // 袁姬「芳妒」
+  const lingleUsedRef = useRef<Set<string>>(new Set()); // 孙翎鸾「聆乐」
   const fangzongDisabledTurnRef = useRef<number>(-1); // 花鬘「芳踪」失效的回合
   const fumianTargetUsedRef = useRef<boolean>(false); // 吴苋「福绵」本回合额外目标已用
   const cangHuiUsedRef = useRef<boolean>(false); // 孙鲁班「谮毁」本回合已发动
@@ -6400,6 +6403,9 @@ const App: React.FC = () => {
     fengpoBoostRef,
     fengpoUsedRef,
     firstUsedCardRef,
+    turnOwnerIdRef,
+    fangduUsedRef,
+    lingleUsedRef,
     fumianTargetUsedRef,
     fxFly,
     gainThreeTypes,
