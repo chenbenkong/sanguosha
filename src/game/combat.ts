@@ -1,6 +1,7 @@
 import React from 'react';
 import type { Card, EquipmentSlot, Player } from '../../types';
 import { canHuguan, tianzeCanStrike, cilvDrawCount, fangduEffect, yuanditriggers } from './skills-batch6';
+import { dispatchAfterDamage, dispatchAfterDealDamage } from './skills/dispatch';
 import { CardName, CardType, GamePhase, Identity, Suit } from '../../types';
 import { EQUIP_META } from '../../constants';
 import { setDeck, setDiscardPile } from './gameStore';
@@ -2699,6 +2700,52 @@ export const createCombatEngine = (deps: CombatDeps): CombatEngine => {
       showSkillBanner('郭皇后', '殚心');
     }
 
+    // 技能注册表：受伤后 / 造成伤害后（新技能只需注册 afterDamage / afterDealDamage）
+    {
+      const victimNow = getPlayer(victimId);
+      const srcNow = sourceId >= 0 ? getPlayer(sourceId) : undefined;
+      if (victimNow) {
+        const ev = {
+          victim: victimNow,
+          source: srcNow,
+          amount: finalAmount,
+          nature: (dmgNature === 'fire' || dmgNature === 'thunder' ? dmgNature : 'normal') as 'normal' | 'fire' | 'thunder',
+          card: damageCard,
+        };
+        await dispatchAfterDamage({
+          players: playersRef.current,
+          turnOwner: playersRef.current.find(x => x.id === turnOwnerIdRef.current),
+          draw: (pid: number, n: number) => drawCards(pid, n),
+          discard: (pid: number, cards: Card[]) => discardCards(pid, cards),
+          heal: (pid: number, n: number) => recoverHp(pid, n),
+          damage: async (vid: number, sid: number, amt: number, cd?: Card) => { await takeDamage(vid, sid, amt, cd); },
+          gainCard: (fromId: number, toId: number, cd: Card) => {
+            mutateHand(fromId, h => h.filter(c => c.id !== cd.id));
+            mutateHand(toId, h => [...h, cd]);
+          },
+          log: (t: string) => addLog(t, 'skill'),
+          banner: (h: string, sk: string) => showSkillBanner(h, sk),
+          delay: (ms: number) => delay(ms),
+          skillsOn: (pid: number) => skillsOn(pid),
+        }, ev);
+        await dispatchAfterDealDamage({
+          players: playersRef.current,
+          turnOwner: playersRef.current.find(x => x.id === turnOwnerIdRef.current),
+          draw: (pid: number, n: number) => drawCards(pid, n),
+          discard: (pid: number, cards: Card[]) => discardCards(pid, cards),
+          heal: (pid: number, n: number) => recoverHp(pid, n),
+          damage: async (vid: number, sid: number, amt: number, cd?: Card) => { await takeDamage(vid, sid, amt, cd); },
+          gainCard: (fromId: number, toId: number, cd: Card) => {
+            mutateHand(fromId, h => h.filter(c => c.id !== cd.id));
+            mutateHand(toId, h => [...h, cd]);
+          },
+          log: (t: string) => addLog(t, 'skill'),
+          banner: (h: string, sk: string) => showSkillBanner(h, sk),
+          delay: (ms: number) => delay(ms),
+          skillsOn: (pid: number) => skillsOn(pid),
+        }, ev);
+      }
+    }
     // 关银屏「虎啸」：锁定技，造成伤害后摸一张牌（原版无次数限制）
     if (sourceId >= 0 && sourceId !== victimId && source?.hero.name === '关银屏' && skillsOn(sourceId)) {
       addLog(`${source.hero.name} 发动「虎啸」，摸一张牌`, 'skill');

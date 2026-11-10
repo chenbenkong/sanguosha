@@ -5,6 +5,7 @@
  * 再在这里 import 一行即可。**不需要改 App.tsx / combat.ts。**
  */
 import './batch6';
+import './batch7';
 
 export { skillsOf, skillHook, registeredHeroCount } from './registry';
 export type { SkillDef, SkillHooks, SkillContext, DamageEvent, CardUsedEvent, JudgeEvent } from './registry';
