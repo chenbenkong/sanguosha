@@ -150,6 +150,12 @@ export interface Player {
   caiShiMode?: 'limitOther' | 'limitSelf' | null;
   /** 王元姬「尚俭」本回合失去的牌数（每回合开始清零） */
   lostCardsThisTurn?: number;
+  /** 朱佩兰「辞虑」已消耗的选项数（初始 0，最多 3） */
+  cilvUsed?: number;
+  /** 董绾「生妒」标记数：具有该标记的角色摸牌后，董绾按倍数摸牌 */
+  shengduMarks?: number;
+  /** 董绾「介绫」本回合已使用过的花色（每种花色限一次） */
+  jielingUsedSuits?: Suit[];
   /** 王悦 / 王桃「护关」：本回合被声明不计入手牌上限的花色 */
   huguanSuit?: Suit;
   /** 王元姬「谦冲」本回合选择的无次数/无距离限制牌型 */
