@@ -44,6 +44,11 @@ export interface SkillContext {
     max?: number;
     cancelLabel?: string;
   }) => Promise<{ kind: string; id?: string; ids?: Array<string | number> } | null>;
+  /**
+   * 同一武将的**共享**存储：该武将的所有技能读写同一份。
+   * 用于跨技能状态（如尹夫人「媵予」发动后解锁「拥嬖」的减伤）。
+   */
+  heroMemory: Record<string, unknown>;
   /** 每个技能一份的持久存储（跨回合保留） */
   memory: Record<string, unknown>;
 }
