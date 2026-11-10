@@ -4,7 +4,7 @@ import {
   canHuguan, tianzeDraws, tianzeCanStrike, fangduEffect, jiexingTriggers,
   shengduDrawCount, cilvDrawCount, nifuAdjust, yuanditriggers,
 } from '../skills-batch6';
-import { Suit } from '../../../types';
+import { CardType, Suit } from '../../../types';
 import type { Player } from '../../../types';
 
 /**
@@ -129,6 +129,8 @@ registerSkill({
     afterCardUsed: (ctx: SkillContext, ev: CardUsedEvent) => {
       if (ev.source.id === ctx.self.id) return;
       if (!ev.targets.some(t => t.id === ctx.self.id)) return;
+      // 官方：仅在成为「普通锦囊牌」的目标后触发，基本牌 / 装备牌不触发
+      if (ev.card.type !== CardType.SCROLL) return;
       const remaining = 3 - (ctx.self.cilvUsed ?? 0);
       if (remaining <= 0) return;
       ctx.draw(ctx.self.id, cilvDrawCount(remaining));
