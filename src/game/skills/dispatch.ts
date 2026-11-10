@@ -53,6 +53,14 @@ export interface DispatchDeps {
 
 /** 每个技能一份的跨回合存储（key = hero + skill） */
 const MEMORY = new Map<string, Record<string, unknown>>();
+/** 同一武将的所有技能共享一份存储（用于跨技能状态） */
+const HERO_MEMORY = new Map<string, Record<string, unknown>>();
+const heroMemOf = (hero: string): Record<string, unknown> => {
+  let m = HERO_MEMORY.get(hero);
+  if (!m) { m = {}; HERO_MEMORY.set(hero, m); }
+  return m;
+};
+
 const memOf = (hero: string, skill: string): Record<string, unknown> => {
   const k = `${hero}::${skill}`;
   let m = MEMORY.get(k);
@@ -74,6 +82,7 @@ const ctxFor = (deps: DispatchDeps, self: Player, hero: string, skill: string): 
   banner: () => deps.banner(hero, skill),
   delay: deps.delay,
   memory: memOf(hero, skill),
+  heroMemory: heroMemOf(hero),
   requestChoice: (req) => deps.requestChoice({
     ...req,
     // 弹窗需要知道是哪个技能在问
@@ -153,4 +162,4 @@ export const dispatchDrawBonus = (deps: DispatchDeps, drawerId: number): number 
 };
 
 /** 测试用：清空技能内存 */
-export const __clearSkillMemory = (): void => { MEMORY.clear(); };
+export const __clearSkillMemory = (): void => { MEMORY.clear(); HERO_MEMORY.clear(); };

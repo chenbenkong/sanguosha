@@ -152,6 +152,8 @@ registerSkill({
       const [a, b] = others;
       if (a.hand[0].suit === b.hand[0].suit) return;
       ctx.gainCard(b.id, a.id, b.hand[0]);
+      // 媵予成功发动后解锁「拥嬖」的减伤效果
+      ctx.heroMemory.given = true;
       ctx.log(`【媵予】尹夫人令 ${a.hero.name} 获得 ${b.hero.name} 的一张牌（花色不同）`);
       ctx.banner();
     },
@@ -165,7 +167,7 @@ registerSkill({
     afterDamage: (ctx: SkillContext, ev: DamageEvent) => {
       if (ev.amount <= 1) return;
       if (ev.victim.id !== ctx.self.id) return;
-      if (!ctx.memory.given) return;
+      if (!ctx.heroMemory.given) return;
       ctx.heal(ctx.self.id, 1);
       ctx.log('【拥嬖】尹夫人受到大于 1 点的伤害，减免并回复 1 点体力');
       ctx.banner();
