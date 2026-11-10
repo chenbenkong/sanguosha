@@ -19,6 +19,7 @@ import { PlayerInspectModal } from '../components/game/PlayerInspectModal';
 import { PortraitLightbox } from '../components/PortraitLightbox';
 import { ReactionModal } from '../components/game/ReactionModal';
 import RulesDialog from '../components/RulesDialog';
+import { BattleIntro } from '../components/game/BattleIntro';
 import { SkillChoiceModal } from '../components/game/SkillChoiceModal';
 import { SkillInfoModal } from '../components/game/SkillInfoModal';
 import TutorialOverlay from '../components/TutorialOverlay';
@@ -39,6 +40,8 @@ import type { UiRegion, BgmPref } from '../components/game/GameTopBar';
  * 组件内不新建内联对象，因此不给下层带来额外重渲染。
  */
 export interface BattleScreenProps {
+  battleIntro: { id: number; names: string[]; meIndex: number } | null;
+  onIntroDone: () => void;
   DECISION_SECONDS: 20;
   SKILL_CHOICE_SECONDS: 30;
   activeSelectedId: any;
@@ -693,6 +696,17 @@ export const BattleScreen: React.FC<BattleScreenProps> = (props) => {
       {props.showRules && <RulesDialog onClose={() => props.setShowRules(false)} onStartTutorial={props.startTutorial} />}
 
       {/* 新手引导：高亮真实控件，不改变对局状态 */}
+      {/* 开局入场仪式：亮出本局武将，淡出后交还主循环 */}
+      {props.battleIntro && (
+        <BattleIntro
+          key={props.battleIntro.id}
+          id={props.battleIntro.id}
+          names={props.battleIntro.names}
+          meIndex={props.battleIntro.meIndex}
+          onDone={props.onIntroDone}
+        />
+      )}
+
       {props.tutorialActive && (
         <TutorialOverlay onFinish={props.finishTutorial} onSkip={props.skipTutorial} />
       )}

@@ -4154,3 +4154,122 @@ a:focus-visible {
   border-color: var(--line-soft);
 }
 
+
+/* ===== 开局入场仪式 ===== */
+.battle-intro {
+  position: fixed;
+  inset: 0;
+  z-index: 9000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background:
+    radial-gradient(ellipse at 50% 45%, rgba(212, 175, 55, 0.10) 0%, transparent 60%),
+    #12100d;
+  animation: battleIntroIn 0.35s ease-out both;
+}
+.battle-intro.is-leaving {
+  animation: battleIntroOut 0.4s ease-in both;
+  pointer-events: none;
+}
+@keyframes battleIntroIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes battleIntroOut {
+  from { opacity: 1; }
+  to   { opacity: 0; }
+}
+.battle-intro__inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
+  padding: 32px 48px;
+}
+.battle-intro__rule {
+  width: 220px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(212, 175, 55, 0.75), transparent);
+  animation: introRule 0.7s ease-out both;
+}
+@keyframes introRule {
+  from { transform: scaleX(0); opacity: 0; }
+  to   { transform: scaleX(1); opacity: 1; }
+}
+.battle-intro__title {
+  font-size: 52px;
+  letter-spacing: 0.28em;
+  padding-left: 0.28em;
+  color: #e8cf94;
+  text-shadow: 0 4px 22px rgba(0, 0, 0, 0.65);
+  animation: introTitle 0.8s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@keyframes introTitle {
+  from { opacity: 0; transform: translateY(14px) scale(0.96); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+.battle-intro__sub {
+  font-size: 12px;
+  letter-spacing: 0.42em;
+  padding-left: 0.42em;
+  color: rgba(212, 175, 55, 0.5);
+  text-transform: uppercase;
+}
+.battle-intro__names {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px 22px;
+  max-width: 720px;
+  list-style: none;
+  margin: 4px 0;
+  padding: 0;
+}
+.battle-intro__name {
+  font-family: 'Ma Shan Zheng', 'Kaiti SC', 'STKaiti', serif;
+  font-size: 26px;
+  letter-spacing: 0.12em;
+  color: #cbb894;
+  opacity: 0;
+  animation: introName 0.5s ease-out both;
+}
+.battle-intro__name.is-me {
+  color: #ffd977;
+  text-shadow: 0 0 18px rgba(255, 200, 90, 0.55);
+}
+.battle-intro__name.is-me::after {
+  content: '（你）';
+  font-size: 14px;
+  letter-spacing: 0;
+  color: rgba(255, 217, 119, 0.8);
+  margin-left: 4px;
+}
+@keyframes introName {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* 浅色主题 */
+.theme-light .battle-intro {
+  background:
+    radial-gradient(ellipse at 50% 45%, rgba(201, 168, 108, 0.18) 0%, transparent 60%),
+    #faf8f5;
+}
+.theme-light .battle-intro__title { color: #8b6914; }
+.theme-light .battle-intro__sub { color: rgba(139, 105, 20, 0.55); }
+.theme-light .battle-intro__name { color: #6b5d45; }
+.theme-light .battle-intro__name.is-me { color: #a8720a; text-shadow: 0 0 16px rgba(168, 114, 10, 0.35); }
+
+/* 尊重减少动效偏好 */
+@media (prefers-reduced-motion: reduce) {
+  .battle-intro,
+  .battle-intro.is-leaving,
+  .battle-intro__rule,
+  .battle-intro__title,
+  .battle-intro__name {
+    animation-duration: 0.01ms !important;
+  }
+}
+.battle-intro__name { opacity: 1; }
+

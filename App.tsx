@@ -29,6 +29,7 @@ import './src/game/skills';
 import { dispatchTurnEnd, dispatchJudge, dispatchDrawBonus } from './src/game/skills/dispatch';
 import type { CombatDeps, CombatEngine } from './src/game/combat';
 import { GameApiProvider } from './src/game/GameApiContext';
+import { BattleIntro } from './src/components/game/BattleIntro';
 import type { GameApi } from './src/game/gameApi';
 import { LogPanel, PhasePanel, TurnRail, TurnStrip, ObjectiveStrip, MobilePhaseChip } from './src/components/game/GameHud';
 import { PlayerInspectModal } from './src/components/game/PlayerInspectModal';
@@ -103,6 +104,10 @@ const App: React.FC = () => {
   
   // --- App State ---
   const [screen, setScreen] = useState<'start' | 'select' | 'game' | 'gameover'>('start');
+  // 开局入场仪式：先展示「布局」过场（各将登场），再交还主循环，避免一开战就像中途加入
+  const [battleIntro, setBattleIntro] = useState<null | { id: number; names: string[]; meIndex: number }>(null);
+  const battleIntroRef = useRef<boolean>(false);
+  useEffect(() => { battleIntroRef.current = battleIntro !== null; }, [battleIntro]);
   const [selectedHero, setSelectedHero] = useState<Hero | null>(null);
   const [playerCount, setPlayerCount] = useState<5 | 7>(5); // 游戏人数选择
   
@@ -1749,6 +1754,12 @@ const App: React.FC = () => {
     setLogs(initLogs);
     setPhase(GamePhase.START);
     setScreen('game');
+    // 开局入场仪式：先把本局武将亮出来，主循环在读秒门控解除前不推进
+    setBattleIntro({
+      id: Date.now(),
+      names: newPlayers.map(p => p.hero.name),
+      meIndex: newPlayers.findIndex(p => p.isHuman),
+    });
     gameStartedAtRef.current = Date.now();
     // 出战台词：人类武将登场时播一句（TTS 合成或真实素材，均在本地）
     if (!isMutedRef.current) {
@@ -2364,6 +2375,7 @@ const App: React.FC = () => {
     // 新手引导期间冻结对局：只高亮界面，不让 AI/阶段推进偷偷改变状态
     if (tutorialActive) return;
     if (checkGameOver()) return;
+    if (battleIntroRef.current) return; // 开局入场仪式期间暂停主循环
     if (isProcessing) return; // 如果正在处理异步效果，暂停游戏主循环推进
 
     // 同一「回合 + 阶段」只推进一次：isProcessing 从 1 回到 0 时不再重复触发
@@ -7734,6 +7746,8 @@ const App: React.FC = () => {
   // 渲染次数与搬出前一致——BattleScreen 不是 memo 组件，这些 JSX 原本也是每次渲染重建；
   // 传下去的函数/ref 本身在 App 侧已由 useCallback / useRef 保证稳定引用。
   const battleProps: React.ComponentProps<typeof BattleScreen> = {
+    battleIntro,
+    onIntroDone: () => setBattleIntro(null),
     DECISION_SECONDS,
     SKILL_CHOICE_SECONDS,
     activeSelectedId,
