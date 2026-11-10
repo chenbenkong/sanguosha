@@ -63,7 +63,7 @@ registerSkill({
   hero: '曹轶',
   skill: '蜜饴',
   hooks: {
-    onTurnStart: (ctx: SkillContext, owner) => {
+    onTurnStart: async (ctx: SkillContext, owner) => {
       if (owner.id !== ctx.self.id) return;
       // 准备阶段：己方受伤者回血，否则对敌方造成伤害（自动择优选）
       const allies = ctx.players.filter(p => !p.isDead && p.id !== ctx.self.id && p.hp < p.maxHp);
@@ -74,8 +74,19 @@ registerSkill({
       } else {
         const foes = ctx.players.filter(p => !p.isDead && p.id !== ctx.self.id);
         if (!foes.length) return;
-        ctx.damage(foes[0].id, ctx.self.id, 1);
-        ctx.log(`【蜜饴】曹轶对 ${foes[0].hero.name} 造成 1 点伤害`);
+        const picked = await ctx.requestChoice({
+          title: '蜜饴：选择造成伤害的目标',
+          mode: 'target',
+          targets: foes.map(p => ({ id: p.id, name: p.hero.name, sub: p.hp + " / " + p.maxHp })),
+          min: 1,
+          max: 1,
+          cancelLabel: '不造成伤害',
+        });
+        if (picked && picked.kind === 'cancel') { ctx.banner(); return; }
+        const chosen = picked && picked.kind === 'target' ? foes.find(p => p.id === Number(picked.ids?.[0])) : foes[0];
+        const tgt = chosen || foes[0];
+        ctx.damage(tgt.id, ctx.self.id, 1);
+        ctx.log(`【蜜饴】曹轶对 ${tgt.hero.name} 造成 1 点伤害`);
       }
       ctx.banner();
     },
@@ -124,7 +135,7 @@ registerSkill({
   hero: '杜夫人',
   skill: '顺世',
   hooks: {
-    onTurnStart: (ctx: SkillContext, owner) => {
+    onTurnStart: async (ctx: SkillContext, owner) => {
       if (owner.id !== ctx.self.id) return;
       if (!ctx.self.hand.length) return;
       const others = ctx.players.filter(p => !p.isDead && p.id !== ctx.self.id);
@@ -145,7 +156,7 @@ registerSkill({
   hero: '尹夫人',
   skill: '媵予',
   hooks: {
-    onTurnStart: (ctx: SkillContext, owner) => {
+    onTurnStart: async (ctx: SkillContext, owner) => {
       if (owner.id !== ctx.self.id) return;
       const others = ctx.players.filter(p => !p.isDead && p.id !== ctx.self.id && p.hand.length > 0);
       if (others.length < 2) return;
@@ -180,7 +191,7 @@ registerSkill({
   hero: '卞玥',
   skill: '庇族',
   hooks: {
-    onTurnStart: (ctx: SkillContext, owner) => {
+    onTurnStart: async (ctx: SkillContext, owner) => {
       if (owner.id !== ctx.self.id) return;
       const same = ctx.players.filter(p => !p.isDead && p.id !== ctx.self.id && p.hand.length === ctx.self.hand.length);
       if (!same.length) return;
@@ -227,7 +238,7 @@ registerSkill({
       ctx.log(`【霞泪】薛灵芸红色牌置入弃牌堆，观看牌堆顶并获得 1 张（第 ${n + 1} 次）`);
       ctx.banner();
     },
-    onTurnStart: (ctx: SkillContext, owner) => {
+    onTurnStart: async (ctx: SkillContext, owner) => {
       if (owner.id !== ctx.self.id) return;
       ctx.memory.used = 0;
     },
@@ -257,7 +268,7 @@ registerSkill({
   hero: '莫琼树',
   skill: '宛蝉',
   hooks: {
-    onTurnStart: (ctx: SkillContext, owner) => {
+    onTurnStart: async (ctx: SkillContext, owner) => {
       if (owner.id !== ctx.self.id) return;
       const others = ctx.players.filter(p => !p.isDead && p.id !== ctx.self.id);
       if (!others.length) return;
@@ -294,7 +305,7 @@ registerSkill({
   hero: '夏侯令女',
   skill: '浮萍',
   hooks: {
-    onTurnStart: (ctx: SkillContext, owner) => {
+    onTurnStart: async (ctx: SkillContext, owner) => {
       if (owner.id !== ctx.self.id) return;
       // 记录本局受到过的牌名数量，作为「炜烈」的发动上限
       const n = (ctx.memory.recorded as number) ?? 0;
@@ -310,7 +321,7 @@ registerSkill({
   hero: '夏侯令女',
   skill: '炜烈',
   hooks: {
-    onTurnStart: (ctx: SkillContext, owner) => {
+    onTurnStart: async (ctx: SkillContext, owner) => {
       if (owner.id !== ctx.self.id) return;
       const recorded = (ctx.memory.recorded as number) ?? 0;
       const used = (ctx.memory.weilieUsed as number) ?? 0;
@@ -350,7 +361,7 @@ registerSkill({
   hero: '柳婒',
   skill: '迟行',
   hooks: {
-    onTurnStart: (ctx: SkillContext, owner) => {
+    onTurnStart: async (ctx: SkillContext, owner) => {
       if (owner.id !== ctx.self.id) return;
       // 上阶段弃牌堆中的【杀】数量（简化：按本回合已用牌数）
       const n = (ctx.memory.kills as number) ?? 0;
@@ -368,7 +379,7 @@ registerSkill({
   hero: '李娴',
   skill: '斥怠',
   hooks: {
-    onTurnStart: (ctx: SkillContext, owner) => {
+    onTurnStart: async (ctx: SkillContext, owner) => {
       const used = (ctx.memory.used as number) ?? 0;
       if (used >= 3) return;
       const diff = owner.hand.length - owner.hp;
@@ -424,7 +435,7 @@ registerSkill({
       ctx.log('【诱言】杨婉从牌堆中获得不同花色的牌各一张');
       ctx.banner();
     },
-    onTurnStart: (ctx: SkillContext, owner) => {
+    onTurnStart: async (ctx: SkillContext, owner) => {
       if (owner.id === ctx.self.id) ctx.memory.usedThisTurn = false;
     },
   },
@@ -455,7 +466,7 @@ registerSkill({
   hero: '张瑾云',
   skill: '蕙质',
   hooks: {
-    onTurnStart: (ctx: SkillContext, owner) => {
+    onTurnStart: async (ctx: SkillContext, owner) => {
       if (owner.id !== ctx.self.id) return;
       const maxHand = Math.max(...ctx.players.filter(p => !p.isDead).map(p => p.hand.length));
       const need = Math.max(1, Math.min(5, maxHand - ctx.self.hand.length));
@@ -486,13 +497,23 @@ registerSkill({
   hero: '王笙',
   skill: '遭谮',
   hooks: {
-    onTurnEnd: (ctx: SkillContext, ending) => {
+    onTurnEnd: async (ctx: SkillContext, ending) => {
       if (ending.id === ctx.self.id) return;
       const foes = ctx.players.filter(p => !p.isDead && p.id !== ctx.self.id);
       if (!foes.length || !ctx.self.hand.length) return;
       // 视为对一名角色使用【杀】（简化为直接 1 点伤害）
-      ctx.damage(foes[0].id, ctx.self.id, 1);
-      ctx.log(`【遭谮】王笙视为对 ${foes[0].hero.name} 使用【杀】`);
+      const picked = await ctx.requestChoice({
+        title: '遭谮：选择【杀】的目标',
+        mode: 'target',
+        targets: foes.map(p => ({ id: p.id, name: p.hero.name, sub: p.hp + " / " + p.maxHp })),
+        min: 1,
+        max: 1,
+        cancelLabel: '不发动',
+      });
+      if (picked && picked.kind === 'cancel') return;
+      const tgt = (picked && picked.kind === 'target' ? foes.find(p => p.id === Number(picked.ids?.[0])) : null) || foes[0];
+      ctx.damage(tgt.id, ctx.self.id, 1);
+      ctx.log(`【遭谮】王笙视为对 ${tgt.hero.name} 使用【杀】`);
       ctx.banner();
     },
   },
@@ -530,7 +551,7 @@ registerSkill({
       ctx.log(`【同礼】张嫙令此牌效果额外执行（手牌花色数 ${x}）`);
       ctx.banner();
     },
-    onTurnStart: (ctx: SkillContext, owner) => {
+    onTurnStart: async (ctx: SkillContext, owner) => {
       if (owner.id === ctx.self.id) ctx.memory.usedThisTurn = false;
     },
   },
@@ -556,7 +577,7 @@ registerSkill({
   hero: '曹媛',
   skill: '妩艳',
   hooks: {
-    onTurnStart: (ctx: SkillContext, owner) => {
+    onTurnStart: async (ctx: SkillContext, owner) => {
       if (owner.id !== ctx.self.id) return;
       const males = ctx.players.filter(p => !p.isDead && p.id !== ctx.self.id && p.hero.gender === 'male');
       if (!males.length) return;
@@ -576,7 +597,7 @@ registerSkill({
   hero: '曹媛',
   skill: '占欲',
   hooks: {
-    onTurnStart: (ctx: SkillContext, owner) => {
+    onTurnStart: async (ctx: SkillContext, owner) => {
       if (owner.id !== ctx.self.id) return;
       if (!ctx.self.hand.length) return;
       const suit = ctx.self.hand[0].suit;
@@ -601,7 +622,7 @@ registerSkill({
   hero: '董翓',
   skill: '狡黠',
   hooks: {
-    onTurnStart: (ctx: SkillContext, owner) => {
+    onTurnStart: async (ctx: SkillContext, owner) => {
       if (owner.id !== ctx.self.id) return;
       ctx.memory.allSlash = true;
       ctx.log('【狡黠】董翓本阶段手牌均视为【杀】');
@@ -623,7 +644,7 @@ registerSkill({
       ctx.log(`【狐魅】董翓令 ${t.hero.name} 摸一张牌（本阶段已造成 ${x} 点伤害）`);
       ctx.banner();
     },
-    onTurnStart: (ctx: SkillContext, owner) => {
+    onTurnStart: async (ctx: SkillContext, owner) => {
       if (owner.id === ctx.self.id) ctx.memory.damageTotal = 0;
     },
   },
