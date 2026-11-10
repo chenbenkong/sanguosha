@@ -30,5 +30,7 @@
     // src/game/gameApi.ts 的 setter/回调签名已按真实类型收紧（原先 33 个 SetStateAction<any> + 24 个 any 函数），
     // 因此 noImplicitAny 不再需要关闭；tsc --noEmit --noImplicitAny true 全仓 0 错。
     "strict": true
-  }
+  },
+  // e2e 用 puppeteer 的类型，与应用构建无关，单独用 e2e/tsconfig.json 检查
+  "exclude": ["e2e", "node_modules", "dist"]
 }

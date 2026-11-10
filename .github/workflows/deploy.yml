@@ -40,6 +40,26 @@ jobs:
       - name: Build
         run: npx vite build --base=./
 
+      # 闸门 3：端到端。需要系统 Chrome —— ubuntu-latest 自带的 chrome 可用。
+      # 之所以放在 Build 之后：e2e 需要 dist 产物起 vite preview。
+      - name: Locate Chrome
+        id: chrome
+        run: |
+          if command -v google-chrome >/dev/null 2>&1; then
+            echo "path=$(command -v google-chrome)" >> $GITHUB_OUTPUT
+          elif [ -x "/usr/bin/google-chrome-stable" ]; then
+            echo "path=/usr/bin/google-chrome-stable" >> $GITHUB_OUTPUT
+          else
+            echo "未找到 Chrome，跳过 e2e" 
+            echo "path=" >> $GITHUB_OUTPUT
+          fi
+
+      - name: E2E tests (real browser)
+        if: steps.chrome.outputs.path != ''
+        env:
+          E2E_CHROME: ${{ steps.chrome.outputs.path }}
+        run: npm run test:e2e
+
       # 上传前打印体积摘要，便于在 Actions 日志里追踪体积回归
       - name: Bundle size summary
         run: |
