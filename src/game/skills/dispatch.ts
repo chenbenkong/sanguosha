@@ -11,6 +11,21 @@ import type { Card, Player } from '../../../types';
  * 引擎侧不再关心具体是哪个武将，只负责构造事件、调用 dispatch*。
  */
 
+/** 技能向玩家提问的请求形状（与引擎 SkillChoiceModal 对齐） */
+export type SkillChoiceReq = {
+  title: string;
+  hint?: string;
+  mode: 'choose' | 'multi' | 'card' | 'target';
+  choices?: Array<{ id: string; label: string; desc?: string }>;
+  targets?: Array<{ id: number; name: string; sub?: string }>;
+  min?: number;
+  max?: number;
+  cancelLabel?: string;
+};
+
+/** 技能提问的返回值 */
+export type SkillChoiceRes = { kind: string; id?: string; ids?: Array<string | number> } | null;
+
 export interface DispatchDeps {
   players: Player[];
   turnOwner: Player | undefined;
@@ -23,6 +38,17 @@ export interface DispatchDeps {
   banner: (hero: string, skill: string) => void;
   delay: (ms: number) => Promise<void>;
   skillsOn: (playerId: number) => boolean;
+  /** 向玩家提问；AI/托管返回 null（由引擎既有 SkillChoiceModal 实现） */
+  requestChoice: (req: {
+    title: string;
+    hint?: string;
+    mode: 'choose' | 'multi' | 'card' | 'target';
+    choices?: Array<{ id: string; label: string; desc?: string }>;
+    targets?: Array<{ id: number; name: string; sub?: string }>;
+    min?: number;
+    max?: number;
+    cancelLabel?: string;
+  }) => Promise<{ kind: string; id?: string; ids?: Array<string | number> } | null>;
 }
 
 /** 每个技能一份的跨回合存储（key = hero + skill） */
@@ -48,6 +74,12 @@ const ctxFor = (deps: DispatchDeps, self: Player, hero: string, skill: string): 
   banner: () => deps.banner(hero, skill),
   delay: deps.delay,
   memory: memOf(hero, skill),
+  requestChoice: (req) => deps.requestChoice({
+    ...req,
+    // 弹窗需要知道是哪个技能在问
+    title: req.title,
+    hint: req.hint ?? `${hero} 的「${skill}」`,
+  }),
 });
 
 /** 找出场上的技能拥有者（跳过已死亡 / 技能被封印的） */

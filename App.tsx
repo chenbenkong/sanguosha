@@ -27,6 +27,7 @@ import type { FxLevel } from './src/game/fx';
 import { createCombatEngine } from './src/game/combat';
 import './src/game/skills';
 import { dispatchTurnEnd, dispatchJudge, dispatchDrawBonus } from './src/game/skills/dispatch';
+import type { SkillChoiceReq } from './src/game/skills/dispatch';
 import type { CombatDeps, CombatEngine } from './src/game/combat';
 import { GameApiProvider } from './src/game/GameApiContext';
 import { BattleIntro } from './src/components/game/BattleIntro';
@@ -3002,6 +3003,18 @@ const App: React.FC = () => {
           banner: (h: string, sk: string) => showSkillBanner(h, sk),
           delay: (ms: number) => delay(ms),
           skillsOn: (pid: number) => skillsOn(pid),
+          requestChoice: (req: SkillChoiceReq) => requestSkillChoice({
+            skill: req.title,
+            owner: '技能',
+            title: req.title,
+            hint: req.hint,
+            mode: req.mode,
+            choices: req.choices,
+            targets: req.targets,
+            min: req.min,
+            max: req.max,
+            cancelLabel: req.cancelLabel,
+          }, !isAiTakeoverRef.current),
         }, currentPlayer.id);
         drawCount += regDrawBonus;
         if (fumianExtra > 0) {
@@ -3971,6 +3984,18 @@ const App: React.FC = () => {
             banner: (h: string, sk: string) => showSkillBanner(h, sk),
             delay: (ms: number) => delay(ms),
             skillsOn: (pid: number) => skillsOn(pid),
+            requestChoice: (req: SkillChoiceReq) => requestSkillChoice({
+              skill: req.title,
+              owner: '技能',
+              title: req.title,
+              hint: req.hint,
+              mode: req.mode,
+              choices: req.choices,
+              targets: req.targets,
+              min: req.min,
+              max: req.max,
+              cancelLabel: req.cancelLabel,
+            }, !isAiTakeoverRef.current),
           }, endingPlayer);
         }
         if (endingPlayer && !endingPlayer.isDead && endingPlayer.hero.name === '张春华') {
@@ -6390,6 +6415,18 @@ const App: React.FC = () => {
         banner: (h: string, sk: string) => showSkillBanner(h, sk),
         delay: (ms: number) => delay(ms),
         skillsOn: (pid: number) => skillsOn(pid),
+        requestChoice: (req: SkillChoiceReq) => requestSkillChoice({
+          skill: req.title,
+          owner: '技能',
+          title: req.title,
+          hint: req.hint,
+          mode: req.mode,
+          choices: req.choices,
+          targets: req.targets,
+          min: req.min,
+          max: req.max,
+          cancelLabel: req.cancelLabel,
+        }, !isAiTakeoverRef.current),
       };
       const judgeOwner = playersRef.current.find(x => x.id === playerId);
       if (judgeOwner) {

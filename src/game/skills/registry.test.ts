@@ -31,6 +31,7 @@ const mkDeps = (players: Player[], over: Partial<DispatchDeps> = {}): DispatchDe
   banner: () => {},
   delay: async () => {},
   skillsOn: () => true,
+  requestChoice: async () => null,
   ...over,
 });
 

@@ -18,12 +18,34 @@ registerSkill({
   hero: '郭照',
   skill: '尊位',
   hooks: {
-    onTurnEnd: (ctx: SkillContext, ending) => {
+    onTurnEnd: async (ctx: SkillContext, ending) => {
       if (ending.id !== ctx.self.id) return;
       if (ctx.memory.usedThisTurn) { delete ctx.memory.usedThisTurn; return; }
       const others = ctx.players.filter(p => !p.isDead && p.id !== ctx.self.id);
       if (!others.length) return;
       // 选择手牌最多的角色追平手牌
+      const picked = await ctx.requestChoice({
+        title: '尊位：选择一项追平',
+        hint: '每个选项限用一次',
+        mode: 'choose',
+        choices: [
+          { id: 'hand', label: '追平手牌', desc: '摸至与手牌最多者相同（至多 5 张）' },
+          { id: 'hp', label: '追平体力', desc: '回复至与体力最高者相同' },
+        ],
+        cancelLabel: '不发动',
+      });
+      const pick = picked && picked.kind === 'choose' ? picked.id : 'hand';
+      if (pick === 'hp') {
+        const healthiest = [...others].sort((a, b) => b.hp - a.hp)[0];
+        const heal = Math.max(0, healthiest.hp - ctx.self.hp);
+        if (heal > 0) {
+          ctx.heal(ctx.self.id, heal);
+          ctx.memory.usedThisTurn = true;
+          ctx.log("【尊位】郭照将体力追平 " + healthiest.hero.name);
+          ctx.banner();
+        }
+        return;
+      }
       const richest = [...others].sort((a, b) => b.hand.length - a.hand.length)[0];
       const need = richest.hand.length - ctx.self.hand.length;
       if (need > 0) {

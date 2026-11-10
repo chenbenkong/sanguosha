@@ -52,13 +52,25 @@ registerSkill({
   hero: '侯昭宁',
   skill: '和戎',
   hooks: {
-    onTurnEnd: (ctx: SkillContext, ending) => {
+    onTurnEnd: async (ctx: SkillContext, ending) => {
       // 在自己的回合结束时结算本回合是否发动过（简化：AI 自动发动最有价值的分支）
       if (ending.id !== ctx.self.id) return;
       if (ctx.memory.usedThisTurn) { delete ctx.memory.usedThisTurn; return; }
       const others = ctx.players.filter(p => !p.isDead && p.id !== ctx.self.id && p.hand.length > 0);
       if (!others.length || ctx.self.hand.length === 0) return;
-      const target = others[0];
+      // 人类玩家自行选择交换对象；AI / 托管（返回 null）走默认目标
+      const picked = await ctx.requestChoice({
+        title: '和戎：选择一名角色交换手牌',
+        hint: '类型相同则减免下次伤害；不同类型则弃其两张并造成 1 点伤害',
+        mode: 'target',
+        targets: others.map(p => ({ id: p.id, name: p.hero.name, sub: p.hand.length + " 张手牌" })),
+        min: 1,
+        max: 1,
+        cancelLabel: '不发动',
+      });
+      if (picked && picked.kind === 'cancel') return;
+      const chosenId = picked && picked.kind === 'target' ? Number(picked.ids?.[0]) : null;
+      const target = (chosenId != null && others.find(p => p.id === chosenId)) || others[0];
       const theirs = target.hand[0];
       const mine = ctx.self.hand[0];
       const sameType = theirs.type === mine.type;

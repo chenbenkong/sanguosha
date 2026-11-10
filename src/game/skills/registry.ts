@@ -29,6 +29,21 @@ export interface SkillContext {
   log: (text: string) => void;
   banner: () => void;
   delay: (ms: number) => Promise<void>;
+  /**
+   * 向玩家提问（选择目标 / 选牌 / 选项）。
+   * AI 与托管场景返回 null，技能应据此走自动决策分支。
+   * 复用引擎既有的 SkillChoiceModal（含读秒与超时兜底）。
+   */
+  requestChoice: (req: {
+    title: string;
+    hint?: string;
+    mode: 'choose' | 'multi' | 'card' | 'target';
+    choices?: Array<{ id: string; label: string; desc?: string }>;
+    targets?: Array<{ id: number; name: string; sub?: string }>;
+    min?: number;
+    max?: number;
+    cancelLabel?: string;
+  }) => Promise<{ kind: string; id?: string; ids?: Array<string | number> } | null>;
   /** 每个技能一份的持久存储（跨回合保留） */
   memory: Record<string, unknown>;
 }

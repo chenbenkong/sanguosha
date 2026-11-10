@@ -120,6 +120,8 @@ export interface CombatDeps {
   updatePlayerWith: (id: number, fn: (p: Player) => Partial<Player>) => void;
   xiaohuiLocked: (playerId: number, cardId: string) => boolean;
   yuejianCountRef: React.RefObject<number>;
+  /** 向玩家提问（技能注册表用；AI/托管返回 null） */
+  requestChoice: (req: import('./skills/dispatch').SkillChoiceReq) => Promise<import('./skills/dispatch').SkillChoiceRes>;
   yuejianPendingRef: React.RefObject<Map<string, number>>;
   zhixiRef: React.RefObject<{ id: number; limit: number; used: number; trickUsed: boolean; } | null>;
   zhuquePrefRef: React.RefObject<Record<number, "normal" | "fire">>;
@@ -2727,6 +2729,7 @@ export const createCombatEngine = (deps: CombatDeps): CombatEngine => {
           banner: (h: string, sk: string) => showSkillBanner(h, sk),
           delay: (ms: number) => delay(ms),
           skillsOn: (pid: number) => skillsOn(pid),
+          requestChoice: deps.requestChoice,
         }, ev);
         await dispatchAfterDealDamage({
           players: playersRef.current,
@@ -2743,6 +2746,7 @@ export const createCombatEngine = (deps: CombatDeps): CombatEngine => {
           banner: (h: string, sk: string) => showSkillBanner(h, sk),
           delay: (ms: number) => delay(ms),
           skillsOn: (pid: number) => skillsOn(pid),
+          requestChoice: deps.requestChoice,
         }, ev);
       }
     }
