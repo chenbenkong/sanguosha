@@ -141,9 +141,20 @@ registerSkill({
       const others = ctx.players.filter(p => !p.isDead && p.id !== ctx.self.id);
       if (!others.length) return;
       const give = ctx.self.hand[0];
-      ctx.gainCard(ctx.self.id, others[0].id, give);
+      const picked = await ctx.requestChoice({
+        title: '顺世：选择交给谁一张牌',
+        hint: '交出后本回合摸牌+1、手牌上限+1',
+        mode: 'target',
+        targets: others.map(p => ({ id: p.id, name: p.hero.name, sub: p.hand.length + ' 张手牌' })),
+        min: 1,
+        max: 1,
+        cancelLabel: '不发动',
+      });
+      if (picked && picked.kind === 'cancel') return;
+      const recv = (picked && picked.kind === 'target' ? others.find(p => p.id === Number(picked.ids?.[0])) : null) || others[0];
+      ctx.gainCard(ctx.self.id, recv.id, give);
       ctx.memory.buff = true;
-      ctx.log(`【顺世】杜夫人交给 ${others[0].hero.name} 一张牌，本回合摸牌 +1、手牌上限 +1`);
+      ctx.log(`【顺世】杜夫人交给 ${recv.hero.name} 一张牌，本回合摸牌 +1、手牌上限 +1`);
       ctx.banner();
     },
     drawPhaseBonus: (ctx: SkillContext) => (ctx.memory.buff ? 1 : 0),
@@ -205,12 +216,21 @@ registerSkill({
   hero: '卞玥',
   skill: '无胁',
   hooks: {
-    onTurnEnd: (ctx: SkillContext, ending) => {
+    onTurnEnd: async (ctx: SkillContext, ending) => {
       if (ending.id !== ctx.self.id) return;
       const others = ctx.players.filter(p => !p.isDead && p.id !== ctx.self.id);
       if (!others.length) return;
       // 交换手牌后，把手里的伤害牌置入牌堆底（简化为弃置）
-      const t = others[0];
+      const picked = await ctx.requestChoice({
+        title: '无胁：选择交换手牌的角色',
+        mode: 'target',
+        targets: others.map(p => ({ id: p.id, name: p.hero.name, sub: p.hand.length + ' 张手牌' })),
+        min: 1,
+        max: 1,
+        cancelLabel: '不交换',
+      });
+      if (picked && picked.kind === 'cancel') return;
+      const t = (picked && picked.kind === 'target' ? others.find(p => p.id === Number(picked.ids?.[0])) : null) || others[0];
       const mine = [...ctx.self.hand];
       const theirs = [...t.hand];
       for (const c of theirs) ctx.gainCard(t.id, ctx.self.id, c);
@@ -248,7 +268,7 @@ registerSkill({
   hero: '薛灵芸',
   skill: '暗织',
   hooks: {
-    afterJudge: (ctx: SkillContext, ev: JudgeEvent) => {
+    afterJudge: async (ctx: SkillContext, ev: JudgeEvent) => {
       if (ev.owner.id !== ctx.self.id) return;
       if (BLACK(ev.card.suit)) {
         ctx.memory.used = 0;
@@ -272,7 +292,16 @@ registerSkill({
       if (owner.id !== ctx.self.id) return;
       const others = ctx.players.filter(p => !p.isDead && p.id !== ctx.self.id);
       if (!others.length) return;
-      const t = others[0];
+      const picked = await ctx.requestChoice({
+        title: '宛蝉：选择令谁摸牌',
+        mode: 'target',
+        targets: others.map(p => ({ id: p.id, name: p.hero.name, sub: p.hp + ' / ' + p.maxHp })),
+        min: 1,
+        max: 1,
+        cancelLabel: '不发动',
+      });
+      if (picked && picked.kind === 'cancel') return;
+      const t = (picked && picked.kind === 'target' ? others.find(p => p.id === Number(picked.ids?.[0])) : null) || others[0];
       ctx.draw(t.id, Math.min(3, 1));
       ctx.log(`【宛蝉】莫琼树令 ${t.hero.name} 摸 1 张牌并可使用一张基本牌/锦囊`);
       ctx.banner();
@@ -283,7 +312,7 @@ registerSkill({
   hero: '莫琼树',
   skill: '绛脂',
   hooks: {
-    afterJudge: (ctx: SkillContext, ev: JudgeEvent) => {
+    afterJudge: async (ctx: SkillContext, ev: JudgeEvent) => {
       if (ev.owner.id !== ctx.self.id) return;
       if (RED(ev.card.suit)) {
         ctx.draw(ctx.self.id, 3);
@@ -291,7 +320,16 @@ registerSkill({
       } else {
         const foes = ctx.players.filter(p => !p.isDead && p.id !== ctx.self.id && p.hand.length > 0);
         if (!foes.length) return;
-        const t = foes[0];
+        const picked = await ctx.requestChoice({
+          title: '绛脂：选择弃置谁的两张牌',
+          mode: 'target',
+          targets: foes.map(p => ({ id: p.id, name: p.hero.name, sub: p.hand.length + ' 张手牌' })),
+          min: 1,
+          max: 1,
+          cancelLabel: '不弃置',
+        });
+        if (picked && picked.kind === 'cancel') return;
+        const t = (picked && picked.kind === 'target' ? foes.find(p => p.id === Number(picked.ids?.[0])) : null) || foes[0];
         ctx.discard(t.id, t.hand.slice(0, 2));
         ctx.log(`【绛脂】莫琼树判定为黑色，弃置 ${t.hero.name} 两张牌`);
       }
@@ -427,7 +465,7 @@ registerSkill({
   hero: '杨婉',
   skill: '诱言',
   hooks: {
-    onTurnEnd: (ctx: SkillContext, ending) => {
+    onTurnEnd: async (ctx: SkillContext, ending) => {
       if (ending.id !== ctx.self.id) return;
       if (ctx.memory.usedThisTurn) return;
       ctx.memory.usedThisTurn = true;
@@ -444,7 +482,7 @@ registerSkill({
   hero: '杨婉',
   skill: '追还',
   hooks: {
-    onTurnEnd: (ctx: SkillContext, ending) => {
+    onTurnEnd: async (ctx: SkillContext, ending) => {
       if (ending.id !== ctx.self.id) return;
       const others = ctx.players.filter(p => !p.isDead && p.id !== ctx.self.id);
       if (!others.length) return;
@@ -481,7 +519,7 @@ registerSkill({
   hero: '张瑾云',
   skill: '继椒',
   hooks: {
-    onTurnEnd: (ctx: SkillContext, ending) => {
+    onTurnEnd: async (ctx: SkillContext, ending) => {
       if (ending.id !== ctx.self.id) return;
       if (ctx.memory.used) return;
       ctx.memory.used = true;
