@@ -2070,7 +2070,15 @@ const App: React.FC = () => {
     setShowSkillModal(false);
 
     // 4. 还原牌桌
-    setPlayers(s.players);
+    // 读档时按 name 回查 HEROES，用最新的武将定义覆盖存档里的快照。
+    // 原因：存档把整个 hero 对象序列化了；后续版本给武将补了技能/改了描述/调了体力时，
+    // 旧存档里的 hero 会停留在旧数据，而技能注册表是按 hero.name 匹配的，
+    // 一旦定义漂移就会出现「技能明明注册了却不触发」这类难查的问题。
+    const refreshedPlayers = s.players.map(p => {
+      const latest = HEROES.find(h => h.name === p.hero?.name);
+      return latest ? { ...p, hero: latest } : p;
+    });
+    setPlayers(refreshedPlayers);
     playersRef.current = s.players;
     setDeck(s.deck);
     deckRef.current = s.deck;
