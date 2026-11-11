@@ -43,7 +43,23 @@ export const openApp = async (baseUrl: string, opts: OpenAppOptions = {}): Promi
   const errors: string[] = [];
   page.on('pageerror', (e: unknown) => {
     const msg = e instanceof Error ? e.message : String(e);
-    errors.push('pageerror: ' + msg.slice(0, 160));
+    // 附带出错当下的画面/阶段：React #185（无限更新）只在 CI 偶发，
+    // 没有这层上下文就无法判断是哪一屏在循环。
+    void page.evaluate(() => {
+      const w = window as unknown as { __sgDbg?: Record<string, unknown> };
+      const d = w.__sgDbg;
+      return {
+        screen: d?.screen ?? null,
+        phase: d?.phase ?? null,
+        turn: d?.turnIndex ?? null,
+        ui: d?.ui ?? null,
+        body: (document.body.innerText || '').slice(0, 120),
+      };
+    }).then((ctx) => {
+      errors.push('pageerror: ' + msg.slice(0, 160) + ' | ctx=' + JSON.stringify(ctx));
+    }).catch(() => {
+      errors.push('pageerror: ' + msg.slice(0, 160));
+    });
   });
   page.on('console', (m) => {
     if (m.type() === 'error') errors.push('console: ' + m.text().slice(0, 160));
