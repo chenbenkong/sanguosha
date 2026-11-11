@@ -3056,7 +3056,8 @@ const App: React.FC = () => {
         // 周瑜「英姿」：摸牌阶段额外摸一张
         const fumianExtra = currentPlayer.hero.name === '吴苋' && currentPlayer.fumianChoice === 1 && skillsOn(currentPlayer.id)
           ? (currentPlayer.fumianValue1 ?? 1) : 0;
-        let drawCount = (currentPlayer.hero.name === '周瑜' ? 3 : 2) + fumianExtra;
+        // 基础摸牌数：周瑜「英姿」已迁移到注册表（drawPhaseBonus +1），此处只给基础 2 张
+        let drawCount = 2 + fumianExtra;
         // 技能注册表：摸牌阶段的额外摸牌（新技能只需注册 drawPhaseBonus）
         const regDrawBonus = dispatchDrawBonus({
           players: playersRef.current,

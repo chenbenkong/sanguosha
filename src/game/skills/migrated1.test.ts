@@ -113,4 +113,14 @@ describe('周瑜「英姿」', () => {
     const { dispatchDrawBonus } = await import('./dispatch');
     expect(dispatchDrawBonus(deps, 1)).toBe(0);
   });
+
+  it('英姿只应加成 1 张（防止基础摸牌数与注册表重复相加）', async () => {
+    // 回归：迁移英姿时 App.tsx 保留了 (周瑜 ? 3 : 2) 的三元表达式，
+    // 又与 drawPhaseBonus 的 +1 叠加，导致周瑜摸 4 张。这里把「英姿的增量」钉死为 1。
+    const zy = P('周瑜', 0);
+    const other = P('甲', 1);
+    const { deps } = makeHarness([zy, other]);
+    const { dispatchDrawBonus } = await import('./dispatch');
+    expect(dispatchDrawBonus(deps, 0)).toBe(1);
+  });
 });
