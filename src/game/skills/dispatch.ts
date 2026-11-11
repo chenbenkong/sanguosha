@@ -200,5 +200,33 @@ export const dispatchDrawBonus = (deps: DispatchDeps, drawerId: number): number 
   return total;
 };
 
+/** 手牌上限增量（累加）：杜夫人「顺世」等 */
+export const dispatchHandLimitBonus = (deps: DispatchDeps, ownerId: number): number => {
+  let total = 0;
+  for (const { def, fn } of skillHook('handLimitBonus')) {
+    for (const self of ownersOf(deps, def.hero)) {
+      if (self.id !== ownerId) continue;
+      total += fn(ctxFor(deps, self, def.hero, def.skill));
+    }
+  }
+  return total;
+};
+
+/** 不计入手牌上限的牌数：王悦/王桃「护关」的花色豁免等 */
+export const dispatchExemptHandCards = (
+  deps: DispatchDeps,
+  ownerId: number,
+  declaredSuit: import('../../../types').Suit | null,
+): number => {
+  let total = 0;
+  for (const { def, fn } of skillHook('exemptHandCards')) {
+    for (const self of ownersOf(deps, def.hero)) {
+      if (self.id !== ownerId) continue;
+      total += fn(ctxFor(deps, self, def.hero, def.skill), declaredSuit);
+    }
+  }
+  return total;
+};
+
 /** 测试用：清空技能内存 */
 export const __clearSkillMemory = (): void => { MEMORY.clear(); HERO_MEMORY.clear(); };

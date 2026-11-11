@@ -27,7 +27,7 @@ import { FX_LABEL, FX_ORDER, FX_TAG } from './src/game/fx';
 import type { FxLevel } from './src/game/fx';
 import { createCombatEngine } from './src/game/combat';
 import './src/game/skills';
-import { dispatchTurnEnd, dispatchTurnStart, dispatchJudge, dispatchDrawBonus } from './src/game/skills/dispatch';
+import { dispatchTurnEnd, dispatchTurnStart, dispatchJudge, dispatchDrawBonus, dispatchHandLimitBonus, dispatchExemptHandCards } from './src/game/skills/dispatch';
 import type { SkillChoiceReq } from './src/game/skills/dispatch';
 import type { CombatDeps, CombatEngine } from './src/game/combat';
 import { GameApiProvider } from './src/game/GameApiContext';
@@ -879,13 +879,52 @@ const App: React.FC = () => {
 
   // 诸葛果「羽化」：非基本牌不计入手牌上限；董白「黠慧」：黑色牌不计入手牌上限
   // 手牌上限/弃牌数的规则计算统一在 src/game/rules.ts，这里只保留 DEV 探针上报
+  // 技能分发依赖的统一入口。此前每个 dispatch 调用点都手写一遍同样的 deps
+  // 组装（draw/discard/heal/damage/gainCard/log/banner/delay/skillsOn/requestChoice），
+  // 既重复又容易出现某处漏传字段。这里收成一份。
+  const buildSkillDeps = () => ({
+    players: playersRef.current,
+    turnOwner: playersRef.current.find(p => p.id === turnOwnerIdRef.current),
+    draw: (pid: number, c: number) => drawCardsRef.current!(pid, c),
+    discard: (pid: number, cards: Card[]) => discardCards(pid, cards),
+    heal: (pid: number, c: number) => recoverHp(pid, c),
+    damage: async (vid: number, sid: number, amt: number, cd?: Card) => {
+      if (combatEngine) await combatEngine.takeDamage(vid, sid, amt, cd);
+    },
+    gainCard: (fromId: number, toId: number, cd: Card) => {
+      mutateHand(fromId, h => h.filter(c => c.id !== cd.id));
+      mutateHand(toId, h => [...h, cd]);
+    },
+    log: (t: string) => addLog(t, 'skill'),
+    banner: (h: string, sk: string) => showSkillBanner(h, sk),
+    delay: (ms: number) => delay(ms),
+    skillsOn: (pid: number) => skillsOn(pid),
+    requestChoice: (req: SkillChoiceReq) => requestSkillChoice({
+      skill: req.title,
+      owner: '技能',
+      title: req.title,
+      hint: req.hint,
+      mode: req.mode,
+      choices: req.choices,
+      targets: req.targets,
+      min: req.min,
+      max: req.max,
+      cancelLabel: req.cancelLabel,
+    }, !isAiTakeoverRef.current),
+  });
+
   const excessCards = (p: Player) => {
-    const nb = countExemptHandCards(p);
-    if (nb > 0 && DEV_BUILD) {
+    // 基础豁免（硬编码技能）+ 注册表技能提供的手牌上限加成 / 花色豁免
+    const baseExempt = countExemptHandCards(p);
+    const skillDeps = buildSkillDeps();
+    const regBonus = dispatchHandLimitBonus(skillDeps, p.id);
+    const regExempt = dispatchExemptHandCards(skillDeps, p.id, p.huguanSuit ?? null);
+    if (baseExempt > 0 && DEV_BUILD) {
       const w = window as unknown as { __r4yuhua?: Record<string, unknown> };
-      w.__r4yuhua = { ...(w.__r4yuhua || {}), hero: p.hero.name, hand: p.hand.length, hp: p.hp, nonBasic: nb, sample: p.hand.map(c => c.type) };
+      w.__r4yuhua = { ...(w.__r4yuhua || {}), hero: p.hero.name, hand: p.hand.length, hp: p.hp, nonBasic: baseExempt, sample: p.hand.map(c => c.type) };
     }
-    return computeDiscardExcess(p);
+    // 注册表提供的加成直接抵扣弃牌需求
+    return Math.max(0, computeDiscardExcess(p) - regBonus - regExempt);
   };
   // 供 mutateHand 的延时回调使用，避免在 drawCards 声明前引用它
   const drawCardsRef = useRef<((playerId: number, count: number) => Card[]) | null>(null);
