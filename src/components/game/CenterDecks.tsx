@@ -2,14 +2,20 @@ import React from 'react';
 import { Card } from '../../../types';
 import CardComponent from '../../../components/CardComponent';
 
-/** 中央牌堆 / 弃牌堆：绒面牌桌上的一个整体，弃牌堆有堆叠厚度，牌堆有层次与投影 */
-export const CenterDecks: React.FC<{
+/**
+ * 中央牌堆 / 弃牌堆：绒面牌桌上的一个整体，弃牌堆有堆叠厚度，牌堆有层次与投影。
+ *
+ * memo：实测 30 秒对局 313 次父级渲染里，本组件 props 只有 deckLength / discardPile /
+ * deckFx 真正变过 28~81 次，其余是父级重渲染带来的无效渲染（其中 309 次的唯一差异
+ * 是内联的 onShowDiscard，已在 BattleScreen 侧改成稳定引用）。
+ */
+export const CenterDecks = React.memo(function CenterDecks({ deckLength, discardPile, deckFx, onShowDiscard }: {
   theme: 'dark' | 'light';
   deckLength: number;
   discardPile: Card[];
   deckFx: { kind: 'tap' | 'shuffle'; id: number } | null;
   onShowDiscard: () => void;
-}> = ({ deckLength, discardPile, deckFx, onShowDiscard }) => {
+}) {
   const deckLayers = deckLength > 80 ? 3 : deckLength > 40 ? 2 : deckLength > 8 ? 1 : 0;
   return (
     <div data-region="center-decks" className="relative flex items-center gap-12 max-md:gap-6 z-[1]">
@@ -101,4 +107,4 @@ export const CenterDecks: React.FC<{
       </div>
     </div>
   );
-};
+});

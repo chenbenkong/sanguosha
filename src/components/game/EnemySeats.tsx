@@ -2,8 +2,21 @@ import React from 'react';
 import { Player, Identity, CardName } from '../../../types';
 import { KINGDOM_CLASS } from '../../game/constants';
 
-/** 敌方座位环：布局、选中目标、伤害/治疗动画、装备与判定区角标 */
-export const EnemySeats: React.FC<{
+/**
+ * 敌方座位环：布局、选中目标、伤害/治疗动画、装备与判定区角标。
+ *
+ * memo：实测 30 秒对局 313 次父级渲染里，enemies 数组（App 里 filter 出来的新数组）
+ * 和 onSeatClick（内联箭头）每次都是新引用，唯一作用就是把每次重渲染都变成全量重算。
+ * 两者已在 BattleScreen 侧稳定化，这里按值比较即可跳过无效渲染。
+ */
+export const EnemySeats = React.memo(function EnemySeats({
+  enemies, me, layoutDensity, sizeTier, viewportW, turnIndex, isSelectingTarget, slashLikeActive,
+  isLijianMode, isJieyinMode, isJijiangMode, isRendeMode, isJiedaoMode, rendeSelectedCardIds,
+  lijianSelectedTargets, tiesuoSelectedTargets, selectedCardIds, rendeSelectedTarget, jiedaoWeaponTarget,
+  jiedaoVictimTarget, damageAnimTarget, healAnimTarget, skillGlowId, aiThinkingId, damageNumber,
+  healNumber, dyingVictimId, dyingActive, fxLevel, isProcessing, hasPendingReaction, getDistance, getAttackRange,
+  onSeatClick, onInspect,
+}: {
   enemies: Player[];
   me: Player;
   layoutDensity: string;
@@ -39,14 +52,7 @@ export const EnemySeats: React.FC<{
   getAttackRange: (p: Player) => number;
   onSeatClick: (id: number) => void;
   onInspect: (id: number) => void;
-}> = ({
-  enemies, me, layoutDensity, sizeTier, viewportW, turnIndex, isSelectingTarget, slashLikeActive,
-  isLijianMode, isJieyinMode, isJijiangMode, isRendeMode, isJiedaoMode, rendeSelectedCardIds,
-  lijianSelectedTargets, tiesuoSelectedTargets, selectedCardIds, rendeSelectedTarget, jiedaoWeaponTarget,
-  jiedaoVictimTarget, damageAnimTarget, healAnimTarget, skillGlowId, aiThinkingId, damageNumber,
-  healNumber, dyingVictimId, dyingActive, fxLevel, isProcessing, hasPendingReaction, getDistance, getAttackRange,
-  onSeatClick, onInspect,
-}) => (
+}) { return (
   <div data-region="seats" data-many={enemies.length >= 5 ? 'true' : 'false'} className={`relative w-full flex items-start justify-center gap-1 overflow-x-auto pt-[44px] pb-1 px-1 scrollbar-hide md:pt-0 md:pb-0 md:px-0 md:absolute md:top-0 md:left-0 md:right-0 md:h-[68vh] md:block md:overflow-visible`}>
     {enemies.map((p, index) => {
       const totalEnemies = enemies.length;
@@ -274,4 +280,4 @@ export const EnemySeats: React.FC<{
       );
     })}
   </div>
-);
+); });

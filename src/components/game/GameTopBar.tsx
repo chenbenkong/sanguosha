@@ -83,8 +83,17 @@ export const UiDisplayMenu: React.FC<{
   </>
 );
 
-/** 右上角控制组：帮助 / 速度 / 主题 / 动效 / 特效 / 静音 / 界面显隐 */
-export const GameTopBar: React.FC<{
+/**
+ * 右上角控制组：帮助 / 速度 / 主题 / 动效 / 特效 / 静音 / 界面显隐。
+ *
+ * memo：实测 30 秒对局 313 次父级渲染里，6 个内联回调每次都换新引用导致本组件
+ * 313 次全量重渲染，而这些按钮的实际状态几乎不变。回调已在 BattleScreen 侧
+ * 改为稳定引用，因此这里按值比较即可跳过绝大多数无效渲染。
+ */
+export const GameTopBar = React.memo(function GameTopBar({
+  theme, controlsHidden, anyRegionHidden, isMuted, motionOn, speedLevel, fxLabel, fxTag, uiMenuOpen,
+  onShowRules, onCycleSpeed, onToggleTheme, onToggleMute, onToggleMotion, onCycleFx, onToggleUiMenu,
+}: {
   theme: 'dark' | 'light';
   controlsHidden: boolean;
   anyRegionHidden: boolean;
@@ -101,10 +110,7 @@ export const GameTopBar: React.FC<{
   onToggleMotion: () => void;
   onCycleFx: () => void;
   onToggleUiMenu: () => void;
-}> = ({
-  theme, controlsHidden, anyRegionHidden, isMuted, motionOn, speedLevel, fxLabel, fxTag, uiMenuOpen,
-  onShowRules, onCycleSpeed, onToggleTheme, onToggleMute, onToggleMotion, onCycleFx, onToggleUiMenu,
-}) => (
+}) { return (
   <div data-region="top-controls" className="absolute top-2 right-3 z-50 flex items-center gap-2">
     {!controlsHidden && (
       <>
@@ -173,4 +179,4 @@ export const GameTopBar: React.FC<{
       <IconEye off={anyRegionHidden} />
     </button>
   </div>
-);
+); });

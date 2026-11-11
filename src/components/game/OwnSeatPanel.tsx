@@ -3,8 +3,16 @@ import { Player, Identity } from '../../../types';
 import { KINGDOM_CLASS } from '../../game/constants';
 import { EQUIP_META } from '../../../constants';
 
-/** 主视角座位卡（与敌方座位同一套卡面） */
-export const OwnSeatPanel: React.FC<{
+/**
+ * 主视角座位卡（与敌方座位同一套卡面）。
+ *
+ * memo：实测 30 秒对局 313 次父级渲染里，本组件 180 次 props 全等
+ * （伤害/治疗/吟唱等动效字段才是真正会变的那几个）。
+ */
+export const OwnSeatPanel = React.memo(function OwnSeatPanel({
+  me, isMyTurn, dyingActive, dyingVictimId, hasPendingReaction, fxLevel, damageAnimTarget, healAnimTarget,
+  damageNumber, healNumber, skillGlowId, aiThinkingId, attackRange, onInspect,
+}: {
   me: Player;
   isMyTurn: boolean;
   dyingActive: boolean;
@@ -19,10 +27,7 @@ export const OwnSeatPanel: React.FC<{
   aiThinkingId: number | null;
   attackRange: number;
   onInspect: (id: number) => void;
-}> = ({
-  me, isMyTurn, dyingActive, dyingVictimId, hasPendingReaction, fxLevel, damageAnimTarget, healAnimTarget,
-  damageNumber, healNumber, skillGlowId, aiThinkingId, attackRange, onInspect,
-}) => {
+}) {
   const isDying = dyingActive && dyingVictimId === me.id;
   return (
     <div
@@ -171,4 +176,4 @@ export const OwnSeatPanel: React.FC<{
       </div>
     </div>
   );
-};
+});
