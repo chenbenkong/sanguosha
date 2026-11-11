@@ -2,6 +2,8 @@ import type {
   SkillContext, DamageEvent, CardUsedEvent, JudgeEvent,
 } from './registry';
 import { skillHook } from './registry';
+import { mergeJudgeBefore, mergeDamageBefore } from './engineAbilities.ts';
+import type { JudgeBeforeEvent, DamageBeforeEvent, JudgeBeforeResult, DamageBeforeResult } from './engineAbilities.ts';
 import type { Card, Player } from '../../../types';
 
 /**
@@ -227,6 +229,35 @@ export const dispatchExemptHandCards = (
   }
   return total;
 };
+
+
+/** 判定前：收集所有技能的修正并合并。引擎用返回值替换判定牌 / 改写花色 */
+export const dispatchJudgeBefore = async (
+  deps: DispatchDeps,
+  ev: JudgeBeforeEvent,
+): Promise<JudgeBeforeResult> => await withGuard(`jb-${ev.owner.id}-${ev.reason}`, async () => {
+  const results: Array<JudgeBeforeResult | null | void> = [];
+  for (const { def, fn } of skillHook('judgeBefore')) {
+    for (const self of ownersOf(deps, def.hero)) {
+      results.push(await fn(ctxFor(deps, self, def.hero, def.skill), ev));
+    }
+  }
+  return mergeJudgeBefore(results);
+}) || {};
+
+/** 伤害前：收集所有技能的修正并合并。引擎用返回值调整数值 / 防止 / 转移 */
+export const dispatchDamageBefore = async (
+  deps: DispatchDeps,
+  ev: DamageBeforeEvent,
+): Promise<DamageBeforeResult> => await withGuard(`db-${ev.victim.id}-${ev.source?.id ?? -1}`, async () => {
+  const results: Array<DamageBeforeResult | null | void> = [];
+  for (const { def, fn } of skillHook('damageBefore')) {
+    for (const self of ownersOf(deps, def.hero)) {
+      results.push(await fn(ctxFor(deps, self, def.hero, def.skill), ev));
+    }
+  }
+  return mergeDamageBefore(results);
+}) || {};
 
 /** 测试用：清空技能内存 */
 export const __clearSkillMemory = (): void => { MEMORY.clear(); HERO_MEMORY.clear(); };

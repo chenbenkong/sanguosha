@@ -1,4 +1,5 @@
 import type { Card, Player } from '../../../types.ts';
+import type { JudgeBeforeEvent, JudgeBeforeResult, DamageBeforeEvent, DamageBeforeResult } from './engineAbilities.ts';
 import type { CardName, Suit } from '../../../types.ts';
 
 /**
@@ -99,6 +100,10 @@ export interface SkillHooks {
   afterJudge?: (ctx: SkillContext, ev: JudgeEvent) => Promise<void> | void;
   /** 弃牌阶段前的互斥修正：返回手牌上限的增量 */
   handLimitBonus?: (ctx: SkillContext) => number;
+  /** 判定牌翻出后、生效前：可替换判定牌或改写花色（刚烈/洛神/红颜/鬼才） */
+  judgeBefore?: (ctx: SkillContext, ev: JudgeBeforeEvent) => JudgeBeforeResult | null | void | Promise<JudgeBeforeResult | null | void>;
+  /** 伤害结算前：可改数值、防止、转移（绝情/骄矜/竭缘/天香/藤甲） */
+  damageBefore?: (ctx: SkillContext, ev: DamageBeforeEvent) => DamageBeforeResult | null | void | Promise<DamageBeforeResult | null | void>;
   /** 不占手牌上限的牌数 */
   exemptHandCards?: (ctx: SkillContext, declaredSuit: Suit | null) => number;
 }

@@ -1,7 +1,7 @@
 import React from 'react';
 import type { Card, EquipmentSlot, Player } from '../../types';
 import { canHuguan, tianzeCanStrike, cilvDrawCount, fangduEffect, yuanditriggers } from './skills-batch6';
-import { dispatchAfterDamage, dispatchAfterDealDamage, dispatchCardUsed } from './skills/dispatch';
+import { dispatchAfterDamage, dispatchAfterDealDamage, dispatchCardUsed, dispatchDamageBefore } from './skills/dispatch';
 import { CardName, CardType, GamePhase, Identity, Suit } from '../../types';
 import { EQUIP_META } from '../../constants';
 import { setDeck, setDiscardPile } from './gameStore';
@@ -2274,14 +2274,7 @@ export const createCombatEngine = (deps: CombatDeps): CombatEngine => {
     const natureLabel = dmgNature === 'fire' ? '火焰' : dmgNature === 'thunder' ? '雷电' : '';
     const source = getPlayer(sourceId);
 
-    // 孙茹「释衅」：锁定技，不会受到火焰伤害（含传导/闪电外的火属性伤害）
-    const sunru = getPlayer(victimId);
-    if (sunru && sunru.hero.name === '孙茹' && skillsOn(victimId) && dmgNature === 'fire') {
-      addLog(`${sunru.hero.name} 的「释衅」发动，免疫火焰伤害`, 'skill');
-      showSkillBanner('孙茹', '释衅');
-      await delay(350);
-      return;
-    }
+    // 孙茹「释衅」已迁移到 src/game/skills/migrated_abilities.ts（damageBefore）
     // 青釭剑：使用【杀】时无视目标防具
     const ignoreArmor = damageCard?.name === CardName.SHA
       && source?.equipment?.weapon?.name === CardName.QINGGANG;
@@ -2374,6 +2367,54 @@ export const createCombatEngine = (deps: CombatDeps): CombatEngine => {
         if (!saved) await handleDeath(victimId, sourceId);
       }
       return;
+    }
+
+    // 技能注册表：伤害结算前（绝情/骄矜/竭缘/天香 等可改数值、防止、转移）
+    {
+      const victimPre = getPlayer(victimId);
+      const srcPre = sourceId >= 0 ? getPlayer(sourceId) : undefined;
+      if (victimPre) {
+        const pre = await dispatchDamageBefore({
+          players: playersRef.current,
+          turnOwner: playersRef.current.find(p => p.id === turnOwnerIdRef.current),
+          draw: (pid: number, c: number) => drawCards(pid, c),
+          discard: (pid: number, cards: Card[]) => discardCards(pid, cards),
+          heal: (pid: number, c: number) => recoverHp(pid, c),
+          damage: async (vid: number, sid: number, amt: number, cd?: Card) => { await takeDamage(vid, sid, amt, cd); },
+          gainCard: (fromId: number, toId: number, cd: Card) => {
+            mutateHand(fromId, h => h.filter(c => c.id !== cd.id));
+            mutateHand(toId, h => [...h, cd]);
+          },
+          log: (t: string) => addLog(t, 'skill'),
+          banner: (h: string, sk: string) => showSkillBanner(h, sk),
+          delay: (ms: number) => delay(ms),
+          skillsOn: (pid: number) => skillsOn(pid),
+          requestChoice: deps.requestChoice,
+        }, {
+          victim: victimPre,
+          source: srcPre,
+          amount: finalAmount,
+          nature: (dmgNature === 'fire' || dmgNature === 'thunder' ? dmgNature : 'normal') as 'normal' | 'fire' | 'thunder',
+          card: damageCard,
+        });
+        if (pre.note) addLog(pre.note, 'skill');
+        if (pre.prevent) {
+          addLog(`${victimPre.hero.name} 的伤害被技能阻止`, 'skill');
+          return;
+        }
+        if (typeof pre.amount === 'number') {
+          if (pre.amount <= 0) return;
+          finalAmount = pre.amount;
+        }
+        if (pre.transferTo != null) {
+          const tgt = getPlayer(pre.transferTo);
+          if (tgt && !tgt.isDead && tgt.id !== victimId) {
+            addLog(`伤害转移给 ${tgt.hero.name}`, 'skill');
+            await takeDamage(tgt.id, sourceId, finalAmount, damageCard, dmgNature === 'normal' ? undefined : dmgNature);
+            return;
+          }
+        }
+      }
     }
 
     // 防具：藤甲受火焰伤害+1；白银狮子把大于1的伤害压到1
