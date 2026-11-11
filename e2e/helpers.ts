@@ -36,7 +36,10 @@ export const openApp = async (baseUrl: string): Promise<E2EContext> => {
   const page = await browser.newPage();
   await page.setViewport({ width: 1440, height: 900, deviceScaleFactor: 1 });
   const errors: string[] = [];
-  page.on('pageerror', (e: Error) => errors.push('pageerror: ' + e.message.slice(0, 160)));
+  page.on('pageerror', (e: unknown) => {
+    const msg = e instanceof Error ? e.message : String(e);
+    errors.push('pageerror: ' + msg.slice(0, 160));
+  });
   page.on('console', (m) => {
     if (m.type() === 'error') errors.push('console: ' + m.text().slice(0, 160));
   });
