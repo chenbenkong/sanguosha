@@ -12,6 +12,7 @@ import { GameSave, SAVE_VERSION, readSave, writeSave, clearSave, consumeSaveReje
 import { shuffle, rankValue, wuguKeepPriority } from './src/game/utils';
 import { useGameState, setPlayers, setDeck, setDiscardPile, setTurnIndex, setPhase, setWinnerSide } from './src/game/gameStore';
 import { countExemptHandCards, computeDiscardExcess, evaluateWinnerSide, nextAliveTurnIndex, seatDistance, suddenDeathDamage, targetProtection, canPlaySlashByRules } from './src/game/rules';
+import { convertSourceFor } from './src/game/convertRules';
 import { jiexingTriggers, countHuguanExempt, tianzeDraws, shengduDrawCount, nifuAdjust } from './src/game/skills-batch6';
 import { isAlly as isAllyImpl, isEnemy as isEnemyImpl } from './src/game/ai/relations';
 import { isSkillSealed as isSkillSealedImpl, skillsOn as skillsOnImpl } from './src/game/ai/skillGate';
@@ -1075,6 +1076,7 @@ const App: React.FC = () => {
     !p.isDead && (p.grantedSkills ?? []).includes(skillName) && skillsOn(p.id);
 
   // 关羽「武圣」/ 许身授予的「武圣」：红色牌可当【杀】
+  // 转化规则统一在 src/game/convertRules.ts（可单测），这里只判断是否具备武圣
   const canUseWusheng = (p: Player) => p.hero.name === '关羽' || hasGrantedSkill(p, '武圣');
 
   const grantSkill = (id: number, skillName: string, sourceSkill: string, durationTurns?: number) => {
@@ -4786,10 +4788,9 @@ const App: React.FC = () => {
         const isUsingNormalCard = card.name === neededCard;
         const isUsingSkillCard = canUseSkill && card.name === skillCardName;
         // 关羽的「武圣」技能：红色牌可以当杀使用
-        const isUsingWusheng = canUseWusheng(me) && [Suit.HEART, Suit.DIAMOND].includes(card.suit) && neededCard === CardName.SHA;
-        // 甄姬的「倾国」技能：黑色手牌可以当【闪】使用
-        const isUsingQingguo = me.hero.name === '甄姬' && neededCard === CardName.SHAN &&
-          (card.suit === Suit.SPADE || card.suit === Suit.CLUB);
+        const isUsingWusheng = convertSourceFor(me, card, neededCard, hasGrantedSkill(me, '武圣') ? ['武圣'] : []) === '武圣';
+        // 甄姬「倾国」：黑色手牌当【闪】—— 判定统一走 convertRules
+        const isUsingQingguo = convertSourceFor(me, card, neededCard) === '倾国';
 
         if (isUsingNormalCard || isUsingSkillCard || isUsingWusheng || isUsingQingguo) {
           // User plays the correct card or uses skill
