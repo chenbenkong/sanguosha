@@ -8,6 +8,7 @@ import './batch6';
 import './batch7';
 import './batch8';
 import './migrated1';
+import './migrated_wa';
 
 export { skillsOf, skillHook, registeredHeroCount } from './registry';
 export type { SkillDef, SkillHooks, SkillContext, DamageEvent, CardUsedEvent, JudgeEvent } from './registry';

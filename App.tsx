@@ -2678,16 +2678,7 @@ const App: React.FC = () => {
           }
         }
 
-        // 王异「秘计」：回合开始时若已受伤，摸等同于已损失体力的牌
-        if (currentPlayer.hero.name === '王异') {
-          const lostHp = currentPlayer.maxHp - currentPlayer.hp;
-          if (lostHp > 0) {
-            addLog(`${currentPlayer.hero.name} 发动「秘计」，已损失 ${lostHp} 点体力，摸 ${lostHp} 张牌`, 'skill');
-            showSkillBanner(currentPlayer.hero.name, '秘计');
-            drawCards(currentPlayer.id, lostHp);
-            await delay(600);
-          }
-        }
+        // 王异「秘计」已迁移到 src/game/skills/migrated2.ts（onTurnStart）
 
         // 诸葛亮「观星」：观看牌堆顶3张，把最好的两张留在顶，其余置底
         if (currentPlayer.hero.name === '诸葛亮') {
@@ -2827,19 +2818,7 @@ const App: React.FC = () => {
           }
         }
 
-        // 甘夫人「神智」：准备阶段弃置所有手牌，弃置数不小于体力值则回复1点
-        if (currentPlayer.hero.name === '甘夫人' && skillsOn(currentPlayer.id)
-            && currentPlayer.hand.length >= currentPlayer.hp && currentPlayer.hp < currentPlayer.maxHp
-            && currentPlayer.hand.length > 0) {
-          const discarded = [...currentPlayer.hand];
-          discardCards(currentPlayer.id, discarded);
-          addLog(`甘夫人发动「神智」，弃置 ${discarded.length} 张手牌`, 'skill');
-          showSkillBanner('甘夫人', '神智');
-          await delay(400);
-          const healed = recoverHp(currentPlayer.id, 1);
-          if (healed > 0) addLog(`甘夫人回复 1 点体力（${getPlayer(currentPlayer.id)?.hp}/${currentPlayer.maxHp}）`, 'success');
-          await delay(400);
-        }
+        // 甘夫人「神智」已迁移到 src/game/skills/migrated2.ts（onTurnStart）
 
         // 孙茹「影箭」：准备阶段，视为使用一张无距离限制的【杀】
         if (currentPlayer.hero.name === '孙茹' && skillsOn(currentPlayer.id)) {
@@ -4252,19 +4231,7 @@ const App: React.FC = () => {
           }
         }
 
-        // 夏侯氏「樵拾」：其他角色的结束阶段，若其手牌数等于夏侯氏的手牌数，令其摸一张牌，然后夏侯氏摸一张牌
-        {
-          const xiahou = playersRef.current.find(p => !p.isDead && p.id !== turnIndex
-            && p.hero.name === '夏侯氏' && skillsOn(p.id));
-          const ender = getPlayer(turnIndex);
-          if (xiahou && ender && !ender.isDead && ender.hand.length === xiahou.hand.length) {
-            addLog(`【樵拾】${ender.hero.name} 与夏侯氏手牌数同为 ${ender.hand.length}，令其摸一张牌，夏侯氏摸一张牌`, 'skill');
-            showSkillBanner('夏侯氏', '樵拾');
-            drawCards(ender.id, 1);
-            drawCards(xiahou.id, 1);
-            await delay(300);
-          }
-        }
+        // 夏侯氏「樵拾」已迁移到 src/game/skills/migrated2.ts（onTurnEnd）
 
         // 蔡夫人「窃听」：其他角色的回合结束时，若其没有用牌指定过其他角色，可取其一张装备或摸一张牌
         {
@@ -4305,28 +4272,7 @@ const App: React.FC = () => {
           }
         }
 
-        // 曹节「惠民」（原版）：结束阶段摸 X 张牌（X 为手牌数小于体力值的角色数），
-        // 然后依次把手牌交给这些角色各一张（自动从手牌最少者开始）
-        if (endingPlayer && !endingPlayer.isDead && endingPlayer.hero.name === '曹节') {
-          const needy = playersRef.current.filter(p => !p.isDead && p.hand.length < p.hp);
-          const x = needy.length;
-          if (x > 0) {
-            addLog(`${endingPlayer.hero.name} 发动「惠民」，摸 ${x} 张牌并分给 ${needy.map(p => p.hero.name).join('、')}`, 'skill');
-            showSkillBanner(endingPlayer.hero.name, '惠民');
-            drawCards(endingPlayer.id, x);
-            await delay(300);
-            const recipients = needy.slice().sort((a, b) => a.hand.length - b.hand.length);
-            for (const r of recipients) {
-              const me = playersRef.current.find(p => p.id === endingPlayer.id);
-              if (!me || me.hand.length === 0 || r.isDead) break;
-              const gift = me.hand[Math.floor(Math.random() * me.hand.length)];
-              mutateHand(me.id, h => h.filter(c => c.id !== gift.id));
-              mutateHand(r.id, h => [...h, gift]);
-              addLog(`${me.hero.name} 将【${gift.name}】交给 ${r.hero.name}`, 'skill');
-              await delay(250);
-            }
-          }
-        }
+        // 曹节「惠民」已迁移到 src/game/skills/migrated2.ts（onTurnEnd）
 
         // 何太后「戚乱」：结束阶段，本回合每杀死一名其他角色，摸三张牌
         const hetaiDuan = playersRef.current.find(p => !p.isDead && p.hero.name === '何太后' && skillsOn(p.id));
