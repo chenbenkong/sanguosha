@@ -115,7 +115,13 @@ describe('端到端：结算前钩子', () => {
       // 引擎走到 prevent 分支并提前返回，没有落到扣血那一段
       expect(afterFire.logs.some(l => l.includes('孙茹 的伤害被技能阻止'))).toBe(true);
       expect(afterFire.logs.some(l => l.includes('孙茹 受到 2 点火焰伤害'))).toBe(false);
-      expect(afterFire.hp).toBe(before.hp);
+      // 血量断言不能用「完全相等」：托管 + 3 倍速下 AI 回合与这段轮询并行，
+      // 孙茹完全可能被别的来源（如某次【杀】）扣 1 点，那样严格相等就会误红
+      // —— 实测在 CI 上偶发过一次 hp 3→2 的红。
+      // 这里要证的是「那 2 点火焰伤害没落地」，所以用差值判别：
+      // 火焰伤害正好 2，漏了会掉 ≥2；只有其它来源的 1 点则 <2。
+      // 加上面那条「没有受到 2 点火焰伤害」的日志断言，两层各自独立。
+      expect(before.hp - afterFire.hp).toBeLessThan(2);
 
       // ── 结算锁：上一批扩展真正翻车的地方 ──
       // 泄漏时 setIsProcessing 停在 1，主循环 effect 直接 return，整局冻结在

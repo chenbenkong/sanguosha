@@ -2241,8 +2241,10 @@ a:focus-visible {
   background: linear-gradient(180deg, rgba(8, 6, 4, 0) 0%, rgba(8, 6, 4, 0.82) 32%, rgba(8, 6, 4, 0.96) 100%);
 }
 
-/* 卡面模式：牌面按 2:3 完整显示，上下留白用深木色衬底，
-   名字条只压在牌面下缘，不遮住技能文本。 */
+/* 卡面模式：牌面按 2:3 完整显示，上下留白用深木色衬底。
+   名字条会压住牌面下缘约两成的技能印刷区——缩略尺寸下这些字本就
+   不可读（420w 源图文字带仅 6px，缩到 166px 宽约 2.3px/行），
+   真要看技能文本走悬停浮层（HeroSkillPreview）或详情页。 */
 .hero-pick.is-fullcard {
   background: radial-gradient(ellipse at 50% 35%, #2a2018 0%, #140f0a 78%);
 }
@@ -4421,17 +4423,20 @@ a:focus-visible {
   color: #f4e4bf;
   background: rgba(12, 9, 6, 0.96);
   border-top: 1px solid rgba(200, 164, 92, 0.45);
+
 }
 .hero-skill-toggle:active { background: rgba(200, 164, 92, 0.3); }
 @media (max-width: 767px) {
   /* 底部 44px 是「技能」按钮的专属条带，脚注与名字条都要让开，否则被压住 */
   .hero-pick-foot { padding-bottom: calc(44px + 0.25rem); }
   /* 名字条整条上移到条带之上，而不是靠内边距把自己撑高——
-     撑高会把它推进牌面印刷技能文本的区域，两行字叠在一起糊掉。 */
-  .hero-pick-namebar { bottom: 44px; }
+     撑高会把它推进牌面印刷技能文本的区域，两行字叠在一起糊掉。
+     再下沉到按钮底下（-6px 的重叠）：按钮 z-index:3 且不透明，看不见，
+     却能把「名字条底边 → 按钮顶边」那道几像素的缝彻底消掉。 */
+  .hero-pick-namebar { bottom: 38px; }
 }
 /* 触屏设备上即使宽度 ≥768 也保留入口：hover 在触屏不可用 */
 @media (hover: none) {
   .hero-skill-toggle { display: flex !important; align-items: center; justify-content: center; }
-  .hero-pick-namebar { bottom: 44px; }
+  .hero-pick-namebar { bottom: 38px; }
 }

@@ -152,11 +152,15 @@ describe('端到端 · 玩家真实流程', () => {
       const started = await bootGame(ctx, { takeover: true, speed: 3 });
       expect(started).toBe(true);
 
-      // 时长预算：3 倍速 + 托管下实测整局 53s / 62s / 98s（五次采样），
-      // 波动来自 AI 之间的技能结算与回合数，不是卡死。原先按 90s 卡会偶发超时，
-      // 所以给到 120s（覆盖最慢一次 + 22% 余量），外层 testTimeout 150s 兜底，
-      // 保证既不会挂死、也不会因为运气差而误红。
-      const deadline = Date.now() + 120000;
+      // 时长预算：整局在 3 倍速 + 托管下的实测墙钟分布很宽
+      // （53s / 62s / 98s / 101s / 115s / 121s / 129s / 209s）。
+      // 波动来源不是卡死，而是 AI 之间的技能结算与回合数——尤其【粮尽】这类
+      // 「所有角色失去体力」的技能会把对局拖长。209s 那次已在 CI 与本地各复现
+      // 一次，用得还是 3 倍速（speed 只到 3，无法再快）。
+      // 所以按观测上界给 300s，外层用例超时 360s 兜底。
+      // 放宽不会让真卡死等更久：退出条件是「结算界面出现」，不是固定睡眠，
+      // 而卡死另有看门狗（App.tsx 的 stall watchdog）负责收尾。
+      const deadline = Date.now() + 300000;
       let over = { over: false, winner: null as string | null };
       while (Date.now() < deadline) {
         over = await isGameOver(ctx.page);
@@ -164,7 +168,7 @@ describe('端到端 · 玩家真实流程', () => {
         // 兜底推进：万一托管没接管到某个决策（例如弹窗先于托管出现），
         // 这里把弹窗点掉并结束回合，避免干等 20 秒读秒。
         await nudgeTurn(ctx.page);
-        await sleep(1200);
+        await sleep(1500);
       }
 
       expect(over.over).toBe(true);
@@ -181,7 +185,7 @@ describe('端到端 · 玩家真实流程', () => {
       expect(exits.home).toBe(true);
 
       expect(ctx.errors).toEqual([]);
-    }, 150000);
+    }, 360000);
   });
 
   describe('弃牌阶段', () => {
