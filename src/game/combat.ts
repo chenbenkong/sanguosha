@@ -588,12 +588,7 @@ export const createCombatEngine = (deps: CombatDeps): CombatEngine => {
         addLog(`${source.hero.name} 使用了【${card.name}】`, 'chat');
     }
 
-    // 黄月英「集智」：使用锦囊牌时摸一张（诸葛果的「祈禳」改为装备触发，见 equipCard）
-    if (card.type === CardType.SCROLL && source.hero.name === '黄月英') {
-      addLog(`${source.hero.name} 发动「集智」，摸一张牌`, 'skill');
-      showSkillBanner(source.hero.name, '集智');
-      drawCards(source.id, 1);
-    }
+    // 黄月英「集智」已迁移到 src/game/skills/migrated1.ts（afterCardUsed）
 
     // SHA（基本牌，不可被无懈可击响应）
     if (card.name === CardName.SHA) {
@@ -2773,12 +2768,7 @@ export const createCombatEngine = (deps: CombatDeps): CombatEngine => {
         }, ev);
       }
     }
-    // 关银屏「虎啸」：锁定技，造成伤害后摸一张牌（原版无次数限制）
-    if (sourceId >= 0 && sourceId !== victimId && source?.hero.name === '关银屏' && skillsOn(sourceId)) {
-      addLog(`${source.hero.name} 发动「虎啸」，摸一张牌`, 'skill');
-      showSkillBanner(source.hero.name, '虎啸');
-      drawCards(sourceId, 1);
-    }
+    // 关银屏「虎啸」已迁移到 src/game/skills/migrated1.ts（afterDealDamage）
 
     // 唐姬「抗歌」②：守护对象进入濒死时，唐姬可令其将体力回复至 1 点（每轮限一次）
     {
@@ -2838,23 +2828,7 @@ export const createCombatEngine = (deps: CombatDeps): CombatEngine => {
       }
     }
 
-    // 郭嘉「遗计」：受到伤害后摸两张牌
-    if (victim.hero.name === '郭嘉' && skillsOn(victimId)) {
-      drawCards(victimId, 2);
-      addLog(`${victim.hero.name} 发动「遗计」，摸两张牌`, 'skill');
-      showSkillBanner(victim.hero.name, '遗计');
-    }
-    // 司马懿「反馈」：受到伤害后获得伤害来源一张手牌
-    if (victim.hero.name === '司马懿' && sourceId !== victimId && skillsOn(victimId)) {
-      const attacker = getPlayer(sourceId);
-      if (attacker && attacker.hand.length > 0) {
-        const gained = attacker.hand[Math.floor(Math.random() * attacker.hand.length)];
-        mutateHand(sourceId, hand => hand.filter(c => c.id !== gained.id));
-        mutateHand(victimId, hand => [...hand, gained]);
-        addLog(`${victim.hero.name} 发动「反馈」，获得 ${attacker.hero.name} 的【${gained.name}】`, 'skill');
-        showSkillBanner(victim.hero.name, '反馈');
-      }
-    }
+    // 郭嘉「遗计」/ 司马懿「反馈」已迁移到 src/game/skills/migrated1.ts（afterDamage）
 
     // 蔡文姬「悲歌」/ 祝融「烈刃」：伤害后触发
     await triggerBeige(victimId, sourceId, damageCard);
