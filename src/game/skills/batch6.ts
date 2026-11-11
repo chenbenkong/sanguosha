@@ -205,12 +205,25 @@ registerSkill({
   hero: '唐姬',
   skill: '抗歌',
   hooks: {
-    onTurnEnd: (ctx: SkillContext, ending: Player) => {
+    onTurnEnd: async (ctx: SkillContext, ending: Player) => {
       if (ending.id !== ctx.self.id) return;
       if (ctx.self.kanggeTargetId != null) return;
       const others = ctx.players.filter(p => !p.isDead && p.id !== ctx.self.id);
       if (!others.length) return;
-      const chosen = [...others].sort((a, b) => b.hp - a.hp)[0];
+      // 人类玩家自行选择守护对象；AI / 托管（返回 null）按血量最高自动挑
+      const picked = await ctx.requestChoice({
+        title: '抗歌：选择守护对象',
+        hint: '该角色回合外得牌你跟着摸、濒死时可令其回至 1 点、其死亡你弃光手牌',
+        mode: 'target',
+        targets: others.map(p => ({ id: p.id, name: p.hero.name, sub: p.hp + ' / ' + p.maxHp })),
+        min: 1,
+        max: 1,
+        cancelLabel: '暂不选择',
+      });
+      if (picked && picked.kind === 'cancel') return;
+      const chosenId = picked && picked.kind === 'target' ? Number(picked.ids?.[0]) : null;
+      const chosen = (chosenId != null && others.find(p => p.id === chosenId))
+        || [...others].sort((a, b) => b.hp - a.hp)[0];
       ctx.self.kanggeTargetId = chosen.id;
       ctx.log(`【抗歌】唐姬选择 ${chosen.hero.name} 作为守护对象`);
       ctx.banner();
