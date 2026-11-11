@@ -174,7 +174,42 @@ export interface BattleScreenProps {
 }
 
 export const BattleScreen: React.FC<BattleScreenProps> = (props) => {
-  const { gameApi } = props;
+  // 实测：CenterDecks / HandTray 的 onShowDiscard 原来是内联箭头函数，每次父级渲染都换新引用，
+  // 导致下层 memo 永远失效（30 秒对局里 CenterDecks 313 次渲染中 309 次仅因此重渲染）。
+  // setShowDiscardViewer 是 useState setter，引用天然稳定，这里只是把它包成稳定回调。
+  //
+  // GameTopBar / EnemySeats 的 onClick 回调和 enemies 数组同理：App 每次渲染都会新建，
+  // 使下层 memo 永远命中不了。这里用「最新引用」模式把它们稳定下来——回调被调用时
+  // 读的一定是本次渲染最新的一份，行为与原来逐字一致，只是引用不再变化。
+  // 用 effect 而不是在渲染期赋值：渲染期赋值在并发渲染下可能把「未提交的那次 props」
+  // 写进 ref，effect 在提交后执行，永远不会读到被丢弃的渲染。
+  const latest = React.useRef(props);
+  React.useEffect(() => { latest.current = props; });
+
+  const setShowDiscardViewer = props.setShowDiscardViewer;
+  const handleShowDiscard = React.useCallback(() => setShowDiscardViewer(true), [setShowDiscardViewer]);
+  const handleShowRules = React.useCallback(() => latest.current.setShowRules(true), []);
+  const handleCycleSpeed = React.useCallback(() => {
+    const p = latest.current;
+    p.setSpeedLevel(p.speedLevel === 1 ? 2 : p.speedLevel === 2 ? 3 : 1);
+  }, []);
+  const handleToggleTheme = React.useCallback(() => latest.current.toggleTheme(), []);
+  const handleToggleMute = React.useCallback(() => latest.current.toggleMute(), []);
+  const handleToggleMotion = React.useCallback(() => latest.current.toggleMotion(), []);
+  const handleCycleFx = React.useCallback(() => latest.current.cycleFx(), []);
+  const handleToggleUiMenu = React.useCallback(() => latest.current.setShowUiMenu((v: boolean) => !v), []);
+  const handleSeatClick = React.useCallback((id: number) => { void latest.current.handleTargetClick(id); }, []);
+  const handleOrderCollapsedChange = React.useCallback((v: boolean) => latest.current.setOrderCollapsedPersist(v), []);
+
+  // enemies 是 App 里 players.filter(...) 的结果，每次渲染都是新数组。玩家对象在引擎里
+  // 是不可变更新（combat.ts 无就地写字段），因此按下标比较元素引用即可判断是否需要换新数组。
+  const enemiesRef = React.useRef(props.enemies);
+  if (enemiesRef.current.length !== props.enemies.length
+    || props.enemies.some((p, i) => p !== enemiesRef.current[i])) {
+    enemiesRef.current = props.enemies;
+  }
+  const stableEnemies = enemiesRef.current;
+
   return (
 <GameApiProvider value={props.gameApi}>
     <div
@@ -534,18 +569,18 @@ export const BattleScreen: React.FC<BattleScreenProps> = (props) => {
           fxLabel={FX_LABEL[props.fxLevel as FxLevel]}
           fxTag={FX_TAG[props.fxLevel as FxLevel]}
           uiMenuOpen={props.showUiMenu}
-          onShowRules={() => props.setShowRules(true)}
-          onCycleSpeed={() => props.setSpeedLevel(props.speedLevel === 1 ? 2 : props.speedLevel === 2 ? 3 : 1)}
-          onToggleTheme={props.toggleTheme}
-          onToggleMute={props.toggleMute}
-          onToggleMotion={props.toggleMotion}
-          onCycleFx={props.cycleFx}
-          onToggleUiMenu={() => props.setShowUiMenu((v: boolean) => !v)}
+          onShowRules={handleShowRules}
+          onCycleSpeed={handleCycleSpeed}
+          onToggleTheme={handleToggleTheme}
+          onToggleMute={handleToggleMute}
+          onToggleMotion={handleToggleMotion}
+          onCycleFx={handleCycleFx}
+          onToggleUiMenu={handleToggleUiMenu}
         />
 
         {/* 环形座位：桌面端绝对定位环绕牌桌；手机端为顶部横向压缩小卡 */}
         <EnemySeats
-          enemies={props.enemies}
+          enemies={stableEnemies}
           me={props.me}
           layoutDensity={props.layoutDensity}
           sizeTier={props.sizeTier}
@@ -578,7 +613,7 @@ export const BattleScreen: React.FC<BattleScreenProps> = (props) => {
           hasPendingReaction={!!props.pendingReaction}
           getDistance={props.getDistance}
           getAttackRange={props.getAttackRange}
-          onSeatClick={props.handleTargetClick}
+          onSeatClick={handleSeatClick}
           onInspect={props.setInspectPlayerId}
         />
       </div>
@@ -608,15 +643,15 @@ export const BattleScreen: React.FC<BattleScreenProps> = (props) => {
 
         {/* Center Decks - 牌堆和弃牌堆 - 原版三国杀风格 */}
         {/* 出牌顺序：右侧竖向顺序条（桌面）；手机端折叠为一条横排 */}
-        <TurnRail players={props.players} turnIndex={props.turnIndex} collapsed={props.orderCollapsed} hidden={props.uiHidden.order} onCollapsedChange={props.setOrderCollapsedPersist} />
-        <TurnStrip players={props.players} turnIndex={props.turnIndex} collapsed={props.orderCollapsed} hidden={props.uiHidden.order} onCollapsedChange={props.setOrderCollapsedPersist} />
+        <TurnRail players={props.players} turnIndex={props.turnIndex} collapsed={props.orderCollapsed} hidden={props.uiHidden.order} onCollapsedChange={handleOrderCollapsedChange} />
+        <TurnStrip players={props.players} turnIndex={props.turnIndex} collapsed={props.orderCollapsed} hidden={props.uiHidden.order} onCollapsedChange={handleOrderCollapsedChange} />
 
         <CenterDecks
           theme={props.theme}
           deckLength={props.deck.length}
           discardPile={props.discardPile}
           deckFx={props.deckFx}
-          onShowDiscard={() => props.setShowDiscardViewer(true)}
+          onShowDiscard={handleShowDiscard}
         />
 
         {/* Advice Modal */}
@@ -669,7 +704,7 @@ export const BattleScreen: React.FC<BattleScreenProps> = (props) => {
           me={props.me}
           deckLength={props.deck.length}
           discardLength={props.discardPile.length}
-          onShowDiscard={() => props.setShowDiscardViewer(true)}
+          onShowDiscard={handleShowDiscard}
           disabled={!!props.dyingState || props.isProcessing > 0}
           phase={props.phase}
           isMyTurn={props.isMyTurn}

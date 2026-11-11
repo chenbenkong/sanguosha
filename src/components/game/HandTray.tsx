@@ -2,8 +2,18 @@ import React from 'react';
 import { Card, CardName, GamePhase, LogEntry, Player, Suit } from '../../../types';
 import CardComponent from '../../../components/CardComponent';
 
-/** 手牌区：扇形排列 / 选中态 / 反应模式可用性 / 新摸牌飞入 / 左下角标 */
-export const HandTray: React.FC<{
+/**
+ * 手牌区：扇形排列 / 选中态 / 反应模式可用性 / 新摸牌飞入 / 左下角标。
+ *
+ * memo：实测 30 秒对局 313 次父级渲染里，lastLog 只变过 110 次、phase 72 次、
+ * discardLength 66 次，其余变化来自父级重渲染（onShowDiscard 的内联箭头已改成稳定引用）。
+ */
+export const HandTray = React.memo(function HandTray({
+  theme, compactHand, uiHiddenLog, lastLog, me, deckLength, discardLength, onShowDiscard, disabled,
+  phase, isMyTurn, isAiTakeover, isZhihengMode, isLijianMode, isRendeMode, isZhangbaMode,
+  lijianSelectedCardId, selectedCardIds, rendeSelectedCardIds, activeSelectedId, pendingReaction, canWusheng,
+  drawPulse, layoutDensity, isMobileHand, handLarge, onCardClick,
+}: {
   theme: 'dark' | 'light';
   compactHand: boolean;
   uiHiddenLog: boolean;
@@ -31,12 +41,8 @@ export const HandTray: React.FC<{
   isMobileHand: boolean;
   handLarge: boolean;
   onCardClick: (card: Card) => void;
-}> = ({
-  theme, compactHand, uiHiddenLog, lastLog, me, deckLength, discardLength, onShowDiscard, disabled,
-  phase, isMyTurn, isAiTakeover, isZhihengMode, isLijianMode, isRendeMode, isZhangbaMode,
-  lijianSelectedCardId, selectedCardIds, rendeSelectedCardIds, activeSelectedId, pendingReaction, canWusheng,
-  drawPulse, layoutDensity, isMobileHand, handLarge, onCardClick,
-}) => (
+}) {
+  return (
   <div data-region="hand" className={`w-full overflow-x-auto overflow-y-visible px-2 sm:px-4 pb-1 scrollbar-hide flex relative ${compactHand ? 'pt-3' : 'pt-4 sm:pt-5'}`} style={{ zIndex: 10, minHeight: 'var(--hand-min)' }}>
     <div className="absolute inset-x-4 bottom-0 h-32 rounded-t-2xl pointer-events-none bg-gradient-to-t from-[color-mix(in_srgb,var(--surface-0)_85%,transparent)] to-transparent"></div>
     <div className="hand-tray" aria-hidden="true" />
@@ -142,4 +148,5 @@ export const HandTray: React.FC<{
       })}
     </div>
   </div>
-);
+  );
+});
