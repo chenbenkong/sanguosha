@@ -6274,11 +6274,10 @@ const App: React.FC = () => {
     deckRef.current = currentDeck;
 
     const playerName = getPlayer(playerId)?.hero.name || '';
-    // 小乔「红颜」：方块牌视为红桃
-    const isXiaoqiao = playerName === '小乔';
-    let finalCard = isXiaoqiao && judgmentCard.suit === Suit.DIAMOND
-      ? { ...judgmentCard, suit: Suit.HEART }
-      : judgmentCard;
+    // 小乔「红颜」已迁移到 src/game/skills/migrated_abilities.ts（judgeBefore）。
+    // 这里不能再提前改写花色，否则钩子的守卫条件永远不成立、技能变成死代码。
+    const isXiaoqiao = playerName === '小乔'; // 仅用于下方日志文案
+    let finalCard = judgmentCard;
     // 张琪瑛「真仪·紫微」：判定牌生效前弃置标记，改为黑桃5/红桃5
     let zhenyiNote = '';
     const zqy = playersRef.current.find(p => !p.isDead && p.hero.name === '张琪瑛'

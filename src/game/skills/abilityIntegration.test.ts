@@ -136,7 +136,6 @@ const buildTrial = (roster: Roster): Trial => {
     lingrenBoostRef: ref({}),
     lingrenUsedRef: ref(false),
     lockXiaohuiCards: noop,
-    luoyiPlayerRef: ref(null),
     mumuNoSlashRef: ref(null),
     mutateHand,
     onEquipLost: noop,
