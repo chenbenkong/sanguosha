@@ -1,5 +1,6 @@
 import { CardName, CardType, Identity, Suit } from '../../types.ts';
-import type { Player } from '../../types.ts';
+import type { Card, Player } from '../../types.ts';
+import { rankValue } from './utils.ts';
 import type { WinnerSide } from './constants.ts';
 
 /**
@@ -121,4 +122,32 @@ export function evaluateWinnerSide(players: Player[]): WinnerSide | null {
   const spy = players.find(p => p.identity === Identity.NEIJIAN);
   if (rebels.length === 0 && (!spy || spy.isDead)) return 'lord';
   return null;
+}
+
+/**
+ * 本回合是否还能使用这张【杀】。
+ *
+ * 从 App.tsx 的 canPlaySlash 提出：原实现直接读三个 ref（mumuNoSlashRef /
+ * slashUsageRef / qiangwuPointRef），闭包化后不可测。这里改成显式参数，
+ * 判定顺序与短路语义保持不变：
+ *   穆穆禁杀 > 诸葛连弩 > 张飞咆哮 > 王元姬谦冲 > 已用次数 > 张星彩枪舞点数
+ */
+export interface SlashGateInput {
+  /** 孙鲁育「穆穆」：本回合被禁止使用【杀】 */
+  mumuBlocked: boolean;
+  /** 本回合已使用的【杀】数量 */
+  usedThisTurn: number;
+  /** 张星彩「枪舞」的判定点数；null 表示本回合未发动 */
+  qiangwuPoint: number | null;
+}
+
+export function canPlaySlashByRules(p: Player, card: Card | undefined, g: SlashGateInput): boolean {
+  if (g.mumuBlocked) return false;
+  if (p.equipment?.weapon?.name === CardName.ZHUGE) return true;
+  if (p.hero.name === '张飞') return true;
+  if (p.hero.name === '王元姬' && p.qianchongType === 'basic') return true;
+  if (g.usedThisTurn < 1) return true;
+  if (card && p.hero.name === '张星彩' && g.qiangwuPoint !== null
+    && rankValue(card.rank) > g.qiangwuPoint) return true;
+  return false;
 }

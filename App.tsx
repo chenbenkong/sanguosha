@@ -11,7 +11,7 @@ import RulesDialog from './src/components/RulesDialog';
 import { GameSave, SAVE_VERSION, readSave, writeSave, clearSave, consumeSaveRejected, isSaveFinished } from './src/game/save';
 import { shuffle, rankValue, wuguKeepPriority } from './src/game/utils';
 import { useGameState, setPlayers, setDeck, setDiscardPile, setTurnIndex, setPhase, setWinnerSide } from './src/game/gameStore';
-import { countExemptHandCards, computeDiscardExcess, evaluateWinnerSide, nextAliveTurnIndex, seatDistance, suddenDeathDamage, targetProtection } from './src/game/rules';
+import { countExemptHandCards, computeDiscardExcess, evaluateWinnerSide, nextAliveTurnIndex, seatDistance, suddenDeathDamage, targetProtection, canPlaySlashByRules } from './src/game/rules';
 import { jiexingTriggers, countHuguanExempt, tianzeDraws, shengduDrawCount, nifuAdjust } from './src/game/skills-batch6';
 import { isAlly as isAllyImpl, isEnemy as isEnemyImpl } from './src/game/ai/relations';
 import { isSkillSealed as isSkillSealedImpl, skillsOn as skillsOnImpl } from './src/game/ai/skillGate';
@@ -1488,19 +1488,13 @@ const App: React.FC = () => {
 
   // 本回合是否还能使用这张【杀】（张飞「咆哮」、诸葛连弩不限；
   // 张星彩「枪舞」：点数大于判定结果的【杀】不计入次数）
-  const canPlaySlash = useCallback((p: Player, card?: Card) => {
-    // 孙鲁育「穆穆」：获得防具牌后本回合不能使用【杀】
-    if (mumuNoSlashRef.current === p.id) return false;
-    if (p.equipment?.weapon?.name === CardName.ZHUGE) return true;
-    if (p.hero.name === '张飞') return true;
-    // 王元姬「谦冲」：本回合选择基本牌则【杀】无次数限制
-    if (p.hero.name === '王元姬' && p.qianchongType === 'basic') return true;
-    const used = slashUsageRef.current[p.id] ?? 0;
-    if (used < 1) return true;
-    if (card && p.hero.name === '张星彩' && qiangwuPointRef.current !== null
-      && rankValue(card.rank) > qiangwuPointRef.current) return true;
-    return false;
-  }, []);
+  // 规则本体已抽到 src/game/rules.ts 的 canPlaySlashByRules（可单测），
+  // 这里只负责把三个 ref 的当前值传进去。
+  const canPlaySlash = useCallback((p: Player, card?: Card) => canPlaySlashByRules(p, card, {
+    mumuBlocked: mumuNoSlashRef.current === p.id,
+    usedThisTurn: slashUsageRef.current[p.id] ?? 0,
+    qiangwuPoint: qiangwuPointRef.current,
+  }), []);
 
   // 失去装备后的结算：白银狮子离场回复 1 点体力
   const onEquipLost = useCallback((playerId: number, equipName: CardName) => {
