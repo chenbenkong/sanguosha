@@ -303,6 +303,108 @@ describe('端到端 · 覆盖补充', () => {
     }, 60000);
   });
 
+  describe('选将页卡面模式', () => {
+    let ctx: E2EContext;
+
+    beforeAll(async () => { ctx = await openApp(BASE); }, 60000);
+    afterAll(async () => { if (ctx) await ctx.close(); });
+
+    /**
+     * 卡面模式的两条不变量，都只有真跑浏览器才验证得了：
+     *  1. 白名单里的武将显示 images/fullcards/*.webp，坏的映射会静默回落立绘
+     *  2. 没有卡面的武将（马云禄、蔡贞姬）必须回落立绘，不能出现 404 破图
+     * 元素选择器与 src 都是对外契约（素材目录 + aria-label），改动会在这里响。
+     */
+    /**
+     * 点击模式按钮并等 React 提交后再读实际状态。
+     * 不能在 click 的同一个 evaluate 里读 aria-pressed：那一刻 React 还没重渲染，
+     * 读到的是旧值（会误判成「没切过去」）。
+     */
+    const pressMode = async (page: Page, label: string): Promise<string | null> => {
+      const clicked = await page.evaluate((l) => {
+        const box = document.querySelector('[role=group][aria-label="切换卡面显示方式"]');
+        if (!box) return false;
+        const btn = [...box.querySelectorAll('button')].find((b) => (b.textContent || '').trim() === l);
+        if (!btn) return false;
+        (btn as HTMLButtonElement).click();
+        return true;
+      }, label);
+      if (!clicked) return null;
+      await sleep(500);
+      return page.evaluate((l) => {
+        const box = document.querySelector('[role=group][aria-label="切换卡面显示方式"]');
+        const btn = box
+          ? [...box.querySelectorAll('button')].find((b) => (b.textContent || '').trim() === l)
+          : null;
+        return btn ? btn.getAttribute('aria-pressed') : null;
+      }, label);
+    };
+
+    const readFirstCardImg = (page: Page) =>
+      page.evaluate(() => {
+        const el = document.querySelector('button[aria-label^="选择 "]');
+        const img = el?.querySelector('img') as HTMLImageElement | null;
+        return img
+          ? {
+              src: img.getAttribute('src') || '',
+              naturalW: img.naturalWidth,
+              naturalH: img.naturalHeight,
+              isFullcard: (el as HTMLElement).className.includes('is-fullcard'),
+            }
+          : null;
+      });
+
+    it('切到「卡面」后卡片改用官方完整卡面，切回「立绘」恢复原状', async () => {
+      expect(await enterHeroSelect(ctx.page)).toBe(true);
+
+      expect(await pressMode(ctx.page, '卡面')).toBe('true');
+      await sleep(900);
+      const card = await readFirstCardImg(ctx.page);
+      expect(card).toBeTruthy();
+      expect(card!.src).toContain('images/fullcards/');
+      // 真正的加载成功：naturalWidth 只有解码成功才非 0
+      expect(card!.naturalW).toBeGreaterThan(0);
+      expect(card!.isFullcard).toBe(true);
+
+      expect(await pressMode(ctx.page, '立绘')).toBe('true');
+      await sleep(900);
+      const back = await readFirstCardImg(ctx.page);
+      expect(back!.src).toContain('images/heroes/');
+      expect(back!.naturalW).toBeGreaterThan(0);
+      expect(back!.isFullcard).toBe(false);
+
+      await shot(ctx.page, 'coverage-card-mode');
+    }, 120000);
+
+    it('无卡面的武将回落立绘：不出现 404 破图', async () => {
+      // 上一个用例收在「立绘」，这里直接切到「卡面」即可，不必重进选将页
+      expect(await pressMode(ctx.page, '卡面')).toBe('true');
+      await sleep(600);
+
+      const result = await ctx.page.evaluate(async () => {
+        const out: Array<{ name: string; src: string; naturalW: number }> = [];
+        for (const name of ['马云禄', '蔡贞姬']) {
+          const el = [...document.querySelectorAll('button[aria-label^="选择 "]')]
+            .find((b) => (b.getAttribute('aria-label') || '') === '选择 ' + name) as HTMLElement | null;
+          if (!el) { out.push({ name, src: 'CARD_NOT_VISIBLE', naturalW: -1 }); continue; }
+          const img = el.querySelector('img') as HTMLImageElement | null;
+          // 等在视口内解码完成，naturalWidth 才是可信的
+          if (img && !img.complete) await new Promise((r) => { img.onload = r; img.onerror = r; });
+          out.push({ name, src: img?.getAttribute('src') || '', naturalW: img?.naturalWidth ?? 0 });
+        }
+        return out;
+      });
+
+      // 两人都可能不在当前页（每页 24 人），所以只对「找得到的」断言
+      for (const r of result) {
+        if (r.src === 'CARD_NOT_VISIBLE') continue;
+        expect(r.src).toContain('images/heroes/');
+        expect(r.src).not.toContain('images/fullcards/');
+        expect(r.naturalW).toBeGreaterThan(0);
+      }
+    }, 120000);
+  });
+
   describe('移动端布局', () => {
     let ctx: E2EContext;
 

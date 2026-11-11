@@ -78,7 +78,10 @@ const bootGame = async (ctx: E2EContext, opts: { takeover?: boolean; speed?: 1 |
 const selectForDiscard = async (
   page: E2EContext['page'],
   excess: number,
-  deadlineMs = 20000,
+  // 预算随张数增长：每张卡一轮「evaluate + 350ms 等待 + 再求值」，
+  // 慢机上单张实测可到 0.6s（CI 慢跑时整体曾慢到 2.7 倍）。
+  // 固定 20s 在 excess 较大时会不够，所以按 8s 起步 + 每张 4s。
+  deadlineMs = 15000 + excess * 6000,
 ): Promise<{ ok: boolean; prompt: Awaited<ReturnType<typeof readDiscardPrompt>>; reason?: string }> => {
   const deadline = Date.now() + deadlineMs;
   let last = await readDiscardPrompt(page);
@@ -152,15 +155,15 @@ describe('端到端 · 玩家真实流程', () => {
       const started = await bootGame(ctx, { takeover: true, speed: 3 });
       expect(started).toBe(true);
 
-      // 时长预算：整局在 3 倍速 + 托管下的实测墙钟分布很宽
-      // （53s / 62s / 98s / 101s / 115s / 121s / 129s / 209s）。
-      // 波动来源不是卡死，而是 AI 之间的技能结算与回合数——尤其【粮尽】这类
-      // 「所有角色失去体力」的技能会把对局拖长。209s 那次已在 CI 与本地各复现
-      // 一次，用得还是 3 倍速（speed 只到 3，无法再快）。
-      // 所以按观测上界给 300s，外层用例超时 360s 兜底。
-      // 放宽不会让真卡死等更久：退出条件是「结算界面出现」，不是固定睡眠，
-      // 而卡死另有看门狗（App.tsx 的 stall watchdog）负责收尾。
-      const deadline = Date.now() + 300000;
+      // 时长预算：整局在 3 倍速 + 托管下的墙钟分布极宽，且**取决于跑在哪台机器上**。
+      // 本机：53s / 62s / 98s / 101s / 115s / 121s / 129s / 209s。
+      // GitHub 共享 runner 上同一份代码实测 114s / 129s / 309s——309s 那次整台
+      // 机器慢了约 2.7 倍（同一次里的弃牌用例也一起变慢）。speed 上限就是 3，
+      // 没法再快，所以只能给足预算。
+      // 这里要证的是「对局能走到结算、主循环不卡死」，不是「跑得快」；
+      // 退出条件是结算界面出现（轮询），不是固定睡眠，卡死另有 App.tsx 的
+      // stall watchdog 收尾，所以放宽预算不会让真卡死等更久。
+      const deadline = Date.now() + 600000;
       let over = { over: false, winner: null as string | null };
       while (Date.now() < deadline) {
         over = await isGameOver(ctx.page);
@@ -185,7 +188,7 @@ describe('端到端 · 玩家真实流程', () => {
       expect(exits.home).toBe(true);
 
       expect(ctx.errors).toEqual([]);
-    }, 360000);
+    }, 660000);
   });
 
   describe('弃牌阶段', () => {
@@ -200,7 +203,7 @@ describe('端到端 · 玩家真实流程', () => {
 
       // 弃牌阶段只在“轮到玩家且手牌超上限”时出现，需要推进若干回合。
       // 不能开托管：托管会替玩家自动弃牌，就测不到这条路径了。
-      const deadline = Date.now() + 75000;
+      const deadline = Date.now() + 150000;
       let prompt = { excess: null as number | null, picked: null as number | null, hasDiscardButton: false, discardEnabled: false };
       let phase: string | null = null;
       while (Date.now() < deadline) {
@@ -238,7 +241,9 @@ describe('端到端 · 玩家真实流程', () => {
 
       // 选够 N 张后按钮才可用
       const picked = await selectForDiscard(ctx.page, prompt.excess!);
-      expect(picked.ok).toBe(true);
+      // 带上 reason：只断言 ok 的话，失败信息是 expect(false).toBe(true)，
+      // 看不出是 prompt 消失 / 张数变化 / 没有可点的牌 / 超时。
+      expect(picked.ok, 'selectForDiscard 失败原因: ' + (picked.reason ?? 'unknown')).toBe(true);
       expect(picked.prompt.picked).toBe(prompt.excess);
       expect(picked.prompt.discardEnabled).toBe(true);
 
@@ -282,7 +287,7 @@ describe('端到端 · 玩家真实流程', () => {
       expect(discardCount).toBeGreaterThan(0);
 
       expect(ctx.errors).toEqual([]);
-    }, 120000);
+    }, 240000);
   });
 
   describe('技能弹窗', () => {
