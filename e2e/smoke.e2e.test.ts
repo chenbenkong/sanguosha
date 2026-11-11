@@ -5,6 +5,7 @@ import {
   openApp, startGameWithHero, readGameState, waitForSkillDialog,
   dismissDialog, clickButton, sleep, shot,
 } from './helpers';
+import { startPreview } from './preview';
 import type { E2EContext } from './helpers';
 
 /**
@@ -18,31 +19,18 @@ import type { E2EContext } from './helpers';
  *  5. 需要玩家决策的技能会真的弹出选择窗
  */
 
-const PORT = 7300;
-const BASE = `http://127.0.0.1:${PORT}/`;
-
-let server: ChildProcess | null = null;
+// 端口不再硬编码：默认由系统分配空闲端口，并校验该端口服务的入口 chunk
+// 是否等于本地 dist —— 否则会静默连到别的工作区残留的 preview 上。
+let BASE = '';
+let previewHandle: { base: string; stop: () => void } | null = null;
 
 beforeAll(async () => {
-  server = spawn('npx', ['vite', 'preview', '--port', String(PORT), '--host', '127.0.0.1'], {
-    cwd: process.cwd(),
-    shell: true,
-    stdio: 'ignore',
-  });
-  // 等端口就绪
-  const deadline = Date.now() + 40000;
-  while (Date.now() < deadline) {
-    try {
-      const res = await fetch(BASE);
-      if (res.ok) return;
-    } catch { /* 还没起来 */ }
-    await sleep(700);
-  }
-  throw new Error('预览服务在 40 秒内未就绪');
-}, 60000);
+  previewHandle = await startPreview();
+  BASE = previewHandle.base;
+}, 90000);
 
 afterAll(() => {
-  if (server) server.kill();
+  previewHandle?.stop();
 });
 
 describe('端到端：真实浏览器', () => {
