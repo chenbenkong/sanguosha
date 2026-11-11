@@ -11,6 +11,7 @@ import './migrated1';
 import './migrated2';
 import './migrated3';
 import './migrated_wa';
+import './migrated_abilities';
 
 export { skillsOf, skillHook, registeredHeroCount } from './registry';
 export type { SkillDef, SkillHooks, SkillContext, DamageEvent, CardUsedEvent, JudgeEvent } from './registry';

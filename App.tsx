@@ -27,7 +27,7 @@ import { FX_LABEL, FX_ORDER, FX_TAG } from './src/game/fx';
 import type { FxLevel } from './src/game/fx';
 import { createCombatEngine } from './src/game/combat';
 import './src/game/skills';
-import { dispatchTurnEnd, dispatchTurnStart, dispatchJudge, dispatchDrawBonus, dispatchHandLimitBonus, dispatchExemptHandCards } from './src/game/skills/dispatch';
+import { dispatchTurnEnd, dispatchTurnStart, dispatchJudge, dispatchDrawBonus, dispatchHandLimitBonus, dispatchExemptHandCards, dispatchJudgeBefore } from './src/game/skills/dispatch';
 import type { SkillChoiceReq } from './src/game/skills/dispatch';
 import type { CombatDeps, CombatEngine } from './src/game/combat';
 import { GameApiProvider } from './src/game/GameApiContext';
@@ -6337,6 +6337,43 @@ const App: React.FC = () => {
     addLog(`⚖️ ${playerName} 的【${reason}】判定：${finalCard.suit} ${rankDisplay}（判定牌：【${judgmentCard.name}】）${isXiaoqiao && finalCard.suit !== judgmentCard.suit ? '，触发「红颜」视为红桃' : ''}${zhenyiNote}${guicaiNote}`, 'warning');
     showJudgmentVisual(finalCard, playerName, reason);
     await delay(1600);
+    // 技能注册表：判定牌翻出后、生效前（可替换判定牌或改写花色）
+    {
+      const judgeOwnerPre = playersRef.current.find(x => x.id === playerId);
+      if (judgeOwnerPre) {
+        const pre = await dispatchJudgeBefore({
+          players: playersRef.current,
+          turnOwner: playersRef.current.find(x => x.id === turnOwnerIdRef.current),
+          draw: (pid: number, c: number) => drawCardsRef.current!(pid, c),
+          discard: (pid: number, cards: Card[]) => discardCards(pid, cards),
+          heal: (pid: number, c: number) => recoverHp(pid, c),
+          damage: async (vid: number, sid: number, amt: number, cd?: Card) => {
+            if (combatEngine) await combatEngine.takeDamage(vid, sid, amt, cd);
+          },
+          gainCard: (fromId: number, toId: number, cd: Card) => {
+            mutateHand(fromId, h => h.filter(c => c.id !== cd.id));
+            mutateHand(toId, h => [...h, cd]);
+          },
+          log: (t: string) => addLog(t, 'skill'),
+          banner: (h: string, sk: string) => showSkillBanner(h, sk),
+          delay: (ms: number) => delay(ms),
+          skillsOn: (pid: number) => skillsOn(pid),
+          requestChoice: (req: SkillChoiceReq) => requestSkillChoice({
+            skill: req.title, owner: '技能', title: req.title, hint: req.hint,
+            mode: req.mode, choices: req.choices, targets: req.targets,
+            min: req.min, max: req.max, cancelLabel: req.cancelLabel,
+          }, !isAiTakeoverRef.current),
+        }, { owner: judgeOwnerPre, reason, card: finalCard });
+        if (pre.replaceWith) {
+          addLog(`【改判】判定牌被替换为【${pre.replaceWith.name}】`, 'skill');
+          finalCard = pre.replaceWith;
+        }
+        if (pre.treatSuitAs) {
+          finalCard = { ...finalCard, suit: pre.treatSuitAs };
+        }
+      }
+    }
+
     // 技能注册表：判定牌生效后（新技能只需注册 afterJudge，不必在此加分支）
     {
       const judgeSkillDeps = {
