@@ -2410,10 +2410,10 @@ export const createCombatEngine = (deps: CombatDeps): CombatEngine => {
             earlyReturn = true;
           }
         }
-        if (earlyReturn) {
-          setIsProcessing(p => Math.max(0, p - 1));
-          return;
-        }
+        // 该块位于 takeDamage 的 try 内，finally 已负责释放一次处理锁；
+        // 这里再减一次会造成「双释放」，让嵌套结算提前解锁、主循环重复推进同一阶段。
+        // 与同函数其它提前返回（如「绝情」分支）保持一致：只 return，不减锁。
+        if (earlyReturn) return;
       }
     }
 
