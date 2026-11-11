@@ -1,4 +1,5 @@
-import { Card, CardName, CardType } from '../../types';
+import { CardName, CardType } from '../../types.ts';
+import type { Card } from '../../types.ts';
 
 /** Fisher-Yates 洗牌（不改动入参） */
 export function shuffle<T>(array: T[]): T[] {
