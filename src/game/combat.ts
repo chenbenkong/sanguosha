@@ -2398,21 +2398,28 @@ export const createCombatEngine = (deps: CombatDeps): CombatEngine => {
           card: damageCard,
         });
         if (pre.note) addLog(pre.note, 'skill');
+        // 注意：这里的提前 return 会跳过 finally 的 setIsProcessing 减，
+        // 导致处理锁永不释放、整局卡死。所以全部改为「释放锁后再返回」。
+        let earlyReturn = false;
         if (pre.prevent) {
           addLog(`${victimPre.hero.name} 的伤害被技能阻止`, 'skill');
-          return;
-        }
-        if (typeof pre.amount === 'number') {
-          if (pre.amount <= 0) return;
+          earlyReturn = true;
+        } else if (typeof pre.amount === 'number' && pre.amount <= 0) {
+          earlyReturn = true;
+        } else if (typeof pre.amount === 'number') {
           finalAmount = pre.amount;
         }
-        if (pre.transferTo != null) {
+        if (!earlyReturn && pre.transferTo != null) {
           const tgt = getPlayer(pre.transferTo);
           if (tgt && !tgt.isDead && tgt.id !== victimId) {
             addLog(`伤害转移给 ${tgt.hero.name}`, 'skill');
             await takeDamage(tgt.id, sourceId, finalAmount, damageCard, dmgNature === 'normal' ? undefined : dmgNature);
-            return;
+            earlyReturn = true;
           }
+        }
+        if (earlyReturn) {
+          setIsProcessing(p => Math.max(0, p - 1));
+          return;
         }
       }
     }
