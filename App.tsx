@@ -4035,7 +4035,6 @@ const App: React.FC = () => {
           }
         }
 
-        // 张春华「伤逝」：回合结束时，手牌少于已损失体力则补至该值
         const endingPlayer = getPlayer(turnIndex);
         // 技能注册表：回合结束时机统一分发（新技能只需注册，不必在此加分支）
         if (endingPlayer) {
@@ -4070,14 +4069,7 @@ const App: React.FC = () => {
             }, !isAiTakeoverRef.current),
           }, endingPlayer);
         }
-        if (endingPlayer && !endingPlayer.isDead && endingPlayer.hero.name === '张春华') {
-          const lostHp = endingPlayer.maxHp - endingPlayer.hp;
-          const deficit = lostHp - endingPlayer.hand.length;
-          if (deficit > 0) {
-            addLog(`${endingPlayer.hero.name} 发动「伤逝」，摸 ${deficit} 张牌补至已损失体力`, 'skill');
-            drawCards(endingPlayer.id, deficit);
-          }
-        }
+        // 张春华「伤逝」已迁移到 src/game/skills/migrated2.ts（onTurnEnd）
 
         // 唐姬「抗歌」：自己的第一个回合开始时，选择一名其他角色作为守护对象
         if (endingPlayer && !endingPlayer.isDead && endingPlayer.hero.name === '唐姬'
@@ -4111,26 +4103,9 @@ const App: React.FC = () => {
           }
         }
 
-        // 貂蝉「闭月」：回合结束时摸一张牌
-        if (endingPlayer && !endingPlayer.isDead && endingPlayer.hero.name === '貂蝉') {
-          addLog(`${endingPlayer.hero.name} 发动「闭月」，摸一张牌`, 'skill');
-          showSkillBanner(endingPlayer.hero.name, '闭月');
-          drawCards(endingPlayer.id, 1);
-        }
+        // 貂蝉「闭月」已迁移到 src/game/skills/migrated2.ts（onTurnEnd）
 
-        // 曹婴「伏间」（锁定技）：结束阶段若全场角色均有手牌，随机观看一名其他角色 X 张手牌（X 为全场最少手牌数）
-        if (endingPlayer && !endingPlayer.isDead && endingPlayer.hero.name === '曹婴' && skillsOn(endingPlayer.id)) {
-          const alive = playersRef.current.filter(p => !p.isDead);
-          const allHaveHand = alive.every(p => p.hand.length > 0);
-          const others = alive.filter(p => p.id !== endingPlayer.id);
-          if (allHaveHand && others.length > 0) {
-            const x = Math.min(...alive.map(p => p.hand.length));
-            const viewed = others[Math.floor(Math.random() * others.length)];
-            const cards = viewed.hand.slice(0, x).map(c => `【${c.name}】`).join('、');
-            addLog(`【伏间】曹婴观看 ${viewed.hero.name} 的 ${x} 张手牌：${cards}`, 'skill');
-            showSkillBanner('曹婴', '伏间');
-          }
-        }
+        // 曹婴「伏间」已迁移到 src/game/skills/migrated2.ts（onTurnEnd）
 
         // 吴苋「怠宴」：结束阶段令一名其他角色从牌堆获得一张红桃基本牌；若其本身上回合已被列为目标，其失去1点体力
         if (endingPlayer && !endingPlayer.isDead && endingPlayer.hero.name === '吴苋' && skillsOn(endingPlayer.id)) {
