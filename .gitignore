@@ -22,3 +22,5 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+# e2e 运行产物（截图），每次跑都会变，不进仓库
+e2e/artifacts/
