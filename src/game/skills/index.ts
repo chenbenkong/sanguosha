@@ -9,6 +9,7 @@ import './batch7';
 import './batch8';
 import './migrated1';
 import './migrated2';
+import './migrated3';
 import './migrated_wa';
 
 export { skillsOf, skillHook, registeredHeroCount } from './registry';

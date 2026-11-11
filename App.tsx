@@ -479,8 +479,6 @@ const App: React.FC = () => {
   // 矫诏：声明后保留展示牌，本回合由玩家决定何时当声明牌使用（不可指定自己）
   const [jiaozhaoPending, setJiaozhaoPending] = useState<{ ownerId: number; cardId: string; declared: CardName; level: number } | null>(null);
   const jiaozhaoPendingRef = useRef<{ ownerId: number; cardId: string; declared: CardName; level: number } | null>(null);
-  // 何太后「戚乱」：本回合内何太后击杀数
-  const hetaishouKillsRef = useRef<number>(0);
 
   // 被「倾城」暗置时，人类玩家的技能按钮整体禁用（视觉由 theme.css 的 body[data-human-sealed] 控制）
   useEffect(() => {
@@ -2092,7 +2090,6 @@ const App: React.FC = () => {
     skillSealRef.current = {};
     turnCountRef.current = 0;
     famineAnnouncedRef.current = false;
-    hetaishouKillsRef.current = 0;
     setIsJiedaoMode(false);
     setJiedaoWeaponTarget(null);
     setJiedaoVictimTarget(null);
@@ -2376,8 +2373,10 @@ const App: React.FC = () => {
         addLog(`【焚心】灵雎与 ${victim.hero.name} 交换身份牌，灵雎成为【${victim.identity}】，${victim.hero.name} 变为【${killerOldIdentity}】`, 'skill');
         showSkillBanner('灵雎', '焚心');
       }
-      // 何太后「戚乱」：记录本回合击杀数（结束阶段按 3×击杀数摸牌）
-      if (killer.hero.name === '何太后') hetaishouKillsRef.current += 1;
+      // 何太后「戚乱」：记录本回合击杀数（结算在 src/game/skills/migrated3.ts 的 onTurnEnd）
+      if (killer.hero.name === '何太后') {
+        updatePlayer(killerId, { killsThisTurn: (killer.killsThisTurn ?? 0) + 1 });
+      }
       // 蔡文姬「断肠」：击杀者失去所有手牌
       if (victim.hero.name === '蔡文姬' && killer.hand.length > 0) {
         addLog(`${victim.hero.name} 的「断肠」发动，${killer.hero.name} 失去所有手牌！`, 'skill');
@@ -2557,7 +2556,7 @@ const App: React.FC = () => {
               cancelLabel: req.cancelLabel,
             }, !isAiTakeoverRef.current),
           }, currentPlayer);
-        hetaishouKillsRef.current = 0; // 「戚乱」本回合击杀数
+        // 「戚乱」击杀数清零已迁移到 src/game/skills/migrated3.ts（onTurnStart）
         ganluUsedRef.current = false;
         setHasUsedGanlu(false);
         setIsGanluMode(false);
@@ -2566,10 +2565,10 @@ const App: React.FC = () => {
         setHasUsedQingcheng(false);
         setIsQingchengMode(false);
         wuyuanUsedRef.current = false; // 重置「武缘」
-        // 王元姬「尚俭」：每回合开始清零“本回合失去的牌”
+        // 王元姬「尚俭」的“本回合失去的牌”清零已迁移到 src/game/skills/migrated3.ts（onTurnStart）
         {
           const wj = playersRef.current.find(p => !p.isDead && p.hero.name === '王元姬');
-          if (wj) updatePlayer(wj.id, { lostCardsThisTurn: 0, qianchongType: null });
+          if (wj) updatePlayer(wj.id, { qianchongType: null });
         }
         usedTypesRef.current = new Set(); // 蔡贞姬「天音」：每回合重置用牌类型记录
         if (currentPlayer.hero.name === '蔡贞姬') sheyiUsedRef.current = false;
@@ -2579,18 +2578,7 @@ const App: React.FC = () => {
           updatePlayer(currentPlayer.id, { hongyiTargetId: null }); // 弘仪持续至羊徽瑜的下个回合开始
         }
 
-        // 张昌蒲「严教」：上回合交出牌数，在下回合开始时摸回
-        {
-          const zcp = playersRef.current.find(p => !p.isDead && p.hero.name === '张昌蒲');
-          if (zcp && (zcp.yanjiaoCount ?? 0) > 0) {
-            const n = zcp.yanjiaoCount!;
-            updatePlayer(zcp.id, { yanjiaoCount: 0 });
-            drawCards(zcp.id, n);
-            addLog(`【严教】张昌蒲下回合开始，摸 ${n} 张牌`, 'skill');
-            showSkillBanner('张昌蒲', '严教');
-            await delay(300);
-          }
-        }
+        // 张昌蒲「严教」的回合开始摸回已迁移到 src/game/skills/migrated3.ts（onTurnStart）
 
         // 周妃「箜声」：准备阶段将至多两张牌置于武将牌上；「良姻」令手牌多于她的一名角色摸一张
         if (currentPlayer.hero.name === '周妃' && skillsOn(currentPlayer.id)) {
@@ -2850,36 +2838,7 @@ const App: React.FC = () => {
           await delay(500);
         }
 
-        // 卑弥呼「拜假」觉醒 + 「纵傀」回合开始
-        if (currentPlayer.hero.name === '卑弥呼' && skillsOn(currentPlayer.id)) {
-          const ju = currentPlayer.juMarks ?? 0;
-          if (ju >= 7 && !currentPlayer.baiJiaAwakened) {
-            const np = getPlayer(currentPlayer.id);
-            if (np) {
-              updatePlayer(currentPlayer.id, {
-                baiJiaAwakened: true,
-                maxHp: np.maxHp + 1,
-                hp: Math.min(np.hp + 1, np.maxHp + 1),
-              });
-              playersRef.current.forEach(o => {
-                if (o.id !== currentPlayer.id && !o.isDead && !o.hasKui) updatePlayer(o.id, { hasKui: true });
-              });
-              addLog(`【拜假】卑弥呼觉醒：体力上限+1、回复1点体力，所有其他角色获得“傀”，失去「骨疽」获得「蚕食」`, 'skill');
-              showSkillBanner('卑弥呼', '拜假');
-              await delay(700);
-            }
-          }
-          // 纵傀：优先给敌人
-          const cand = playersRef.current.filter(p => !p.isDead && p.id !== currentPlayer.id && !p.hasKui);
-          if (cand.length) {
-            const pick = [...cand].sort((a, b) =>
-              (isEnemy(currentPlayer, b) ? 1 : 0) - (isEnemy(currentPlayer, a) ? 1 : 0))[0];
-            updatePlayer(pick.id, { hasKui: true });
-            addLog(`【纵傀】卑弥呼令 ${pick.hero.name} 获得“傀”标记`, 'skill');
-            showSkillBanner('卑弥呼', '纵傀');
-            await delay(400);
-          }
-        }
+        // 卑弥呼「拜假」觉醒 + 「纵傀」回合开始：已迁移到 src/game/skills/migrated3.ts（onTurnStart）
 
         // 每轮游戏开始时：卑弥呼令体力最少且无傀的其他角色获得傀
         if (roundLastTurnRef.current !== null && currentPlayer.id < roundLastTurnRef.current) {
@@ -3897,20 +3856,7 @@ const App: React.FC = () => {
           }
         }
 
-        // 王元姬「尚俭」：任一角色结束阶段，若本回合失去的牌数不大于体力值，摸等量牌
-        {
-          const wj = playersRef.current.find(p => !p.isDead && p.hero.name === '王元姬' && skillsOn(p.id));
-          if (wj) {
-            const lost = wj.lostCardsThisTurn ?? 0;
-            if (lost > 0 && lost <= wj.hp) {
-              updatePlayer(wj.id, { lostCardsThisTurn: 0 });
-              drawCards(wj.id, lost);
-              addLog(`【尚俭】王元姬本回合失去 ${lost} 张牌（不大于体力 ${wj.hp}），摸 ${lost} 张牌`, 'skill');
-              showSkillBanner('王元姬', '尚俭');
-              await delay(400);
-            }
-          }
-        }
+        // 王元姬「尚俭」已迁移到 src/game/skills/migrated3.ts（onTurnStart 清零 / onTurnEnd 结算）
 
         // 花鬘「芳踪」：结束阶段，将手牌摸至X张（X为场上存活人数；嬉战弃牌则本回合失效）
         if (currentPlayer.hero.name === '花鬘' && skillsOn(currentPlayer.id)
@@ -4250,15 +4196,7 @@ const App: React.FC = () => {
 
         // 曹节「惠民」已迁移到 src/game/skills/migrated2.ts（onTurnEnd）
 
-        // 何太后「戚乱」：结束阶段，本回合每杀死一名其他角色，摸三张牌
-        const hetaiDuan = playersRef.current.find(p => !p.isDead && p.hero.name === '何太后' && skillsOn(p.id));
-        if (hetaiDuan && hetaishouKillsRef.current > 0) {
-          const drawN = hetaishouKillsRef.current * 3;
-          addLog(`何太后发动「戚乱」，本回合击杀 ${hetaishouKillsRef.current} 人，摸 ${drawN} 张牌`, 'skill');
-          showSkillBanner('何太后', '戚乱');
-          drawCards(hetaiDuan.id, drawN);
-          await delay(400);
-        }
+        // 何太后「戚乱」已迁移到 src/game/skills/migrated3.ts（onTurnEnd）
 
         // 张琪瑛「点化」：结束阶段观看牌堆顶
         if (endingPlayer && !endingPlayer.isDead && endingPlayer.hero.name === '张琪瑛') {

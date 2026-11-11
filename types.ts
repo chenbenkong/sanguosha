@@ -186,6 +186,8 @@ export interface Player {
   fumianValue2?: number;
   /** 吴苋「怠宴」上回合的目标 */
   daiyanTargetId?: number;
+  /** 何太后「戚乱」本回合击杀数（每个回合开始时清零） */
+  killsThisTurn?: number;
 }
 
 /** 装备区：武器 / 防具 / +1马 / -1马 */

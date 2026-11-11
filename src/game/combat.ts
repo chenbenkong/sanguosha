@@ -2588,19 +2588,7 @@ export const createCombatEngine = (deps: CombatDeps): CombatEngine => {
       }
     }
 
-    // 卑弥呼「骨疽」：拥有“傀”的角色受到伤害后，卑弥呼摸一张并获得一个“疽”
-    const kuiVictim = getPlayer(victimId);
-    if (kuiVictim && kuiVictim.hasKui) {
-      const bmh = playersRef.current.find(p => !p.isDead && p.hero.name === '卑弥呼'
-        && skillsOn(p.id) && !p.baiJiaAwakened);
-      if (bmh) {
-        drawCards(bmh.id, 1);
-        updatePlayer(bmh.id, { juMarks: (bmh.juMarks ?? 0) + 1 });
-        addLog(`【骨疽】${kuiVictim.hero.name} 受到伤害，卑弥呼摸一张牌并获得“疽”（${(bmh.juMarks ?? 0) + 1} 枚）`, 'skill');
-        showSkillBanner('卑弥呼', '骨疽');
-        await delay(250);
-      }
-    }
+    // 卑弥呼「骨疽」已迁移到 src/game/skills/migrated3.ts（afterDamage）
 
     // 陆郁生「霜怀」：距离 1 以内的其他角色受到伤害后，令其从弃牌堆获得一张【桃】；
     // 与上次目标相同则双方摸一张，不同则陆郁生失去 1 点体力
