@@ -27,7 +27,7 @@ import { FX_LABEL, FX_ORDER, FX_TAG } from './src/game/fx';
 import type { FxLevel } from './src/game/fx';
 import { createCombatEngine } from './src/game/combat';
 import './src/game/skills';
-import { dispatchTurnEnd, dispatchTurnStart, dispatchJudge, dispatchDrawBonus, dispatchHandLimitBonus, dispatchExemptHandCards, dispatchJudgeBefore } from './src/game/skills/dispatch';
+import { dispatchTurnEnd, dispatchTurnStart, dispatchJudge, dispatchDrawBonus, dispatchHandLimitBonus, dispatchExemptHandCards, dispatchJudgeBefore, dispatchDrawPhaseBegin, dispatchDiscardPhaseSkip, dispatchCardLost } from './src/game/skills/dispatch';
 import type { SkillChoiceReq } from './src/game/skills/dispatch';
 import type { CombatDeps, CombatEngine } from './src/game/combat';
 import { GameApiProvider } from './src/game/GameApiContext';
@@ -455,8 +455,6 @@ const App: React.FC = () => {
   const [isAnxuMode, setIsAnxuMode] = useState<boolean>(false);
   const [hasUsedAnxu, setHasUsedAnxu] = useState<boolean>(false);
   const [anxuTargets, setAnxuTargets] = useState<number[]>([]);
-  // 许褚「裸衣」：本回合【杀】/【决斗】伤害+1
-  const luoyiPlayerRef = useRef<number | null>(null);
 
   // ── 第 1 批女将技能状态（孙茹/何太后/吴国太/甘夫人/邹氏/郭皇后）──
   // 吴国太「甘露」：出牌阶段限一次，交换两名角色装备区
@@ -877,6 +875,36 @@ const App: React.FC = () => {
 
   // 诸葛果「羽化」：非基本牌不计入手牌上限；董白「黠慧」：黑色牌不计入手牌上限
   // 手牌上限/弃牌数的规则计算统一在 src/game/rules.ts，这里只保留 DEV 探针上报
+  // 「不因使用/打出而失去牌」的统一上报：弃置 / 被其他角色获得 / 移出装备区。
+  // 枭姬（失去装备区的牌）与连营（失去最后一张手牌）都挂在 afterCardLost 上，
+  // 因此所有失去牌的路径都必须经过这里，不能再各写一处 hero.name === 'X'。
+  const notifyCardLost = async (
+    playerId: number,
+    cards: Card[],
+    cause: 'discard' | 'gain' | 'equip' | 'other',
+    fromEquip = false,
+    handAfter?: number,
+  ): Promise<void> => {
+    // 装备区的牌不占手牌，没有牌也必须上报（枭姬看的是装备区，不是手牌）
+    if (!cards.length && !fromEquip) return;
+    // 用实时角色表：调用方可能刚用旧闭包改过手牌
+    const live = playersRef.current.find(p => p.id === playerId);
+    if (!live || live.isDead) return;
+    try {
+      await dispatchCardLost(buildSkillDeps(), {
+        player: live,
+        cards,
+        cause,
+        // 调用方知道确切结果时用它的值：state updater 是异步刷新的，
+        // 此时 playersRef 里可能还是失去牌之前的手牌
+        handAfter: handAfter ?? live.hand.length,
+        fromEquip,
+      });
+    } catch (e) {
+      addLog('技能结算异常：' + String(e), 'warning');
+    }
+  };
+
   // 技能分发依赖的统一入口。此前每个 dispatch 调用点都手写一遍同样的 deps
   // 组装（draw/discard/heal/damage/gainCard/log/banner/delay/skillsOn/requestChoice），
   // 既重复又容易出现某处漏传字段。这里收成一份。
@@ -892,6 +920,8 @@ const App: React.FC = () => {
     gainCard: (fromId: number, toId: number, cd: Card) => {
       mutateHand(fromId, h => h.filter(c => c.id !== cd.id));
       mutateHand(toId, h => [...h, cd]);
+      // 这里不再单独上报「失去牌」：mutateHand 是手牌移除的唯一入口，
+      // 它自己判断手牌是否清零并跑一次 afterCardLost（否则同一张牌会触发两次连营）。
     },
     log: (t: string) => addLog(t, 'skill'),
     banner: (h: string, sk: string) => showSkillBanner(h, sk),
@@ -927,31 +957,39 @@ const App: React.FC = () => {
   // 供 mutateHand 的延时回调使用，避免在 drawCards 声明前引用它
   const drawCardsRef = useRef<((playerId: number, count: number) => Card[]) | null>(null);
 
+  // mutateHand 的广播副作用（连营）需要读 notifyCardLost / playersRef，
+  // 但 mutateHand 被 useCallback(..., []) 固定、且被 combat.ts 长期持有，
+  // 所以副作用走 ref 中转，避免把过期的闭包写死进去。
+  const handEmptiedRef = useRef<((id: number, lost: Card[]) => void) | null>(null);
+
   // 以最新 state 为准的手牌修改器，避免闭包旧 hand 导致的“卡牌复活”bug
   const mutateHand = useCallback((id: number, fn: (hand: Card[]) => Card[]) => {
+    // 失去最后一张手牌的判定放在 state updater **之外**：
+    // StrictMode 下 updater 可能被调用两次，写在里面会重复触发「连营」。
+    const beforePlayer = playersRef.current.find(p => p.id === id);
+    const projected = beforePlayer ? fn(beforePlayer.hand) : [];
+    const lostAll = !!beforePlayer && !beforePlayer.isDead
+      && beforePlayer.hand.length > 0 && projected.length === 0;
     setPlayers(prev => {
       const target = prev.find(p => p.id === id);
       const rawHand = target ? fn(target.hand) : [];
       // 防御性去重：同一张牌（同 id）不应在一手牌里出现两次，否则会重复渲染/重复出牌
       const seen = new Set<string>();
       const nextHand = rawHand.filter(c => (seen.has(c.id) ? false : (seen.add(c.id), true)));
-      const lostLast = !!target && target.hero.name === '陆逊' && !target.isDead
-        && target.hand.length > 0 && nextHand.length === 0;
       const updated = prev.map(p => p.id === id ? { ...p, hand: nextHand } : p);
       playersRef.current = updated;
-      // 陆逊「连营」：失去最后一张手牌时补一张
-      if (lostLast) {
-        setTimeout(() => {
-          const live = playersRef.current.find(p => p.id === id);
-          if (!live || live.isDead || live.hand.length > 0) return;
-          addLog(`${live.hero.name} 发动「连营」，摸一张牌`, 'skill');
-          showSkillBanner(live.hero.name, '连营');
-          drawCardsRef.current?.(id, 1);
-        }, 0);
-      }
       return updated;
     });
+    // 陆逊「连营」已迁移到 src/game/skills/migrated_phase.ts（afterCardLost）：
+    // 这里只如实上报「手牌清零」这一次失去，判定与结算都由注册表完成。
+    if (lostAll) handEmptiedRef.current?.(id, beforePlayer?.hand ?? []);
   }, []);
+
+  // 立刻同步最新闭包：每次渲染刷新一次，避免 mutateHand 持有过期的 notifyCardLost
+  handEmptiedRef.current = (id, lost) => {
+    // 推迟到本次 state 提交之后，让「连营」摸到的牌接在清零之后
+    setTimeout(() => { void notifyCardLost(id, lost, 'other', false, 0); }, 0);
+  };
 
   const updatePlayer = (id: number, updates: Partial<Player>) => {
     // 董白「黠慧」：体力值减少后，解除对获得的黑色牌的使用/打出/弃置限制
@@ -1436,12 +1474,12 @@ const App: React.FC = () => {
   drawCardsRef.current = drawCards;
 
   // 孙尚香「枭姬」：失去装备区的牌时摸两张
-  const triggerXiaoji = useCallback((playerId: number) => {
-    const p = getPlayer(playerId);
-    if (!p || p.isDead || p.hero.name !== '孙尚香') return;
-    drawCards(playerId, 2);
-    addLog(`${p.hero.name} 发动「枭姬」，失去装备后摸了两张牌`, 'skill');
-  }, [drawCards]);
+  // 已迁移到 src/game/skills/migrated_phase.ts（afterCardLost）。这里保留同名的
+  // 轻量入口，只为让 combat.ts 里「装备被顺走/拆掉/顶替」的既有调用点不必逐处改造：
+  // 判定与结算都交给注册表，这里只负责如实上报一次「失去了装备区的牌」。
+  const triggerXiaoji = useCallback((playerId: number, card: Card) => {
+    void notifyCardLost(playerId, [card], 'equip', true);
+  }, []);
 
   // 甘夫人「淑慎」：甘夫人回复体力后，可令一名友方角色摸等量牌
   const recoverHp = (playerId: number, amount: number) => {
@@ -1583,7 +1621,7 @@ const App: React.FC = () => {
       });
       addLog(`${player.hero.name} 弃置了旧装备【${prev.name}】`, 'info');
       onEquipLost(playerId, prev.name);
-      triggerXiaoji(playerId);
+      triggerXiaoji(playerId, prev);
     }
     // 与普通出牌一致：卡面翻入动画 + 语音；没有装备台词时用统一「装备」音效兜底
     showCardVisual(card, player.hero.name, 1200, player.hero.gender, '装备');
@@ -2071,7 +2109,6 @@ const App: React.FC = () => {
     setIsAnxuMode(false);
     setHasUsedAnxu(false);
     setAnxuTargets([]);
-    luoyiPlayerRef.current = null;
     // 第 1 批女将：新局重置
     setIsGanluMode(false);
     setGanluTargets([]);
@@ -2199,12 +2236,12 @@ const App: React.FC = () => {
     // 张琪瑛「法箓」：因弃置移至弃牌堆后按花色获得标记
     if (before) grantZhangMarks(before, cardsToDiscard);
 
-    // 陆逊「连营」：失去最后一张手牌后摸一张
-    if (lostAllHand && before && !before.isDead && before.hero.name === '陆逊') {
-      addLog(`${before.hero.name} 发动「连营」，摸一张牌`, 'skill');
-      showSkillBanner(before.hero.name, '连营');
-      drawCards(playerId, 1);
-    }
+    // 陆逊「连营」已迁移到 src/game/skills/migrated_phase.ts（afterCardLost）。
+    // 只上报真正被移出手牌的牌（cardsToDiscard 可能含「黠慧」挡下的牌）。
+    const removedFromHand = before
+      ? before.hand.filter(c => cardIdsToRemove.has(c.id))
+      : cardsToDiscard;
+    void notifyCardLost(playerId, removedFromHand, 'discard', false, lostAllHand ? 0 : undefined);
 
     // 张星彩「甚贤」：回合外其他角色因弃置失去牌且其中有基本牌时，摸一张（每回合限一次）
     const xingcai = playersRef.current.find(p => !p.isDead && p.hero.name === '张星彩');
@@ -2509,7 +2546,6 @@ const App: React.FC = () => {
         setHasUsedAnxu(false);
         setIsAnxuMode(false);
         setAnxuTargets([]);
-        luoyiPlayerRef.current = null;
         // 第 1 批女将：回合开始重置（限一次/暗置计数）
         turnCountRef.current += 1;
         turnOwnerIdRef.current = currentPlayer.id;
@@ -3036,39 +3072,14 @@ const App: React.FC = () => {
           addLog(`${currentPlayer.hero.name} 发动「英姿」，额外摸一张牌`, 'skill');
           showSkillBanner(currentPlayer.hero.name, '英姿');
         }
-        // 兵粮寸断已在判定阶段结算，这里只按结果决定是否摸牌
-        if (currentPlayer.hero.name === '张辽') {
-          // 张辽「突袭」：不摸牌，改为获得至多两名其他角色的各一张手牌
-          const candidates = playersRef.current
-            .filter(p => !p.isDead && p.id !== currentPlayer.id && p.hand.length > 0)
-            .sort((a, b) => b.hand.length - a.hand.length)
-            .slice(0, 2);
-          if (candidates.length > 0) {
-            addLog(`${currentPlayer.hero.name} 发动「突袭」，改为获得其他角色的手牌`, 'skill');
-            showSkillBanner(currentPlayer.hero.name, '突袭');
-            for (const c of candidates) {
-              const p = getPlayer(c.id);
-              if (!p || p.hand.length === 0) continue;
-              const stolen = p.hand[Math.floor(Math.random() * p.hand.length)];
-              mutateHand(c.id, hand => hand.filter(x => x.id !== stolen.id));
-              mutateHand(currentPlayer.id, hand => [...hand, stolen]);
-              addLog(`${currentPlayer.hero.name} 获得 ${p.hero.name} 的一张手牌`, 'info');
-              await delay(300);
-            }
-          } else {
-            drawCards(currentPlayer.id, drawCount);
-          }
-        } else {
-          let actualDraw = drawCount;
-          // 许褚「裸衣」：手中有杀/决斗时少摸一张，本回合伤害+1（官方无体力下限，体力 1 也可发动）
-          if (currentPlayer.hero.name === '许褚'
-              && currentPlayer.hand.some(c => c.name === CardName.SHA || c.name === CardName.JUEDOU)) {
-            actualDraw = Math.max(0, actualDraw - 1);
-            luoyiPlayerRef.current = currentPlayer.id;
-            addLog(`${currentPlayer.hero.name} 发动「裸衣」，少摸一张牌，本回合【杀】/【决斗】伤害+1`, 'skill');
-            showSkillBanner(currentPlayer.hero.name, '裸衣');
-          }
-          drawCards(currentPlayer.id, actualDraw);
+        // 张辽「突袭」/ 许褚「裸衣」已迁移到 src/game/skills/migrated_phase.ts
+        // （drawPhaseBegin：突袭把摸牌改为获得手牌，裸衣少摸一张并记下本回合伤害+1）
+        const drawPhase = await dispatchDrawPhaseBegin(buildSkillDeps(), currentPlayer.id, {
+          count: drawCount,
+        });
+        if (drawPhase.note) addLog(drawPhase.note, 'skill');
+        if (!drawPhase.replaced) {
+          drawCards(currentPlayer.id, typeof drawPhase.count === 'number' ? drawPhase.count : drawCount);
         }
         await delay(800);
         setPhase(GamePhase.ACTION);
@@ -3781,11 +3792,15 @@ const App: React.FC = () => {
           addLog(`胡金定 发动「怀子」，手牌上限视为体力上限（应弃 ${excess} 张，原为 ${rawExcess} 张）`, 'skill');
         }
         
-        // 吕蒙「克己」：本回合出牌阶段未使用【杀】，可跳过弃牌阶段
-        if (updatedPlayer.hero.name === '吕蒙' && (slashUsageRef.current[updatedPlayer.id] ?? 0) === 0) {
-          if (excess > 0) {
-            addLog(`${updatedPlayer.hero.name} 发动「克己」，本回合未出【杀】，跳过弃牌阶段`, 'skill');
-            showSkillBanner(updatedPlayer.hero.name, '克己');
+        // 吕蒙「克己」：出牌阶段未使用【杀】则跳过弃牌阶段
+        // 判定已迁移到 src/game/skills/migrated_phase.ts（discardPhaseSkip）
+        const skipDiscard = dispatchDiscardPhaseSkip(buildSkillDeps(), updatedPlayer.id, {
+          slashesUsed: slashUsageRef.current[updatedPlayer.id] ?? 0,
+          excess,
+        });
+        if (skipDiscard.skip) {
+          if (skipDiscard.note && excess > 0) {
+            addLog(skipDiscard.note, 'skill');
             await delay(500);
           }
           setPhase(GamePhase.END);
@@ -5082,7 +5097,7 @@ const App: React.FC = () => {
         discardPileRef.current = next;
         return next;
       });
-      triggerXiaoji(ownerId);
+      triggerXiaoji(ownerId, cost);
     } else {
       discardCards(ownerId, [cost]);
     }
@@ -6548,7 +6563,6 @@ const App: React.FC = () => {
     lingrenBoostRef,
     lingrenUsedRef,
     lockXiaohuiCards,
-    luoyiPlayerRef,
     mumuNoSlashRef,
     mutateHand,
     onEquipLost,

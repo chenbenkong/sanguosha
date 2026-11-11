@@ -1,7 +1,8 @@
 import type {
   SkillContext, DamageEvent, CardUsedEvent, JudgeEvent,
+  DrawPhaseEvent, DrawPhaseResult, DiscardPhaseEvent, DiscardPhaseResult, CardLostEvent,
 } from './registry';
-import { skillHook } from './registry';
+import { skillHook, mergeDrawPhase } from './registry';
 import { mergeJudgeBefore, mergeDamageBefore } from './engineAbilities.ts';
 import type { JudgeBeforeEvent, DamageBeforeEvent, JudgeBeforeResult, DamageBeforeResult } from './engineAbilities.ts';
 import type { Card, Player } from '../../../types';
@@ -258,6 +259,50 @@ export const dispatchDamageBefore = async (
   }
   return mergeDamageBefore(results);
 }) || {};
+
+/** 摸牌阶段开始：收集所有技能的修正并合并（突袭改获得 / 裸衣少摸一张） */
+export const dispatchDrawPhaseBegin = async (
+  deps: DispatchDeps,
+  drawerId: number,
+  ev: DrawPhaseEvent,
+): Promise<DrawPhaseResult> => await withGuard(`dpb-${drawerId}`, async () => {
+  const results: Array<DrawPhaseResult | null | void> = [];
+  for (const { def, fn } of skillHook('drawPhaseBegin')) {
+    for (const self of ownersOf(deps, def.hero)) {
+      if (self.id !== drawerId) continue;
+      results.push(await fn(ctxFor(deps, self, def.hero, def.skill), ev));
+    }
+  }
+  return mergeDrawPhase(results);
+}) || {};
+
+/** 弃牌阶段：任意一个技能返回 skip 即跳过整个弃牌阶段（克己） */
+export const dispatchDiscardPhaseSkip = (
+  deps: DispatchDeps,
+  ownerId: number,
+  ev: DiscardPhaseEvent,
+): DiscardPhaseResult => {
+  for (const { def, fn } of skillHook('discardPhaseSkip')) {
+    for (const self of ownersOf(deps, def.hero)) {
+      if (self.id !== ownerId) continue;
+      const r = fn(ctxFor(deps, self, def.hero, def.skill), ev);
+      if (r && r.skip) return r;
+    }
+  }
+  return { skip: false };
+};
+
+/** 不因使用/打出而失去牌后（弃置 / 被获得 / 移出装备区） */
+export const dispatchCardLost = async (deps: DispatchDeps, ev: CardLostEvent): Promise<void> => {
+  await withGuard(`lost-${ev.player.id}-${ev.cards.map(c => c.id).join(',')}`, async () => {
+    for (const { def, fn } of skillHook('afterCardLost')) {
+      for (const self of ownersOf(deps, def.hero)) {
+        if (self.id !== ev.player.id) continue;
+        await fn(ctxFor(deps, self, def.hero, def.skill), ev);
+      }
+    }
+  });
+};
 
 /** 测试用：清空技能内存 */
 export const __clearSkillMemory = (): void => { MEMORY.clear(); HERO_MEMORY.clear(); };

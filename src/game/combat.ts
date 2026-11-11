@@ -74,7 +74,6 @@ export interface CombatDeps {
   lingrenBoostRef: React.RefObject<Record<string, { targetId: number; bonus: number; }>>;
   lingrenUsedRef: React.RefObject<boolean>;
   lockXiaohuiCards: (ownerId: number, receiverId: number, cards: Card[]) => void;
-  luoyiPlayerRef: React.RefObject<number | null>;
   mumuNoSlashRef: React.RefObject<number | null>;
   mutateHand: (id: number, fn: (hand: Card[]) => Card[]) => void;
   onEquipLost: (playerId: number, equipName: CardName) => void;
@@ -111,7 +110,7 @@ export interface CombatDeps {
   triggerLieren: (victimId: number, sourceId: number, damageCard?: Card) => Promise<void>;
   triggerShuyong: (ownerId: number, preferredVictimId?: number) => Promise<void>;
   triggerWanwei: (ownerId: number, names: string[]) => void;
-  triggerXiaoji: (playerId: number) => void;
+  triggerXiaoji: (playerId: number, card: Card) => void;
   tryZhenlie: (target: Player, source: Player, card: Card) => Promise<boolean>;
   turnCountRef: React.RefObject<number>;
   turnIndex: number;
@@ -186,7 +185,6 @@ export const createCombatEngine = (deps: CombatDeps): CombatEngine => {
     lingrenBoostRef,
     lingrenUsedRef,
     lockXiaohuiCards,
-    luoyiPlayerRef,
     mumuNoSlashRef,
     mutateHand,
     onEquipLost,
@@ -1140,7 +1138,7 @@ export const createCombatEngine = (deps: CombatDeps): CombatEngine => {
             mutateHand(source.id, hand => [...hand, stolenEquip]);
             lockXiaohuiCards(target.id, source.id, [stolenEquip]);
             onEquipLost(target.id, stolenEquip.name);
-            triggerXiaoji(target.id);
+            triggerXiaoji(target.id, stolenEquip);
             addLog(`${source.hero.name} 顺手牵走了 ${target.hero.name} 的装备【${stolenEquip.name}】`, 'chat');
             triggerWanwei(target.id, [stolenEquip.name]);
           } else if (target.hand.length > 0) {
@@ -1214,7 +1212,7 @@ export const createCombatEngine = (deps: CombatDeps): CombatEngine => {
               return newPile;
             });
             onEquipLost(target.id, brokenEquip.name);
-            triggerXiaoji(target.id);
+            triggerXiaoji(target.id, brokenEquip);
             addLog(`${source.hero.name} 拆掉了 ${target.hero.name} 的装备【${brokenEquip.name}】`, 'chat');
             triggerWanwei(target.id, [brokenEquip.name]);
           } else {
@@ -1489,7 +1487,7 @@ export const createCombatEngine = (deps: CombatDeps): CombatEngine => {
             return { equipment: nextEquip };
           });
           mutateHand(source.id, hand => [...hand, weapon]);
-          triggerXiaoji(target.id);
+          triggerXiaoji(target.id, weapon);
           addLog(`${target.hero.name} 无法使用【杀】，将【${weapon.name}】交给了 ${source.hero.name}`, 'info');
         } else {
           addLog(`${target.hero.name} 没有【杀】也没有武器，【借刀杀人】无效果`, 'info');
@@ -2288,12 +2286,7 @@ export const createCombatEngine = (deps: CombatDeps): CombatEngine => {
       window.jiuBoost[sourceId] = false;
     }
 
-    // 许褚「裸衣」：本回合【杀】/【决斗】伤害+1
-    if (luoyiPlayerRef.current === sourceId && damageCard
-        && (damageCard.name === CardName.SHA || damageCard.name === CardName.JUEDOU)) {
-      finalAmount += 1;
-      addLog(`【裸衣】触发，${source?.hero.name ?? ''} 的伤害+1`, 'danger');
-    }
+    // 许褚「裸衣」已迁移到 src/game/skills/migrated_phase.ts（damageBefore）
 
     // 古锭刀（锁定技）：你的【杀】造成伤害时，若目标没有手牌，伤害+1
     if (damageCard?.name === CardName.SHA && sourceId !== victimId
@@ -2888,7 +2881,7 @@ export const createCombatEngine = (deps: CombatDeps): CombatEngine => {
           discardPileRef.current = next;
           return next;
         });
-        triggerXiaoji(victimId);
+        triggerXiaoji(victimId, horse);
         addLog(`${source.hero.name} 的【麒麟弓】射落了 ${v.hero.name} 的【${horse.name}】`, 'skill');
       }
     }
