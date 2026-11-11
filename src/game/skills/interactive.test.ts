@@ -52,13 +52,15 @@ describe('曹轶「蜜饴」交互', () => {
     expect(damageFrom(fx, 0)).toBe(1);
   });
 
-  it('有受伤友军时优先治疗，不弹伤害选择', async () => {
+  it('有受伤友军时优先治疗（弹治疗选择而非伤害选择）', async () => {
     const me = P('曹轶', 0);
     const hurt = P('友', 1, { hp: 1, maxHp: 4 });
     const rec = recorder(() => ({ kind: 'cancel' }));
     const { deps, fx } = makeHarness([me, hurt], { requestChoice: rec.fn });
     await dispatchTurnStart(deps, me);
-    expect(rec.seen.length).toBe(0);
+    // 现在治疗也会询问玩家，但问的是「回复体力」而不是「造成伤害」
+    expect(rec.seen.length).toBeGreaterThan(0);
+    expect(rec.seen[0].title).toContain('回复体力');
     expect(fx.healed.some(h => h.playerId === 1)).toBe(true);
   });
 });

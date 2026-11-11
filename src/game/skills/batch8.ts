@@ -68,7 +68,16 @@ registerSkill({
       // 准备阶段：己方受伤者回血，否则对敌方造成伤害（自动择优选）
       const allies = ctx.players.filter(p => !p.isDead && p.id !== ctx.self.id && p.hp < p.maxHp);
       if (allies.length > 0) {
-        const t = allies[0];
+        const pickedHeal = await ctx.requestChoice({
+          title: '蜜饴：选择回复体力的角色',
+          mode: 'target',
+          targets: allies.map(p => ({ id: p.id, name: p.hero.name, sub: p.hp + ' / ' + p.maxHp })),
+          min: 1,
+          max: 1,
+          cancelLabel: '改为造成伤害',
+        });
+        const chosenHealId = pickedHeal && pickedHeal.kind === 'target' ? Number(pickedHeal.ids?.[0]) : null;
+        const t = (chosenHealId != null && allies.find(p => p.id === chosenHealId)) || allies[0];
         ctx.heal(t.id, 1);
         ctx.log(`【蜜饴】曹轶令 ${t.hero.name} 回复 1 点体力`);
       } else {

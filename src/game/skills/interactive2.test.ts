@@ -108,3 +108,42 @@ describe('莫琼树「绛脂」交互', () => {
     expect(fx.drawn.some(d => d.playerId === 0 && d.count === 3)).toBe(true);
   });
 });
+
+describe('唐姬「抗歌」交互', () => {
+  it('玩家选定的守护对象生效', async () => {
+    const tj = P('唐姬', 0);
+    const a = P('甲', 1, { hp: 4, maxHp: 4 });
+    const b = P('乙', 2, { hp: 2, maxHp: 4 });
+    // AI 会选血量最高的「甲」，玩家改选「乙」
+    const rec = recorder(() => ({ kind: 'target', ids: [2] }));
+    const { deps } = makeHarness([tj, a, b], { requestChoice: rec.fn });
+    await dispatchTurnEnd(deps, tj);
+    expect(rec.seen.length).toBe(1);
+    expect(tj.kanggeTargetId).toBe(2);
+  });
+
+  it('玩家取消时不设定守护对象', async () => {
+    const tj = P('唐姬', 0);
+    const { deps } = makeHarness([tj, P('甲', 1)], { requestChoice: async () => ({ kind: 'cancel' }) });
+    await dispatchTurnEnd(deps, tj);
+    expect(tj.kanggeTargetId).toBeUndefined();
+  });
+
+  it('AI（返回 null）回落到血量最高的角色', async () => {
+    const tj = P('唐姬', 0);
+    const a = P('甲', 1, { hp: 4, maxHp: 4 });
+    const b = P('乙', 2, { hp: 1, maxHp: 4 });
+    const { deps } = makeHarness([tj, a, b], { requestChoice: async () => null });
+    await dispatchTurnEnd(deps, tj);
+    expect(tj.kanggeTargetId).toBe(1);
+  });
+
+  it('已有守护对象时不再询问', async () => {
+    const tj = P('唐姬', 0);
+    tj.kanggeTargetId = 1;
+    const rec = recorder(() => ({ kind: 'target', ids: [2] }));
+    const { deps } = makeHarness([tj, P('甲', 1), P('乙', 2)], { requestChoice: rec.fn });
+    await dispatchTurnEnd(deps, tj);
+    expect(rec.seen.length).toBe(0);
+  });
+});
