@@ -4273,3 +4273,140 @@ a:focus-visible {
 }
 .battle-intro__name { opacity: 1; }
 
+
+
+/* ===== 选将卡：技能速览浮层 =====
+   浮层用 position: fixed，因为卡片 .hero-pick 是 overflow: hidden，且外层是滚动容器，
+   卡内定位的浮层一定会被裁掉。深浅两套配色都走同一组变量，避免只适配一种主题。 */
+.hero-skill-preview {
+  position: fixed;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(200, 164, 92, 0.55);
+  background: linear-gradient(180deg, rgba(26, 20, 14, 0.98) 0%, rgba(14, 10, 7, 0.99) 100%);
+  color: #e6d9bd;
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(2px);
+  overflow: auto;
+  pointer-events: auto;
+}
+.theme-light .hero-skill-preview {
+  border-color: rgba(168, 132, 44, 0.55);
+  background: linear-gradient(180deg, rgba(252, 249, 243, 0.99) 0%, rgba(243, 234, 216, 0.99) 100%);
+  color: #4a3a22;
+  box-shadow: 0 16px 38px rgba(90, 70, 40, 0.28), 0 0 0 1px rgba(196, 167, 125, 0.4);
+}
+/* 移动端：贴底抽屉，避免浮层被屏幕边缘挤成一条 */
+.hero-skill-preview.is-sheet {
+  left: 12px;
+  right: 12px;
+  bottom: 12px;
+  top: auto;
+  border-radius: 12px;
+}
+
+.hero-skill-preview__head {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding-bottom: 5px;
+  border-bottom: 1px solid rgba(200, 164, 92, 0.28);
+}
+.theme-light .hero-skill-preview__head { border-bottom-color: rgba(168, 132, 44, 0.28); }
+.hero-skill-preview__name {
+  font-family: "Ma Shan Zheng", cursive;
+  font-size: 20px;
+  line-height: 1.1;
+  color: #e8cf94;
+  letter-spacing: 0.06em;
+}
+.theme-light .hero-skill-preview__name { color: #6b4a1a; }
+.hero-skill-preview__meta {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  color: #9a8b74;
+}
+.theme-light .hero-skill-preview__meta { color: #8a7a60; }
+.hero-skill-preview__close {
+  margin-left: auto;
+  min-width: 32px;
+  min-height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  font-size: 14px;
+  color: #c8bda8;
+  border: 1px solid transparent;
+}
+.hero-skill-preview__close:hover {
+  color: #f0d894;
+  border-color: rgba(200, 164, 92, 0.5);
+}
+.theme-light .hero-skill-preview__close { color: #6b4a1a; }
+.theme-light .hero-skill-preview__close:hover {
+  color: #3a2a12;
+  border-color: rgba(168, 132, 44, 0.5);
+}
+
+.hero-skill-preview__tags { display: flex; flex-wrap: wrap; gap: 4px; }
+.hero-skill-preview__tag {
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  color: #f4e4bf;
+  background: rgba(158, 43, 37, 0.75);
+}
+.theme-light .hero-skill-preview__tag {
+  color: #fdf6e6;
+  background: rgba(139, 60, 44, 0.82);
+}
+
+.hero-skill-preview__body { display: flex; flex-direction: column; gap: 6px; }
+.hero-skill-preview__skill { font-size: 13px; line-height: 1.6; }
+.hero-skill-preview__skill-name {
+  font-weight: 700;
+  color: #e8cf94;
+  margin-right: 2px;
+}
+.theme-light .hero-skill-preview__skill-name { color: #8b6914; }
+.hero-skill-preview__skill.is-lord .hero-skill-preview__skill-name { color: #d9b46a; }
+.theme-light .hero-skill-preview__skill.is-lord .hero-skill-preview__skill-name { color: #9a6b12; }
+.hero-skill-preview__skill-desc { color: #cfc2a8; }
+.theme-light .hero-skill-preview__skill-desc { color: #55483a; }
+
+/* 移动端技能速览入口（桌面隐藏，见 HeroCard 的 md:hidden）。
+   底部 44px 是它的专属条带：脚注预留下内边距后，它落在描述文字下方，
+   不覆盖任何文本，也满足指触 44×44 的最小命中尺寸。 */
+.hero-skill-toggle {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 3;
+  min-height: 44px;
+  padding: 0 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  color: #f4e4bf;
+  background: rgba(12, 9, 6, 0.9);
+  border-top: 1px solid rgba(200, 164, 92, 0.45);
+}
+.hero-skill-toggle:active { background: rgba(200, 164, 92, 0.3); }
+@media (max-width: 767px) {
+  .hero-pick-foot { padding-bottom: calc(44px + 0.25rem); }
+}
+/* 触屏设备上即使宽度 ≥768 也保留入口：hover 在触屏不可用 */
+@media (hover: none) {
+  .hero-skill-toggle { display: flex !important; align-items: center; justify-content: center; }
+}
