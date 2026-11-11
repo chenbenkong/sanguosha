@@ -13,6 +13,7 @@ import './migrated3';
 import './migrated_wa';
 import './migrated_abilities';
 import './migrated_phase';
+import './migrated_abilities2';
 
 export { skillsOf, skillHook, registeredHeroCount } from './registry';
 export type {

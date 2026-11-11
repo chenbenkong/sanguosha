@@ -3,7 +3,6 @@ import type { Card, EquipmentSlot, Player } from '../../types';
 import { canHuguan, tianzeCanStrike, cilvDrawCount, fangduEffect, yuanditriggers } from './skills-batch6';
 import { dispatchAfterDamage, dispatchAfterDealDamage, dispatchCardUsed, dispatchDamageBefore } from './skills/dispatch';
 import { CardName, CardType, GamePhase, Identity, Suit } from '../../types';
-import { EQUIP_META } from '../../constants';
 import { setDeck, setDiscardPile } from './gameStore';
 import { rankValue, shuffle } from './utils';
 import type { LogEntry } from '../../types';
@@ -2362,7 +2361,20 @@ export const createCombatEngine = (deps: CombatDeps): CombatEngine => {
       return;
     }
 
-    // 技能注册表：伤害结算前（绝情/骄矜/竭缘/天香 等可改数值、防止、转移）
+    // 防具：藤甲受火焰伤害+1；白银狮子把大于1的伤害压到1
+    let victim = getPlayer(victimId)!;
+    const armor = victim.equipment?.armor?.name;
+    if (!ignoreArmor && armor === CardName.TENGJIA && dmgNature === 'fire') {
+      finalAmount += 1;
+      addLog(`${victim.hero.name} 的【藤甲】遇火，火焰伤害+1`, 'danger');
+    }
+    if (!ignoreArmor && armor === CardName.BAIYIN && finalAmount > 1) {
+      finalAmount = 1;
+      addLog(`${victim.hero.name} 的【白银狮子】将伤害减为 1 点`, 'skill');
+    }
+
+    // 技能注册表：伤害结算前（骄矜/竭缘/仁释/天香 等可改数值、防止、转移）
+    // 分发点必须在【藤甲】/【白银狮子】之后：旧内联分支就是这个顺序，提前会改规则。
     {
       const victimPre = getPlayer(victimId);
       const srcPre = sourceId >= 0 ? getPlayer(sourceId) : undefined;
@@ -2391,8 +2403,9 @@ export const createCombatEngine = (deps: CombatDeps): CombatEngine => {
           card: damageCard,
         });
         if (pre.note) addLog(pre.note, 'skill');
-        // 注意：这里的提前 return 会跳过 finally 的 setIsProcessing 减，
-        // 导致处理锁永不释放、整局卡死。所以全部改为「释放锁后再返回」。
+        // 本块位于 takeDamage 的 try 内，返回时 finally 会释放处理锁，
+        // 与其余提前返回（如「绝情」）一致——这里**不能**再手动减一次，
+        // 否则嵌套结算（外层已持有一次锁）会被提前释放，AI 主循环重复推进同一阶段。
         let earlyReturn = false;
         if (pre.prevent) {
           addLog(`${victimPre.hero.name} 的伤害被技能阻止`, 'skill');
@@ -2415,80 +2428,6 @@ export const createCombatEngine = (deps: CombatDeps): CombatEngine => {
         // 与同函数其它提前返回（如「绝情」分支）保持一致：只 return，不减锁。
         if (earlyReturn) return;
       }
-    }
-
-    // 防具：藤甲受火焰伤害+1；白银狮子把大于1的伤害压到1
-    let victim = getPlayer(victimId)!;
-    const armor = victim.equipment?.armor?.name;
-    if (!ignoreArmor && armor === CardName.TENGJIA && dmgNature === 'fire') {
-      finalAmount += 1;
-      addLog(`${victim.hero.name} 的【藤甲】遇火，火焰伤害+1`, 'danger');
-    }
-    if (!ignoreArmor && armor === CardName.BAIYIN && finalAmount > 1) {
-      finalAmount = 1;
-      addLog(`${victim.hero.name} 的【白银狮子】将伤害减为 1 点`, 'skill');
-    }
-
-    // 灵雎「竭缘」：受到其他角色造成的伤害时，若其体力值不小于你，可弃一张红色手牌令此伤害-1
-    const lingjuVictim = getPlayer(victimId);
-    if (lingjuVictim && lingjuVictim.hero.name === '灵雎' && sourceId >= 0
-        && sourceId !== victimId && skillsOn(victimId) && finalAmount > 0) {
-      const s = getPlayer(sourceId);
-      if (s && s.hp >= lingjuVictim.hp) {
-        const red = lingjuVictim.hand.find(c => (c.suit === Suit.HEART || c.suit === Suit.DIAMOND) && c.name !== CardName.TAO)
-          ?? (lingjuVictim.hp <= 2
-            ? lingjuVictim.hand.find(c => c.suit === Suit.HEART || c.suit === Suit.DIAMOND)
-            : undefined);
-        if (red) {
-          mutateHand(victimId, h => h.filter(c => c.id !== red.id));
-          finalAmount = Math.max(0, finalAmount - 1);
-          addLog(`【竭缘】灵雎弃置红色【${red.name}】，此伤害 -1`, 'skill');
-          showSkillBanner('灵雎', '竭缘');
-        }
-      }
-    }
-
-    // 孙鲁班「骄矜」：受到男性角色造成的伤害时，可弃置一张装备牌令此伤害-1
-    const jjVictim = getPlayer(victimId);
-    if (jjVictim && jjVictim.hero.name === '孙鲁班' && sourceId >= 0 && sourceId !== victimId
-        && skillsOn(victimId) && finalAmount > 0) {
-      const srcP = getPlayer(sourceId);
-      const equipCards = Object.values(jjVictim.equipment ?? {}).filter((c): c is Card => !!c);
-      if (srcP && srcP.hero.gender === 'male' && equipCards.length > 0
-          && (jjVictim.hp - finalAmount <= 1 || finalAmount >= 2)) {
-        const cost = equipCards[0];
-        const slot = EQUIP_META[cost.name]?.slot;
-        if (slot) {
-          updatePlayerWith(victimId, p => {
-            const eq = { ...(p.equipment ?? {}) };
-            delete eq[slot];
-            return { equipment: eq };
-          });
-        }
-        setDiscardPile(prev => {
-          const next = [...prev, cost];
-          discardPileRef.current = next;
-          return next;
-        });
-        finalAmount = Math.max(0, finalAmount - 1);
-        addLog(`【骄矜】孙鲁班弃置【${cost.name}】，此伤害 -1`, 'skill');
-        showSkillBanner('孙鲁班', '骄矜');
-      }
-    }
-
-    // 胡金定「仁释」：已受伤时受到【杀】伤害，防止并获得此【杀】，体力上限 -1
-    const rjVictim = getPlayer(victimId);
-    if (rjVictim && rjVictim.hero.name === '胡金定' && skillsOn(victimId)
-        && sourceId !== victimId && damageCard?.name === CardName.SHA
-        && rjVictim.hp < rjVictim.maxHp) {
-      const gained = damageCard;
-      mutateHand(victimId, h => [...h, gained]);
-      const newMax = Math.max(1, rjVictim.maxHp - 1);
-      updatePlayer(victimId, { maxHp: newMax, hp: Math.min(rjVictim.hp, newMax) });
-      addLog(`【仁释】胡金定防止此【杀】造成的伤害并获得【${gained.name}】，体力上限 -1（${newMax}）`, 'skill');
-      showSkillBanner('胡金定', '仁释');
-      await delay(400);
-      return;
     }
 
     // 羊徽瑜「弘仪」：被指定角色造成伤害时判定，红色受伤角色摸一张，黑色此伤害-1
@@ -2572,21 +2511,7 @@ export const createCombatEngine = (deps: CombatDeps): CombatEngine => {
       }
     }
 
-    // 小乔「天香」：弃一张红桃手牌，将伤害转移给伤害来源
-    if (victim.hero.name === '小乔' && sourceId !== victimId && skillsOn(victimId)) {
-      const heartCard = victim.hand.find(c => c.suit === Suit.HEART);
-      if (heartCard) {
-        discardCards(victimId, [heartCard]);
-        addLog(`${victim.hero.name} 发动「天香」，弃置【${heartCard.name}】将伤害转移给 ${getPlayer(sourceId)?.hero.name ?? ''}`, 'skill');
-        showSkillBanner(victim.hero.name, '天香');
-        await delay(400);
-        const receiver = getPlayer(sourceId);
-        if (receiver && !receiver.isDead) {
-          await takeDamage(sourceId, sourceId, finalAmount, damageCard, dmgNature === 'normal' ? undefined : dmgNature);
-        }
-        return;
-      }
-    }
+    // 小乔「天香」已迁移到 src/game/skills/migrated_abilities2.ts（damageBefore transferTo）
 
     // 铁索连环：属性伤害传导（同一波次内每个角色只传导一次，避免状态未提交时递归打回自己）
     let chainOthers: Player[] = [];
