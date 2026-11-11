@@ -106,6 +106,75 @@ export interface SkillHooks {
   damageBefore?: (ctx: SkillContext, ev: DamageBeforeEvent) => DamageBeforeResult | null | void | Promise<DamageBeforeResult | null | void>;
   /** 不占手牌上限的牌数 */
   exemptHandCards?: (ctx: SkillContext, declaredSuit: Suit | null) => number;
+  /** 摸牌阶段开始：可改写摸牌数，或声明本次改用其它方式获得牌（突袭 / 裸衣） */
+  drawPhaseBegin?: (ctx: SkillContext, ev: DrawPhaseEvent) => DrawPhaseResult | null | void | Promise<DrawPhaseResult | null | void>;
+  /** 弃牌阶段：返回 skip 表示跳过整个弃牌阶段（克己） */
+  discardPhaseSkip?: (ctx: SkillContext, ev: DiscardPhaseEvent) => DiscardPhaseResult | null | void;
+  /** 角色不因使用/打出而失去牌后：弃置 / 被获得 / 移出装备区（枭姬 / 连营） */
+  afterCardLost?: (ctx: SkillContext, ev: CardLostEvent) => Promise<void> | void;
+}
+
+/**
+ * 摸牌阶段事件：引擎给出基础摸牌数（已含 drawPhaseBonus 的累加）。
+ */
+export interface DrawPhaseEvent {
+  count: number;
+}
+
+/**
+ * 摸牌阶段返回值：技能可改写摸牌数，也可声明本次不摸牌（改为其它获得方式）。
+ */
+export interface DrawPhaseResult {
+  /** 改写后的摸牌数 */
+  count?: number;
+  /** 本次不以摸牌结算（技能已自行完成效果），引擎跳过摸牌 */
+  replaced?: boolean;
+  /** 战报说明 */
+  note?: string;
+}
+
+/** 弃牌阶段事件 */
+export interface DiscardPhaseEvent {
+  /** 本回合已使用的【杀】数 */
+  slashesUsed: number;
+  /** 按手牌上限本应弃置的张数 */
+  excess: number;
+}
+
+/** 弃牌阶段返回值：skip 为 true 表示跳过整个弃牌阶段 */
+export interface DiscardPhaseResult {
+  skip: boolean;
+  /** 战报说明 */
+  note?: string;
+}
+
+/**
+ * 失去牌事件：牌**不因使用或打出**而离开该角色的手牌或装备区。
+ * 覆盖弃置、被其他角色获得、装备被顶替/拆走等所有途径。
+ */
+export interface CardLostEvent {
+  /** 失去牌的角色 */
+  player: Player;
+  /** 失去的牌 */
+  cards: Card[];
+  /** 失去途径；'other' 为上面三类之外的途径（如技能直接改写手牌） */
+  cause: 'discard' | 'gain' | 'equip' | 'other';
+  /** 失去之后该角色剩余的手牌数 */
+  handAfter: number;
+  /** 本批失去的牌是否来自装备区（装备区的牌不占手牌，handAfter 在此期间不变） */
+  fromEquip: boolean;
+}
+
+/** 摸牌阶段修正合并：replaced 一旦为 true 即终止；count 取最后一次显式设置 */
+export function mergeDrawPhase(results: Array<DrawPhaseResult | null | void>): DrawPhaseResult {
+  const out: DrawPhaseResult = {};
+  for (const r of results) {
+    if (!r) continue;
+    if (typeof r.count === 'number') out.count = r.count;
+    if (r.replaced) { out.replaced = true; break; }
+    if (r.note) out.note = out.note ? out.note + '；' + r.note : r.note;
+  }
+  return out;
 }
 
 /** 一个武将技能的完整定义 */
