@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { ChildProcess } from 'node:child_process';
 import { spawn } from 'node:child_process';
 import { enableTakeover, openApp, setSpeedLevel, sleep, startGameWithHero } from './helpers';
+import { startPreview } from './preview';
 import type { E2EContext } from './helpers';
 
 /**
@@ -18,10 +19,10 @@ import type { E2EContext } from './helpers';
  *  B. App.tsx performJudgment 的 judgeBefore —— 小乔「红颜」方块判定生效为红桃
  */
 
-const PORT = 7452;
-const BASE = `http://127.0.0.1:${PORT}/`;
+// 端口不硬编码：默认系统分配（E2E_PORT 可覆盖），并校验应答方是本仓库的 dev server。
+let BASE = '';
+let previewHandle: { base: string; stop: () => void } | null = null;
 
-let server: ChildProcess | null = null;
 
 /**
  * 确认真的是**本仓库的** dev server 在应答。
@@ -43,21 +44,14 @@ const isOurDevServer = async (): Promise<boolean> => {
 };
 
 beforeAll(async () => {
-  server = spawn('npx', ['vite', '--port', String(PORT), '--strictPort', '--host', '127.0.0.1'], {
-    cwd: process.cwd(),
-    shell: true,
-    stdio: 'ignore',
-  });
-  const deadline = Date.now() + 60000;
-  while (Date.now() < deadline) {
-    if (await isOurDevServer()) return;
-    await sleep(700);
-  }
-  throw new Error(`端口 ${PORT} 上没等到本仓库的 vite dev server（可能被别的进程占用）`);
-}, 90000);
+  // 用共用模块起 dev server：它会自选空闲端口，并在端口已被占用时校验应答方，
+  // 不一致直接报错而不是静默连到别人的服务上。
+  previewHandle = await startPreview({ dev: true });
+  BASE = previewHandle.base;
+}, 120000);
 
 afterAll(() => {
-  if (server) server.kill();
+  previewHandle?.stop();
 });
 
 type Page = E2EContext['page'];
