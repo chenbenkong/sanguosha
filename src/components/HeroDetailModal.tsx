@@ -2,7 +2,9 @@ import React, { useEffect } from 'react';
 import { Hero, Player, Identity } from '../../types';
 import { EQUIP_META } from '../../constants';
 import { getHeroDetail, SkillTag } from '../game/heroDetail';
-import { heroPortrait2x } from '../game/utils';
+import { heroFullCard2x, heroPortrait2x } from '../game/utils';
+import { useCardArtMode } from './game/useCardArtMode';
+import { CardArtToggle, FullCardImage } from './game/FullCardImage';
 
 interface HeroDetailModalProps {
   hero: Hero | null;
@@ -53,7 +55,13 @@ export const HeroDetailModal: React.FC<HeroDetailModalProps> = ({ hero, player, 
     return () => window.removeEventListener('keydown', onKey);
   }, [hero, onClose]);
 
+  const { mode: artMode, setMode: setArtMode } = useCardArtMode();
+
   if (!hero) return null;
+  /** 卡面模式下左侧大图换成官方完整卡面；无卡面武将（马云禄、蔡贞姬）恒回落立绘 */
+  const fullCard = heroFullCard2x(hero);
+  const cardMode = artMode === 'card' && fullCard !== null;
+  const artLabel = cardMode ? `${hero.name} 卡面` : `${hero.name} 立绘`;
   const { profile, skills } = getHeroDetail(hero);
   // 对局实时状态（仅当传入 player 时渲染）
   const judgeZone = player?.judgeZone ?? [];
@@ -194,20 +202,39 @@ export const HeroDetailModal: React.FC<HeroDetailModalProps> = ({ hero, player, 
               <button
                 onClick={() => onZoom?.(hero)}
                 className="relative block w-full rounded-lg overflow-hidden border border-[#c8a45c]/50 hover:border-[#f0d894] transition-colors group"
-                aria-label={`放大查看 ${hero.name} 立绘`}
-                title="点击放大 2x 立绘"
+                aria-label={`放大查看 ${artLabel}`}
+                title={cardMode ? '点击放大 2x 卡面' : '点击放大 2x 立绘'}
               >
-                <img
-                  src={heroPortrait2x(hero.avatarUrl)}
-                  alt={`${hero.name} 立绘`}
-                  loading="eager"
-                  decoding="async"
-                  className="block w-full aspect-[2/3] object-cover object-top"
-                />
+                {cardMode && fullCard ? (
+                  /* 卡面是 2:3 整幅、下半部分印着技能文本，object-cover 会把它裁掉，
+                     所以改成 object-contain 并给深色衬底填满两侧留白 */
+                  <div className="block w-full aspect-[2/3] bg-[#0d0a07] border border-black/40">
+                    <FullCardImage src={fullCard} alt={artLabel} loading="eager" />
+                  </div>
+                ) : (
+                  <img
+                    src={heroPortrait2x(hero.avatarUrl)}
+                    alt={artLabel}
+                    aria-label={artLabel}
+                    loading="eager"
+                    decoding="async"
+                    className="block w-full aspect-[2/3] object-cover object-top"
+                  />
+                )}
                 <span className="absolute right-2 bottom-2 text-[11px] px-2 py-1 rounded bg-black/70 text-[#e8cf94] border border-[#c8a45c]/40 opacity-90 group-hover:opacity-100">
                   放大查看
                 </span>
               </button>
+
+              {/* 就地切换：详情页不必退回选将页也能改画面模式 */}
+              {fullCard && (
+                <div className="mt-2 flex items-center justify-between gap-2">
+                  <span className="text-[11px] modal-text-dim">
+                    {cardMode ? '官方完整卡面' : '裁切立绘'}
+                  </span>
+                  <CardArtToggle mode={artMode} onChange={setArtMode} />
+                </div>
+              )}
 
               {/* 定位 / 难度 */}
               <div className="mt-3 flex items-center justify-between gap-2">

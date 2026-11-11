@@ -267,6 +267,9 @@ e2e 会自己起 `vite preview`（端口 7300），所以**必须先有 `dist/` 
 
 当前版本号：`APP_VERSION`（`src/game/constants.ts`）。以下为最后的 3 条成文更新记录。
 
+**v3.55** 选将页新增「卡面」模式：97 名武将可切换为三国杀官方完整卡面（含势力、勾玉与技能文本），
+大图查看与武将详情同步支持；两名无卡面武将自动回落立绘。
+
 **v3.31** 新增 7 名女将（关银屏 / 张星彩 / 卞夫人 / 诸葛果 / 曹节 / 伏皇后 / 马云禄），
 立绘统一升级，语音走白名单回退。
 
@@ -278,6 +281,8 @@ e2e 会自己起 `vite preview`（端口 7300），所以**必须先有 `dist/` 
 
 ## 许可与素材
 
-非商业个人练习项目。武将立绘、卡面、语音素材来源见
-[public/images/heroes/素材说明.md](public/images/heroes/素材说明.md) 与 [public/audio/语音说明.md](public/audio/语音说明.md)。
+非商业个人练习项目。素材来源分别见
+[public/images/heroes/素材说明.md](public/images/heroes/素材说明.md)（竖幅立绘）、
+[public/images/fullcards/素材说明.md](public/images/fullcards/素材说明.md)（官方完整卡面）与
+[public/audio/语音说明.md](public/audio/语音说明.md)。
 贡献约定见 [CONTRIBUTING.md](CONTRIBUTING.md)。

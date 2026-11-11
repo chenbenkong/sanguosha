@@ -6,6 +6,7 @@ import { IconSpeaker, IconMotion, IconDice, IconArrowLeft, ThemeIcon } from '../
 import { HeroCard } from './HeroCard';
 import { HERO_PAGE_SIZE, filterHeroes, parseHeroQuery } from './heroSelectQuery';
 import { useRecentHeroes } from './useRecentHeroes';
+import { useCardArtMode } from './useCardArtMode';
 
 export type HeroKingdomFilter = '全部' | '魏' | '蜀' | '吴' | '群';
 const KINGDOMS: HeroKingdomFilter[] = ['全部', '魏', '蜀', '吴', '群'];
@@ -51,6 +52,7 @@ export const HeroSelectScreen: React.FC<{
   onPageChange, allHeroes, selectedHero, onPickHero, onOpenDetail, onOpenPortrait, onStart,
 }) => {
   const { ids: recentIds, push: pushRecent } = useRecentHeroes();
+  const { mode: artMode, setMode: setArtMode } = useCardArtMode();
   /** 「最近」是选将页自己的筛选项，不占用 App 的 heroKingdom 联合类型 */
   const [recentOnly, setRecentOnly] = useState(false);
   const [page, setPage] = useState(0);
@@ -195,6 +197,26 @@ export const HeroSelectScreen: React.FC<{
             ))}
           </div>
 
+          {/* 画面模式：立绘看得清脸，卡面看得全信息。两者取舍真实存在，
+              所以给切换而不是替用户决定；默认立绘（脸大更好扫视）。 */}
+          <div
+            className="flex items-center gap-1 shrink-0 sm:ml-2"
+            role="group"
+            aria-label="切换卡面显示方式"
+          >
+            {([['portrait', '立绘'], ['card', '卡面']] as const).map(([m, label]) => (
+              <button
+                key={m}
+                onClick={() => setArtMode(m)}
+                aria-pressed={artMode === m}
+                className={tabClass(artMode === m) + ' min-w-0 px-2.5'}
+                title={m === 'card' ? '显示官方完整卡面（含技能文本）' : '显示武将立绘（裁切半身）'}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
           <div className="relative w-full sm:w-64 sm:ml-auto">
             <input
               value={heroQuery}
@@ -247,6 +269,7 @@ export const HeroSelectScreen: React.FC<{
                 key={hero.id}
                 hero={hero}
                 theme={theme}
+                artMode={artMode}
                 selected={selectedHero?.id === hero.id}
                 onPick={pickHero}
               />
