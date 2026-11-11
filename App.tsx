@@ -6276,7 +6276,6 @@ const App: React.FC = () => {
     const playerName = getPlayer(playerId)?.hero.name || '';
     // 小乔「红颜」已迁移到 src/game/skills/migrated_abilities.ts（judgeBefore）。
     // 这里不能再提前改写花色，否则钩子的守卫条件永远不成立、技能变成死代码。
-    const isXiaoqiao = playerName === '小乔'; // 仅用于下方日志文案
     let finalCard = judgmentCard;
     // 张琪瑛「真仪·紫微」：判定牌生效前弃置标记，改为黑桃5/红桃5
     let zhenyiNote = '';
@@ -6347,8 +6346,6 @@ const App: React.FC = () => {
         showSkillBanner('司马懿', '鬼才');
       }
     }
-    const rankDisplay = finalCard.rank;
-    addLog(`⚖️ ${playerName} 的【${reason}】判定：${finalCard.suit} ${rankDisplay}（判定牌：【${judgmentCard.name}】）${isXiaoqiao && finalCard.suit !== judgmentCard.suit ? '，触发「红颜」视为红桃' : ''}${zhenyiNote}${guicaiNote}`, 'warning');
     showJudgmentVisual(finalCard, playerName, reason);
     await delay(1600);
     // 技能注册表：判定牌翻出后、生效前（可替换判定牌或改写花色）
@@ -6387,6 +6384,12 @@ const App: React.FC = () => {
         }
       }
     }
+
+    // 判定日志在钩子之后打印：钩子可能改写花色（如红颜）或替换判定牌（如鬼才），
+    // 提前打印会把「生效花色」写错，也会漏掉技能触发的说明。
+    addLog(`⚖️ ${playerName} 的【${reason}】判定：${finalCard.suit} ${finalCard.rank}（判定牌：【${judgmentCard.name}】）` +
+      (finalCard.suit !== judgmentCard.suit ? `，触发「红颜」视为红桃` : '') +
+      zhenyiNote + guicaiNote, 'warning');
 
     // 技能注册表：判定牌生效后（新技能只需注册 afterJudge，不必在此加分支）
     {
