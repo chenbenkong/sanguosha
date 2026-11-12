@@ -26,6 +26,39 @@ export interface TiltHandlers {
 
 /** 最大倾斜角（度）。再大透视失真明显，卡面文字会糊。 */
 const MAX_TILT = 9;
+/**
+ * 指针位置 → 倾斜姿态。抽成纯函数是为了能确定性地单测：
+ * 真实环境里 (hover:hover) + (pointer:fine) 在不同机器上判定不同
+ * （CI 的 headless Chrome 报 hover:none，本地报 hover:hover），
+ * 蹲在浏览器里测角度会变成「测环境」而不是「测算法」。
+ *
+ * 入参用 getBoundingClientRect 的最小投影，避免测试里伪造整个 DOMRect。
+ * 返回 null 表示尺寸为零（元素未布局），调用方应直接放弃这次更新。
+ */
+export const tiltFromPoint = (
+  rect: { left: number; top: number; width: number; height: number },
+  clientX: number,
+  clientY: number,
+): { mx: string; my: string; rx: string; ry: string } | null => {
+  if (!rect.width || !rect.height) return null;
+
+  // 归一化到 0..1：左上角 (0,0)，右下角 (1,1)。指针移出元素后可能越界，
+  // 夹住以免出现极端角度。
+  const px = Math.min(1, Math.max(0, (clientX - rect.left) / rect.width));
+  const py = Math.min(1, Math.max(0, (clientY - rect.top) / rect.height));
+
+  // 指针在右半边时绕 Y 轴正转，牌面朝右下倾 —— 与「手拿着牌」的直觉一致
+  const ry = (px - 0.5) * 2 * MAX_TILT;
+  const rx = (0.5 - py) * 2 * MAX_TILT;
+
+  return {
+    mx: (px * 100).toFixed(1) + '%',
+    my: (py * 100).toFixed(1) + '%',
+    rx: rx.toFixed(2) + 'deg',
+    ry: ry.toFixed(2) + 'deg',
+  };
+};
+
 /** 悬停时抬起的高度（px），给「拿起来的牌」一点层次 */
 const LIFT = 4;
 /** 两次写入的最小间隔（ms），≈60fps */
@@ -51,9 +84,24 @@ export const useTilt = (disabled = false): TiltHandlers => {
   const lastAtRef = useRef(0);
 
   useEffect(() => {
-    enabledRef.current = !disabled
-      && mediaOk('(hover: hover) and (pointer: fine)')
-      && !mediaOk('(prefers-reduced-motion: reduce)');
+    const evaluate = (): void => {
+      enabledRef.current = !disabled
+        && mediaOk('(hover: hover) and (pointer: fine)')
+        && !mediaOk('(prefers-reduced-motion: reduce)');
+    };
+    evaluate();
+
+    // 监听变化而不是只在挂载时判定一次：插上鼠标、或用户中途打开
+    // 「减弱动效」，都应该即时生效，而不是要刷新页面。
+    if (typeof window.matchMedia !== 'function') return;
+    const queries = [
+      window.matchMedia('(hover: hover) and (pointer: fine)'),
+      window.matchMedia('(prefers-reduced-motion: reduce)'),
+    ];
+    for (const q of queries) q.addEventListener('change', evaluate);
+    return () => {
+      for (const q of queries) q.removeEventListener('change', evaluate);
+    };
   }, [disabled]);
 
   const onPointerMove = useCallback((e: React.PointerEvent<HTMLElement>) => {
@@ -64,19 +112,17 @@ export const useTilt = (disabled = false): TiltHandlers => {
     lastAtRef.current = now;
 
     const r = el.getBoundingClientRect();
-    if (!r.width || !r.height) return;
-    // 归一化到 0..1：左上角 (0,0)，右下角 (1,1)
-    const px = Math.min(1, Math.max(0, (e.clientX - r.left) / r.width));
-    const py = Math.min(1, Math.max(0, (e.clientY - r.top) / r.height));
+    const pose = tiltFromPoint(
+      { left: r.left, top: r.top, width: r.width, height: r.height },
+      e.clientX,
+      e.clientY,
+    );
+    if (!pose) return;
 
-    // 指针在右半边时绕 Y 轴正转，牌面朝右下倾 —— 与「手拿着牌」的直觉一致
-    const ry = (px - 0.5) * 2 * MAX_TILT;
-    const rx = (0.5 - py) * 2 * MAX_TILT;
-
-    el.style.setProperty('--mx', (px * 100).toFixed(1) + '%');
-    el.style.setProperty('--my', (py * 100).toFixed(1) + '%');
-    el.style.setProperty('--rx', rx.toFixed(2) + 'deg');
-    el.style.setProperty('--ry', ry.toFixed(2) + 'deg');
+    el.style.setProperty('--mx', pose.mx);
+    el.style.setProperty('--my', pose.my);
+    el.style.setProperty('--rx', pose.rx);
+    el.style.setProperty('--ry', pose.ry);
     el.style.setProperty('--lift', -LIFT + 'px');
     el.dataset.tilting = 'on';
   }, []);

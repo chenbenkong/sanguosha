@@ -412,16 +412,22 @@ describe('端到端 · 覆盖补充', () => {
     afterAll(async () => { if (ctx) await ctx.close(); });
 
     /**
-     * 倾斜只写 CSS 变量、不重渲染，所以断言都落在「变量与 data 属性」上，
-     * 直接读 computed transform 拿到的是一串 matrix，断言它既不可读也不稳。
+     * 倾斜的**启用条件**是否被正确执行。
      *
-     * 三条不变量：
-     *  1. 悬停到不同位置，--rx/--ry 换了值（真的在跟指针）
-     *  2. 指针离开后变量被清掉（牌回平放，不会卡在斜的姿态）
-     *  3. 光斑坐标 --mx/--my 落在 0..100% 内（换算没越界）
+     * 这里刻意不断言「一定有角度」：\`(hover: hover) and (pointer: fine)\`
+     * 是设备属性，CI 的 headless Chrome 报 hover:none、本地报 hover:hover，
+     * 而 CDP 的 Emulation.setEmulatedMedia 也覆盖不了（实测传入后被静默忽略）。
+     * 断言固定角度等于在测环境。
+     *
+     * 所以测的是契约本身——允许倾斜时确实写入了变量，不允许时确实一点没写。
+     * 几何算法（角度符号、夹取、单位）由 useTilt.test.ts 确定性覆盖。
      */
-    it('指针悬停时写入倾斜变量，离开后清除', async () => {
+    it('倾斜与该环境的指针能力保持一致', async () => {
       expect(await enterHeroSelect(ctx.page)).toBe(true);
+
+      const capable = await ctx.page.evaluate(() =>
+        matchMedia('(hover: hover) and (pointer: fine)').matches
+        && !matchMedia('(prefers-reduced-motion: reduce)').matches);
 
       const box = await ctx.page.evaluate(() => {
         const el = document.querySelector('button[aria-label^="选择 "]') as HTMLElement | null;
@@ -430,58 +436,102 @@ describe('端到端 · 覆盖补充', () => {
         return { x: r.x, y: r.y, w: r.width, h: r.height, hasTilt: el.classList.contains('tilt') };
       });
       expect(box).toBeTruthy();
-      // 3D 倾斜的类必须挂上，否则后面的断言等于空转
+      // 类必须挂上：这是倾斜样式的载体，与环境能力无关
       expect(box!.hasTilt).toBe(true);
 
-      // 右下角
+      // 悬停到右下角（真实指针事件，不是合成事件）
       await ctx.page.mouse.move(box!.x + box!.w * 0.85, box!.y + box!.h * 0.82, { steps: 8 });
-      await sleep(200);
-      const br = await ctx.page.evaluate(() => {
+      await sleep(220);
+      const hover = await ctx.page.evaluate(() => {
         const el = document.querySelector('button[aria-label^="选择 "]') as HTMLElement;
         return {
+          tilting: el.dataset.tilting || null,
           rx: el.style.getPropertyValue('--rx').trim(),
           ry: el.style.getPropertyValue('--ry').trim(),
           mx: el.style.getPropertyValue('--mx').trim(),
-          my: el.style.getPropertyValue('--my').trim(),
-          tilting: el.dataset.tilting || null,
+          transform: getComputedStyle(el).transform,
         };
       });
-      expect(br.tilting).toBe('on');
-      expect(br.rx).not.toBe('');
-      expect(br.ry).not.toBe('');
-      // 右下角应向右倾（--ry 为正）
-      expect(parseFloat(br.ry)).toBeGreaterThan(0);
-      const mx = parseFloat(br.mx);
-      const my = parseFloat(br.my);
-      expect(mx).toBeGreaterThan(50);
-      expect(my).toBeGreaterThan(50);
-      expect(mx).toBeLessThanOrEqual(100);
-      expect(my).toBeLessThanOrEqual(100);
 
-      // 左上角：符号应反过来
-      await ctx.page.mouse.move(box!.x + box!.w * 0.15, box!.y + box!.h * 0.18, { steps: 8 });
-      await sleep(200);
-      const tl = await ctx.page.evaluate(() => {
+      if (capable) {
+        expect(hover.tilting).toBe('on');
+        expect(hover.rx).not.toBe('');
+        expect(hover.ry).not.toBe('');
+        // 右下角向右倾
+        expect(parseFloat(hover.ry)).toBeGreaterThan(0);
+        const mx = parseFloat(hover.mx);
+        expect(mx).toBeGreaterThan(50);
+        expect(mx).toBeLessThanOrEqual(100);
+        // 3D 生效：computed transform 必须是 matrix3d（matrix 2D 意味着旋转被吃掉了）
+        expect(hover.transform.startsWith('matrix3d')).toBe(true);
+
+        // 离开后变量清空，牌回平放
+        await ctx.page.mouse.move(5, 5, { steps: 6 });
+        await sleep(260);
+        const after = await ctx.page.evaluate(() => {
+          const el = document.querySelector('button[aria-label^="选择 "]') as HTMLElement;
+          return {
+            rx: el.style.getPropertyValue('--rx'),
+            ry: el.style.getPropertyValue('--ry'),
+            tilting: el.dataset.tilting || null,
+          };
+        });
+        expect(after.rx).toBe('');
+        expect(after.ry).toBe('');
+        expect(after.tilting).toBe(null);
+      } else {
+        // 不可倾斜的环境：一个变量都不许写，且 transform 不该是 3D
+        expect(hover.tilting).toBe(null);
+        expect(hover.rx).toBe('');
+        expect(hover.ry).toBe('');
+        expect(hover.transform.startsWith('matrix3d')).toBe(false);
+      }
+    }, 120000);
+
+    /**
+     * 「不允许倾斜」这条分支的真实覆盖。
+     *
+     * hover / pointer 伪装不了（平台属性，CDP 与 --blink-settings 实测都无效），
+     * 但 prefers-reduced-motion 可以模拟，而它走的是**完全相同的关闭路径**
+     * （useTilt 里同一个 enabled 判定、同一句「不写任何变量」）。
+     * 这样 CI 与本地都能真实跑到关闭分支，而不是只在代码里推理。
+     */
+    it('开启「减弱动效」后不再写倾斜变量', async () => {
+      await ctx.page.emulateMediaFeatures([
+        { name: 'prefers-reduced-motion', value: 'reduce' },
+      ]);
+
+      const capable = await ctx.page.evaluate(() =>
+        !matchMedia('(prefers-reduced-motion: reduce)').matches);
+      // 前提成立才继续：模拟没生效的话这条用例没有意义
+      expect(capable).toBe(false);
+
+      const box = await ctx.page.evaluate(() => {
         const el = document.querySelector('button[aria-label^="选择 "]') as HTMLElement;
-        return { ry: el.style.getPropertyValue('--ry').trim(), rx: el.style.getPropertyValue('--rx').trim() };
+        const r = el.getBoundingClientRect();
+        return { x: r.x, y: r.y, w: r.width, h: r.height };
       });
-      expect(parseFloat(tl.ry)).toBeLessThan(0);
-      expect(parseFloat(tl.rx)).toBeGreaterThan(0);
-
-      // 离开：变量被清空，牌回平放
-      await ctx.page.mouse.move(5, 5, { steps: 6 });
-      await sleep(250);
-      const after = await ctx.page.evaluate(() => {
+      await ctx.page.mouse.move(box.x + box.w * 0.85, box.y + box.h * 0.82, { steps: 8 });
+      await sleep(220);
+      const state = await ctx.page.evaluate(() => {
         const el = document.querySelector('button[aria-label^="选择 "]') as HTMLElement;
         return {
+          tilting: el.dataset.tilting || null,
           rx: el.style.getPropertyValue('--rx'),
           ry: el.style.getPropertyValue('--ry'),
-          tilting: el.dataset.tilting || null,
+          transform: getComputedStyle(el).transform,
         };
       });
-      expect(after.rx).toBe('');
-      expect(after.ry).toBe('');
-      expect(after.tilting).toBe(null);
+      expect(state.tilting).toBe(null);
+      expect(state.rx).toBe('');
+      expect(state.ry).toBe('');
+      // 媒体查询里 transform: none，不再是 3D
+      expect(state.transform).toBe('none');
+
+      // 复原，避免影响同文件后续用例
+      await ctx.page.emulateMediaFeatures([
+        { name: 'prefers-reduced-motion', value: 'no-preference' },
+      ]);
     }, 120000);
   });
 
