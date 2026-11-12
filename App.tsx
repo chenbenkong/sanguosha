@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { Hero, Player, Card, GamePhase, CardName, LogEntry, Identity, Suit, CardType, Equipment, EquipmentSlot } from './types';
 import { HEROES, INITIAL_DECK, EQUIP_META } from './constants';
 import { playSfx, SFX_FOR_NAME } from './src/audio/sfx';
-import { playCardVoice, playSkillVoice, playDeathVoice, playEnterVoice, hasCardVoice } from './src/audio/voice';
+import { playCardVoice, playSkillVoice, playDeathVoice, playEnterVoice, hasCardVoice, playOfficialDeathVoice } from './src/audio/voice';
 import CardComponent, { CardArtFilters } from './components/CardComponent';
 import TutorialOverlay from './src/components/TutorialOverlay';
 import { PortraitLightbox } from './src/components/PortraitLightbox';
@@ -2336,7 +2336,11 @@ const App: React.FC = () => {
     const victim = getPlayer(victimId)!;
     // 优先播放武将阵亡台词，缺失时回退合成音
     if (!isMuted) {
-      if (!playDeathVoice(victim.hero.id)) playSound('death');
+      // 官方真人原声（92 名，含全部新女将）优先；没有再退回旧目录的 TTS，
+      // 最后才是合成提示音。
+      if (!playOfficialDeathVoice(victim.hero.name) && !playDeathVoice(victim.hero.id)) {
+        playSound('death');
+      }
     }
     addLog(`${victim.hero.name} 阵亡！身份是：【${victim.identity}】`, 'danger');
 

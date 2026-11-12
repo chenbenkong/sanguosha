@@ -1,4 +1,12 @@
 // 角色 / 卡牌语音：使用开源三国杀项目 noname 的语音资源（本地托管，非商用）
+import DEATH_VOICE_LINES_RAW from './dieVoiceLines.json' with { type: 'json' };
+
+/**
+ * 武将名 → 台词。JSON 导入会被推断成字面量窄类型（每个键都是具体列名），
+ * 用 string 索引会报 TS7053，所以这里显式收宽成 Record。
+ */
+const DEATH_VOICE_LINES = DEATH_VOICE_LINES_RAW as Record<string, string>;
+
 type VoiceKind = 'skill' | 'die' | 'card';
 
 const CARD_SLUG: Record<string, string> = {
@@ -86,6 +94,25 @@ const DEATH_VOICE_HEROES = new Set([
   // 第 1 批 6 名女将（TTS 合成）
   'sunru', 'hetaishou', 'wuguotai', 'ganfuren', 'zoushi', 'guohuanghou',
 ]);
+
+/**
+ * 官方真人原声阵亡台词（v3.56 新增）。
+ *
+ * 与上面的 audio/die/<id>.mp3 并存而不是替换：老目录按武将 id（拼音）命名，
+ * 覆盖 45 名（含 TTS 合成）；新目录按**武将中文名**命名，覆盖 92 名，包含
+ * 全部 69 名新女将。文件名与 public/images/heroes/<中文名>.webp 同一套命名，
+ * 引擎侧给 hero.name 就能拼路径，不必再维护 id→拼音 映射表。
+ *
+ * 优先级：官方原声 > 旧目录 > 合成提示音。
+ */
+export function playOfficialDeathVoice(heroName: string): boolean {
+  if (!(heroName in DEATH_VOICE_LINES)) return false;
+  return playFile(`audio/die-voice/${heroName}.mp3`);
+}
+
+/** 该武将有官方原声阵亡台词时的台词文本（UI 显示用；没有则返回 null） */
+export const deathVoiceLine = (heroName: string): string | null =>
+  DEATH_VOICE_LINES[heroName] ?? null;
 
 /** 阵亡台词：传入武将 id */
 export function playDeathVoice(heroId: string): boolean {

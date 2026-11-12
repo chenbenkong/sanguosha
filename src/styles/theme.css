@@ -4440,3 +4440,63 @@ a:focus-visible {
   .hero-skill-toggle { display: flex !important; align-items: center; justify-content: center; }
   .hero-pick-namebar { bottom: 38px; }
 }
+
+/* ============================================================================
+   卡牌 3D 倾斜 + 光斑跟随（v3.57）
+   参照 chenbenkong/sanguosha-cards 图鉴站。指针位置由 useTilt 写成 CSS 变量，
+   这里只负责把变量翻译成视觉。
+
+   为什么全用 0 默认值：没倾斜过时 --rx/--ry 是空的，transform 里用 var(..., 0deg)
+   兜底，牌就是平的——不需要额外的 .is-tilting 类来区分状态，也不会在首帧闪一下。
+   ============================================================================ */
+.tilt {
+  /* preserve-3d 让子元素（光斑层）与牌面处于同一 3D 空间，光斑才会跟着透视走 */
+  transform-style: preserve-3d;
+  transform:
+    perspective(760px)
+    translateY(var(--lift, 0))
+    rotateX(var(--rx, 0deg))
+    rotateY(var(--ry, 0deg));
+  transition: transform 0.32s cubic-bezier(0.22, 0.61, 0.36, 1),
+              box-shadow 0.32s ease;
+  will-change: transform;
+}
+
+/* 倾斜进行中要缩短过渡：松手回弹用 0.32s 好看，拖动时若也等 0.32s
+   就会「粘手」——指针已经移开，牌还在慢慢追。 */
+.tilt[data-tilting='on'] {
+  transition: transform 0.06s linear;
+}
+
+/* 光斑：跟着 --mx/--my 走的一道柔光，混合模式用 soft-light 而不是
+   screen——后者会把深色牌面整体提亮，卡面细节被冲掉。 */
+.tilt::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  z-index: 2;
+  opacity: 0;
+  transition: opacity 0.28s ease;
+  background: radial-gradient(
+    220px circle at var(--mx, 50%) var(--my, 50%),
+    rgba(255, 246, 224, 0.30) 0%,
+    rgba(255, 246, 224, 0.10) 38%,
+    rgba(255, 246, 224, 0) 68%
+  );
+  mix-blend-mode: soft-light;
+}
+
+.tilt[data-tilting='on']::after { opacity: 1; }
+
+/* 触屏 / 开了减弱动效时彻底关掉：这些设备上倾斜没有意义或会造成不适，
+   而且 useTilt 已经不挂手势了，这里保证连样式都不生效。 */
+@media (hover: none), (pointer: coarse), (prefers-reduced-motion: reduce) {
+  .tilt {
+    transform: none;
+    transition: none;
+    will-change: auto;
+  }
+  .tilt::after { display: none; }
+}

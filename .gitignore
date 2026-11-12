@@ -27,3 +27,6 @@ e2e/artifacts/
 
 # 卡面素材的临时脚本与截图（脚本保留，截图临时）
 shots/
+
+# 素材脚本的上游数据（voice.json 等），按需重新下载，不入库
+cardsrepo/
