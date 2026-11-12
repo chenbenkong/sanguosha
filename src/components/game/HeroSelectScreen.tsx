@@ -272,6 +272,7 @@ export const HeroSelectScreen: React.FC<{
                 artMode={artMode}
                 selected={selectedHero?.id === hero.id}
                 onPick={pickHero}
+                onOpenDetail={onOpenDetail}
               />
             ))}
           </div>

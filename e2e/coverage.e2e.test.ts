@@ -405,6 +405,86 @@ describe('端到端 · 覆盖补充', () => {
     }, 120000);
   });
 
+  describe('卡牌 3D 倾斜', () => {
+    let ctx: E2EContext;
+
+    beforeAll(async () => { ctx = await openApp(BASE); }, 60000);
+    afterAll(async () => { if (ctx) await ctx.close(); });
+
+    /**
+     * 倾斜只写 CSS 变量、不重渲染，所以断言都落在「变量与 data 属性」上，
+     * 直接读 computed transform 拿到的是一串 matrix，断言它既不可读也不稳。
+     *
+     * 三条不变量：
+     *  1. 悬停到不同位置，--rx/--ry 换了值（真的在跟指针）
+     *  2. 指针离开后变量被清掉（牌回平放，不会卡在斜的姿态）
+     *  3. 光斑坐标 --mx/--my 落在 0..100% 内（换算没越界）
+     */
+    it('指针悬停时写入倾斜变量，离开后清除', async () => {
+      expect(await enterHeroSelect(ctx.page)).toBe(true);
+
+      const box = await ctx.page.evaluate(() => {
+        const el = document.querySelector('button[aria-label^="选择 "]') as HTMLElement | null;
+        if (!el) return null;
+        const r = el.getBoundingClientRect();
+        return { x: r.x, y: r.y, w: r.width, h: r.height, hasTilt: el.classList.contains('tilt') };
+      });
+      expect(box).toBeTruthy();
+      // 3D 倾斜的类必须挂上，否则后面的断言等于空转
+      expect(box!.hasTilt).toBe(true);
+
+      // 右下角
+      await ctx.page.mouse.move(box!.x + box!.w * 0.85, box!.y + box!.h * 0.82, { steps: 8 });
+      await sleep(200);
+      const br = await ctx.page.evaluate(() => {
+        const el = document.querySelector('button[aria-label^="选择 "]') as HTMLElement;
+        return {
+          rx: el.style.getPropertyValue('--rx').trim(),
+          ry: el.style.getPropertyValue('--ry').trim(),
+          mx: el.style.getPropertyValue('--mx').trim(),
+          my: el.style.getPropertyValue('--my').trim(),
+          tilting: el.dataset.tilting || null,
+        };
+      });
+      expect(br.tilting).toBe('on');
+      expect(br.rx).not.toBe('');
+      expect(br.ry).not.toBe('');
+      // 右下角应向右倾（--ry 为正）
+      expect(parseFloat(br.ry)).toBeGreaterThan(0);
+      const mx = parseFloat(br.mx);
+      const my = parseFloat(br.my);
+      expect(mx).toBeGreaterThan(50);
+      expect(my).toBeGreaterThan(50);
+      expect(mx).toBeLessThanOrEqual(100);
+      expect(my).toBeLessThanOrEqual(100);
+
+      // 左上角：符号应反过来
+      await ctx.page.mouse.move(box!.x + box!.w * 0.15, box!.y + box!.h * 0.18, { steps: 8 });
+      await sleep(200);
+      const tl = await ctx.page.evaluate(() => {
+        const el = document.querySelector('button[aria-label^="选择 "]') as HTMLElement;
+        return { ry: el.style.getPropertyValue('--ry').trim(), rx: el.style.getPropertyValue('--rx').trim() };
+      });
+      expect(parseFloat(tl.ry)).toBeLessThan(0);
+      expect(parseFloat(tl.rx)).toBeGreaterThan(0);
+
+      // 离开：变量被清空，牌回平放
+      await ctx.page.mouse.move(5, 5, { steps: 6 });
+      await sleep(250);
+      const after = await ctx.page.evaluate(() => {
+        const el = document.querySelector('button[aria-label^="选择 "]') as HTMLElement;
+        return {
+          rx: el.style.getPropertyValue('--rx'),
+          ry: el.style.getPropertyValue('--ry'),
+          tilting: el.dataset.tilting || null,
+        };
+      });
+      expect(after.rx).toBe('');
+      expect(after.ry).toBe('');
+      expect(after.tilting).toBe(null);
+    }, 120000);
+  });
+
   describe('移动端布局', () => {
     let ctx: E2EContext;
 

@@ -1454,10 +1454,13 @@ body[data-human-sealed="true"] .skill-btn {
   transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
 }
 .hero-pick:hover {
-  transform: translateY(-2px);
+  /* 上浮交给 .tilt 的 --lift 统一处理：这里再写 transform 会盖掉 3D 旋转
+     （.hero-pick:hover 比 .tilt 更具体，实测把 rotateX/rotateY 整个吃掉）。
+     只在没有 .tilt 时兜底，保证旧行为不变。 */
   border-color: rgba(232, 207, 148, 0.75);
   box-shadow: 0 10px 26px rgba(0, 0, 0, 0.5);
 }
+.hero-pick:hover:not(.tilt) { transform: translateY(-2px); }
 .hero-pick[aria-pressed="true"] {
   border-color: #f0d894;
   box-shadow:
@@ -1915,9 +1918,12 @@ a:focus-visible {
   transition: transform 0.18s ease, box-shadow 0.18s ease;
 }
 .seat-card:hover {
-  transform: translateY(-2px);
+  /* 上浮交给 .tilt 的 --lift 统一处理：这里写 transform 会盖掉 3D 旋转
+     （.seat-card:hover 特异性 (0,2,0) 高于 .tilt (0,1,0)）。
+     留着这条 :not(.tilt) 兜底，没有挂倾斜的座位卡行为不变。 */
   box-shadow: 0 14px 32px rgba(0, 0, 0, 0.5);
 }
+.seat-card:hover:not(.tilt) { transform: translateY(-2px); }
 .seat-art { position: absolute; inset: 0; }
 .seat-art-img {
   display: block;
@@ -4454,7 +4460,7 @@ a:focus-visible {
   transform-style: preserve-3d;
   transform:
     perspective(760px)
-    translateY(var(--lift, 0))
+    translateY(var(--lift, -2px))
     rotateX(var(--rx, 0deg))
     rotateY(var(--ry, 0deg));
   transition: transform 0.32s cubic-bezier(0.22, 0.61, 0.36, 1),

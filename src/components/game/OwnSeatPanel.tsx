@@ -2,6 +2,7 @@ import React from 'react';
 import { Player, Identity } from '../../../types';
 import { KINGDOM_CLASS } from '../../game/constants';
 import { EQUIP_META } from '../../../constants';
+import { useTilt } from './useTilt';
 
 /**
  * 主视角座位卡（与敌方座位同一套卡面）。
@@ -29,11 +30,33 @@ export const OwnSeatPanel = React.memo(function OwnSeatPanel({
   onInspect: (id: number) => void;
 }) {
   const isDying = dyingActive && dyingVictimId === me.id;
+
+  /**
+   * 主视角卡正在播动画时关掉倾斜。
+   *
+   * 判断依据与下面给 .own-seat / .seat-art 挂动画用的条件完全一致：
+   *  - damageAnimTarget === 0 → animate-damage-shake（legacy.css:320，
+   *    transform: translateX）；
+   *  - healAnimTarget === 0   → animate-heal-pulse（legacy.css:407，
+   *    transform: scale）；
+   *  - isDying                → is-dying（theme.css:2641，fxHeartbeat
+   *    transform: scale 1↔1.02，无限循环）。
+   * 这三条都作用在 .own-seat 这张卡自身上，而倾斜也挂在同一节点，
+   * 两套 transform 会抢同一个属性，所以动画期间必须让倾斜退场。
+   * skillGlowId / aiThinkingId 只动 ::before 的 opacity，不碰 transform，
+   * 倾斜与它们不冲突，因此不参与这个判断。
+   */
+  const tiltDisabled = damageAnimTarget === 0 || healAnimTarget === 0 || isDying;
+  const tilt = useTilt(tiltDisabled);
+
   return (
     <div
       data-seat-id={0}
+      onPointerMove={tilt.onPointerMove}
+      onPointerLeave={tilt.onPointerLeave}
+      onPointerCancel={tilt.onPointerCancel}
       className={`
-        own-seat seat-card relative rounded-xl border-2 kingdom-frame hero-card ${KINGDOM_CLASS[me.hero.kingdom] ?? ''}
+        own-seat seat-card tilt relative rounded-xl border-2 kingdom-frame hero-card ${KINGDOM_CLASS[me.hero.kingdom] ?? ''}
         focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--line-strong)]
         ${damageAnimTarget === 0 || healAnimTarget === 0
           ? ''

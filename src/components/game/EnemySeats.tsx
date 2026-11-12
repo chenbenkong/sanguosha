@@ -1,6 +1,58 @@
 import React from 'react';
 import { Player, Identity, CardName } from '../../../types';
 import { KINGDOM_CLASS } from '../../game/constants';
+import { useTilt } from './useTilt';
+
+/**
+ * 与 theme.css 的 .tilt 同一表达式（OwnSeatPanel.tsx 里是同一份字面量）。
+ *
+ * 之所以必须内联、不能只靠 .tilt 类：.seat-card:hover（theme.css:1917）用
+ * transform 做 2px 上浮，特异性 (0,2,0) 高于 .tilt 的 (0,1,0)，实测会把
+ * rotateX/rotateY 整个吃掉——悬停时只剩 translateY(-2px)，倾斜完全不生效。
+ * theme.css 不在本次改动范围内，内联样式是唯一能越过那条 hover 规则、
+ * 又不新增选择器的写法。
+ *
+ * 变量没被 useTilt 写过时全部走兜底值，解析为恒等变换，牌就是平的；
+ * 而 CSS 动画（animate-damage-shake / animate-heal-pulse / is-dying）
+ * 在层叠里高于内联样式，所以这条 transform 也压不掉它们。
+ */
+
+/**
+ * 座位卡的命中区（= 整张可点卡面）。
+ *
+ * 单独成组件只为一个原因：useTilt 是 hook，而座位是 enemies.map 渲染出来的，
+ * 直接在循环里调 hook 会违反 hooks 规则。拆出来之后每张牌各持一个实例，
+ * disabled 也就天然是「这张牌自己的动画」而不是全体座位。
+ */
+const SeatHitArea = ({
+  disabled, className, ariaLabel, title, onClick, onKeyDown, children,
+}: {
+  disabled: boolean;
+  className: string;
+  ariaLabel: string;
+  title: string;
+  onClick: () => void;
+  onKeyDown: (e: React.KeyboardEvent<HTMLDivElement>) => void;
+  children: React.ReactNode;
+}) => {
+  const tilt = useTilt(disabled);
+  return (
+    <div
+      role="button"
+      tabIndex={0}
+      aria-label={ariaLabel}
+      onClick={onClick}
+      onKeyDown={onKeyDown}
+      onPointerMove={tilt.onPointerMove}
+      onPointerLeave={tilt.onPointerLeave}
+      onPointerCancel={tilt.onPointerCancel}
+      title={title}
+      className={className}
+    >
+      {children}
+    </div>
+  );
+};
 
 /**
  * 敌方座位环：布局、选中目标、伤害/治疗动画、装备与判定区角标。
@@ -73,6 +125,23 @@ export const EnemySeats = React.memo(function EnemySeats({
       const selectableTarget = !p.isDead && (isSelectingTarget || isLijianMode || isJieyinMode || isJijiangMode
         || (isRendeMode && rendeSelectedCardIds.length > 0) || isJiedaoMode);
 
+      /**
+       * 这张牌正在播动画时关掉倾斜。
+       *
+       * 判断依据就是下面给容器挂动画用的同一组布尔，不另起一套状态：
+       *  - damageAnimTarget === p.id → animate-damage-shake（legacy.css:320，
+       *    transform: translateX），与倾斜抢同一个 transform；
+       *  - healAnimTarget === p.id     → animate-heal-pulse（legacy.css:407，
+       *    transform: scale），同上；
+       *  - dyingVictimId === p.id      → is-dying（theme.css:2641，fxHeartbeat
+       *    transform: scale 1↔1.02，无限循环，期间倾斜永远没机会生效）。
+       * skillGlowId / aiThinkingId 只动 ::before 的 opacity，不碰 transform，
+       * 倾斜与它们不冲突，因此不参与这里的判断。
+       */
+      const seatTiltDisabled = damageAnimTarget === p.id
+        || healAnimTarget === p.id
+        || (dyingVictimId === p.id && dyingActive);
+
       return (
         <div
           key={p.id}
@@ -96,10 +165,9 @@ export const EnemySeats = React.memo(function EnemySeats({
             <span className="turn-glow" aria-hidden="true" />
           )}
 
-          <div
-            role="button"
-            tabIndex={0}
-            aria-label={p.isDead ? `${p.hero.name}（已阵亡）` : `查看 ${p.hero.name} 的武将详情`}
+          <SeatHitArea
+            disabled={seatTiltDisabled}
+            ariaLabel={p.isDead ? `${p.hero.name}（已阵亡）` : `查看 ${p.hero.name} 的武将详情`}
             onClick={() => {
               const selecting = isSelectingTarget || isLijianMode || isJieyinMode || isJijiangMode
                 || (isRendeMode && rendeSelectedCardIds.length > 0) || (isJiedaoMode && !p.isDead);
@@ -122,7 +190,7 @@ export const EnemySeats = React.memo(function EnemySeats({
             }}
             title={p.isDead ? `${p.hero.name}（已阵亡）` : `点击查看 ${p.hero.name} 的武将详情`}
             className={`
-              seat-card relative rounded-xl border-2 kingdom-frame hero-card
+              seat-card tilt relative rounded-xl border-2 kingdom-frame hero-card
               focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--line-strong)]
               ${damageAnimTarget === p.id || healAnimTarget === p.id
                 ? ''
@@ -275,7 +343,7 @@ export const EnemySeats = React.memo(function EnemySeats({
                 </div>
               )}
             </div>
-          </div>
+          </SeatHitArea>
         </div>
       );
     })}

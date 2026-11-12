@@ -3,6 +3,7 @@ import { Hero } from '../../../types';
 import { KINGDOM_CLASS } from '../../game/constants';
 import { heroFullCard } from '../../game/utils';
 import { HeroSkillPreview } from './HeroSkillPreview';
+import { useTilt } from './useTilt';
 import type { CardArtMode } from './useCardArtMode';
 
 /** 长按多少毫秒算「查看技能」而不是「选将」 */
@@ -22,7 +23,9 @@ export const HeroCard: React.FC<{
   /** 画面模式：立绘裁切 或 官方完整卡面 */
   artMode: CardArtMode;
   onPick: (h: Hero) => void;
-}> = ({ hero, selected, theme, artMode, onPick }) => {
+  /** 打开武将详情（卡片右上角的「详情」按钮） */
+  onOpenDetail: (h: Hero) => void;
+}> = ({ hero, selected, theme, artMode, onPick, onOpenDetail }) => {
   /** 卡面上的势力、勾玉、技能文本都是印刷体，再叠一层自家 UI 就是重复信息 */
   const fullCard = artMode === 'card' ? heroFullCard(hero) : null;
   const cardMode = Boolean(fullCard);
@@ -31,6 +34,8 @@ export const HeroCard: React.FC<{
   const longPressRef = useRef<number | null>(null);
   /** 长按已触发时吞掉随后的 click，避免「想看技能」变成「直接选中」 */
   const suppressClickRef = useRef(false);
+  /** 3D 倾斜：只写 CSS 变量，不触发重渲染。触屏/减弱动效由 hook 与 .tilt 媒体查询双重关断 */
+  const tilt = useTilt();
 
   const clearLongPress = useCallback(() => {
     if (longPressRef.current !== null) {
@@ -67,12 +72,17 @@ export const HeroCard: React.FC<{
         ref={anchorRef}
         onClick={handleClick}
         onPointerEnter={(e) => { if (e.pointerType === 'mouse') open(); }}
-        onPointerLeave={(e) => { if (e.pointerType === 'mouse') close(); }}
+        onPointerLeave={(e) => {
+          if (e.pointerType === 'mouse') close();
+          tilt.onPointerLeave(e);
+        }}
+        onPointerMove={tilt.onPointerMove}
+        onPointerCancel={tilt.onPointerCancel}
         onTouchStart={handleTouchStart}
         onTouchEnd={clearLongPress}
         onTouchMove={clearLongPress}
         onTouchCancel={clearLongPress}
-        className={`hero-pick hero-card group w-full text-left kingdom-frame ${KINGDOM_CLASS[hero.kingdom] ?? ''}${cardMode ? ' is-fullcard' : ''}`}
+        className={`hero-pick hero-card group tilt w-full text-left kingdom-frame ${KINGDOM_CLASS[hero.kingdom] ?? ''}${cardMode ? ' is-fullcard' : ''}`}
         aria-pressed={selected}
         aria-label={`选择 ${hero.name}`}
         aria-describedby={preview ? `hero-skill-${hero.id}` : undefined}
@@ -95,10 +105,13 @@ export const HeroCard: React.FC<{
             再叠一层既重复又盖住牌面信息。 */}
         {!cardMode && <span className="hero-kingdom absolute top-2 left-2">{hero.kingdom}</span>}
 
+        {/* right-[54px] + 内联紧凑内边距：8 列（min-[1200px]）时卡片仅 ~145px 宽，
+            4 颗勾玉的默认内边距会把勾玉推到左上势力角标上。压缩 6px 后
+            势力角标 / 勾玉 / 右上 44px 详情按钮三者互不重叠。 */}
         {!cardMode && <span className="hero-hp absolute top-2 right-2" title={`体力上限 ${hero.maxHp}`}>
-          <span className="hero-hp-pips">
+          <span className="hero-hp-pips" style={{ gap: 1, maxWidth: 44, flexWrap: 'nowrap' }}>
             {Array.from({ length: hero.maxHp }).map((_, i) => (
-              <i key={i} className="hero-hp-pip" />
+              <i key={i} className="hero-hp-pip" style={{ width: 8 }} />
             ))}
           </span>
         </span>}
@@ -112,7 +125,7 @@ export const HeroCard: React.FC<{
         {cardMode ? (
           /* 卡面模式下技能文本、势力、勾玉都印在牌面上，只补一条武将名——
              卡面原名的竖排书法在缩略尺寸下难认，横排名字负责扫视识别。 */
-          <div className="hero-pick-namebar absolute inset-x-0 bottom-0 px-2 pb-1.5 pt-6">
+          <div className="hero-pick-namebar absolute inset-x-0 bottom-0 pl-2 pr-[42px] pb-1.5 pt-6">
             <span className="font-ancient hero-pick-name leading-tight text-[#f4e4bf] drop-shadow-[0_1px_3px_rgba(0,0,0,0.85)]">
               {hero.name}
             </span>
@@ -120,7 +133,7 @@ export const HeroCard: React.FC<{
             {hero.lordSkillName && <span className="hero-lord-chip">主公技</span>}
           </div>
         ) : (
-          <div className="hero-pick-foot absolute inset-x-0 bottom-0 px-2.5 pb-2.5 pt-8">
+          <div className="hero-pick-foot absolute inset-x-0 bottom-0 pl-2.5 pr-[42px] pb-2.5 pt-8">
             <div className="hero-pick-title truncate">{hero.description}</div>
             <div className="font-ancient hero-pick-name leading-tight text-[#f4e4bf] drop-shadow-[0_1px_3px_rgba(0,0,0,0.85)]">
               {hero.name}
@@ -133,6 +146,26 @@ export const HeroCard: React.FC<{
             <div className="hero-pick-desc line-clamp-3">{hero.skillDesc}</div>
           </div>
         )}
+      </button>
+
+      {/* 「详情」入口。放在卡片 button 的兄弟节点：button 内不能再嵌 button，
+          而 e2e 用 button[aria-label^="选择 "] 找卡片并点击选中，卡片本身必须
+          保持「点击=选中」不变。右上角，44×44 命中区；勾玉已左移让位。 */}
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          onOpenDetail(hero);
+        }}
+        aria-label={`查看 ${hero.name} 详情`}
+        title={`查看 ${hero.name} 详情`}
+        className="absolute bottom-2 right-2 z-20 flex h-9 w-9 md:h-10 md:w-10 items-center justify-center rounded-full border border-[#c8a45c]/70 bg-[#0a0806]/82 text-[#f4e4bf] backdrop-blur-[2px] transition-colors hover:border-[#f0d894] hover:bg-[#c8a45c]/35 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#f0d894]"
+      >
+        <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="12" cy="12" r="9" />
+          <path d="M12 11v5" />
+          <path d="M12 8h.01" />
+        </svg>
       </button>
 
       {/* 移动端没有 hover：卡片右下角的「技能」入口展开速览。
