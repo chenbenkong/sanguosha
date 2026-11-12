@@ -1,11 +1,12 @@
-import React, { useEffect } from 'react';
+import React, { useCallback, useEffect, useRef } from 'react';
 import { Hero, Player, Identity } from '../../types';
 import { EQUIP_META } from '../../constants';
 import { getHeroDetail, SkillTag } from '../game/heroDetail';
 import { getHeroStory } from '../game/heroStory';
 import { heroFullCard2x, heroPortrait2x } from '../game/utils';
 import { useCardArtMode } from './game/useCardArtMode';
-import { CardArtToggle, FullCardImage } from './game/FullCardImage';
+import { CardArtToggle } from './game/FullCardImage';
+import { Card3DViewer } from './Card3DViewer';
 
 interface HeroDetailModalProps {
   hero: Hero | null;
@@ -39,6 +40,15 @@ const TAG_STYLE: Record<SkillTag, string> = {
   主公技: 'bg-[#3a1a14] text-[#f0c8b8] border-[#c86b62]/60',
 };
 
+/**
+ * 拖完松手那次 click 的吞掉窗口（ms）。
+ *
+ * 在卡面上按下、拖到弹层遮罩上松手时，浏览器把 click 派发到两者最近的共同祖先
+ * （遮罩层本身）。那条路径不经过卡片，Card3DViewer 挂在自己身上的捕获拦截够不着，
+ * 所以「拖完不要关弹层」还得在遮罩这一层守住。
+ */
+const DRAG_CLOSE_GUARD_MS = 400;
+
 const Star: React.FC<{ on: boolean }> = ({ on }) => (
   <span className={on ? 'text-[#e8cf94]' : 'text-[#5a4a38]'} aria-hidden="true">★</span>
 );
@@ -49,14 +59,29 @@ const Star: React.FC<{ on: boolean }> = ({ on }) => (
  * 桌面居中大弹窗，手机全屏抽屉，正文可滚动、按钮固定可见。
  */
 export const HeroDetailModal: React.FC<HeroDetailModalProps> = ({ hero, player, sealed, onClose, onSelect, onStart, onZoom }) => {
+  /**
+   * 最新的 onClose：理由同 PortraitLightbox —— 把它写进依赖会让监听器每次渲染
+   * 都被摘掉重挂，而同一次 Esc 派发里的全局处理器正好能撞上那个空窗。
+   */
+  const onCloseRef = useRef(onClose);
+  useEffect(() => { onCloseRef.current = onClose; });
+
   useEffect(() => {
     if (!hero) return;
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onCloseRef.current(); };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [hero, onClose]);
+  }, [hero]);
 
   const { mode: artMode, setMode: setArtMode } = useCardArtMode();
+
+  /** 最近一次拖动结束的时刻，用来吞掉随之而来的那次 click */
+  const dragEndAt = useRef(0);
+  const handleDragEnd = useCallback(() => { dragEndAt.current = performance.now(); }, []);
+  const handleMaskClick = useCallback(() => {
+    if (performance.now() - dragEndAt.current < DRAG_CLOSE_GUARD_MS) return;
+    onClose();
+  }, [onClose]);
 
   if (!hero) return null;
   /** 卡面模式下左侧大图换成官方完整卡面；无卡面武将（马云禄、蔡贞姬）恒回落立绘 */
@@ -84,7 +109,7 @@ export const HeroDetailModal: React.FC<HeroDetailModalProps> = ({ hero, player, 
   return (
     <div
       className="fixed inset-0 z-[120] modal-mask flex items-stretch md:items-center justify-center p-0 md:p-6"
-      onClick={onClose}
+      onClick={handleMaskClick}
       role="dialog"
       aria-modal="true"
       aria-label={`${hero.name} 武将详情`}
@@ -210,9 +235,16 @@ export const HeroDetailModal: React.FC<HeroDetailModalProps> = ({ hero, player, 
               >
                 {cardMode && fullCard ? (
                   /* 卡面是 2:3 整幅、下半部分印着技能文本，object-cover 会把它裁掉，
-                     所以改成 object-contain 并给深色衬底填满两侧留白 */
+                     所以交给 3D 查看器在 2:3 的定尺寸容器里整幅铺开：容器尺寸确定，
+                     引擎按挂载点建画布，画布即容器，不会溢出也不会撑破弹层 */
                   <div className="block w-full aspect-[2/3] bg-[#0d0a07] border border-black/40">
-                    <FullCardImage src={fullCard} alt={artLabel} loading="eager" />
+                    <Card3DViewer
+                      src={fullCard}
+                      meta={{ name: hero.name, faction: hero.kingdom }}
+                      alt={artLabel}
+                      controls={false}
+                      onDragEnd={handleDragEnd}
+                    />
                   </div>
                 ) : (
                   <img

@@ -4506,3 +4506,91 @@ a:focus-visible {
   }
   .tilt::after { display: none; }
 }
+
+/* ============================================================================
+   3D 卡牌查看器（图鉴同款 WebGL 引擎，v3.60）
+   引擎自己渲染卡面与投影，这里只负责容器尺寸、控制条与降级图。
+   ============================================================================ */
+.c3d-host {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  /* 拖动时不要触发浏览器的滚动/缩放，否则手机上一划就变成滚页面 */
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.c3d-mount {
+  width: 100%;
+  height: 100%;
+}
+
+/* 引擎画布自带投影（.c3d-canvas 的 filter 由 gallery 侧提供），
+   这里保留一个同款投影，保证两种尺寸下都有落地感 */
+.c3d-host .c3d-canvas {
+  display: block;
+  filter: drop-shadow(0 16px 20px rgba(0, 0, 0, 0.5));
+}
+
+/* 降级图：与改动前的静态卡图完全一致，尺寸按容器内接 */
+.c3d-fallback {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  display: block;
+}
+
+/* 控制条：贴在卡片下方，不做成浮动按钮避免挡住卡面 */
+.c3d-bar {
+  position: absolute;
+  left: 50%;
+  bottom: 6px;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 6px;
+  padding: 4px 6px;
+  border-radius: 999px;
+  border: 1px solid rgba(200, 164, 92, 0.45);
+  background: rgba(10, 8, 6, 0.72);
+  backdrop-filter: blur(4px);
+  z-index: 3;
+}
+
+.c3d-bar button {
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  font-size: 15px;
+  line-height: 1;
+  color: #f4e4bf;
+  border: 1px solid transparent;
+  transition: background 0.18s ease, border-color 0.18s ease;
+}
+
+.c3d-bar button:hover {
+  border-color: rgba(240, 216, 148, 0.7);
+  background: rgba(200, 164, 92, 0.25);
+}
+
+.c3d-bar button[aria-pressed='true'] {
+  background: rgba(200, 164, 92, 0.35);
+  border-color: rgba(240, 216, 148, 0.8);
+}
+
+/* 触屏上也允许拖动旋转（与选将卡的悬停倾斜不同，这是明确的按住行为），
+   但把控制条放大到好点按的尺寸 */
+@media (pointer: coarse) {
+  .c3d-bar button { width: 40px; height: 40px; font-size: 17px; }
+}
+
+/* 开了减弱动效就不给旋转：视差与自转对前庭敏感用户不适 */
+@media (prefers-reduced-motion: reduce) {
+  .c3d-bar { display: none; }
+}

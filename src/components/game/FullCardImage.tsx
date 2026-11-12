@@ -6,8 +6,10 @@ import type { CardArtMode } from './useCardArtMode';
  *
  * 卡面是 2:3 竖幅、下半部分印着技能文本，一旦 object-cover 就会被裁掉，
  * 所以「卡面一律 object-contain」这条不变量收在 FullCardImage 里，
- * 大图（PortraitLightbox）与详情页缩略图（HeroDetailModal）共用同一份实现，
- * 避免两处各自写 className 后一边改了一边忘。
+ * 详情弹层（HeroDetailModal）与卡面开关共用这一份实现。
+ *
+ * 注意灯箱（PortraitLightbox）已不再走这里：它现在把 3D 卡牌交给
+ * Card3DViewer，静态立绘那条分支直接渲染 img。这条不变量由那两处各自保证。
  */
 
 /** 官方完整卡面（2x）。深色衬底用于图片加载中与 letterbox 区域，不出现白块。 */
