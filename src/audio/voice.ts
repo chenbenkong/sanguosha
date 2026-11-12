@@ -7,6 +7,8 @@ import DEATH_VOICE_LINES_RAW from './dieVoiceLines.json' with { type: 'json' };
  */
 const DEATH_VOICE_LINES = DEATH_VOICE_LINES_RAW as Record<string, string>;
 
+import SKILL_VOICE_LINES_RAW from './skillVoiceLines.json' with { type: 'json' };
+
 type VoiceKind = 'skill' | 'die' | 'card';
 
 const CARD_SLUG: Record<string, string> = {
@@ -74,6 +76,46 @@ export function playCardVoice(cardName: string, gender: 'male' | 'female' = 'mal
 }
 
 /** 技能台词：传入技能中文名 */
+/**
+ * 官方真人原声「技能」台词（v3.58 新增）。
+ *
+ * 为什么必须按「武将 + 技能」两级查，而不能像 SKILL_SLUG 那样只按技能名：
+ * 同名技能在不同武将手里的台词并不相同——实测 158 个技能条目对应 311 句，
+ * 存在同名不同词的情况。只按技能名做全局映射会把台词配错人。
+ *
+ * 一个技能通常有多句（1~6 句），运行时随机取一句，避免同一局里
+ * 反复发动同一技能时听到完全一样的一句。
+ *
+ * 文件位置：public/audio/skill-voice/<武将名>/<技能名><序号>.mp3
+ * 序号从 1 开始，对应 SKILL_VOICE_LINES[武将][技能] 数组下标 + 1。
+ */
+const SKILL_VOICE_LINES = SKILL_VOICE_LINES_RAW as Record<string, Record<string, string[]>>;
+
+/** 该武将的该技能是否有官方原声台词 */
+export const hasOfficialSkillVoice = (heroName: string, skillName: string): boolean =>
+  (SKILL_VOICE_LINES[heroName]?.[skillName]?.length ?? 0) > 0;
+
+/** 该武将的该技能的全部台词文本（UI 显示用；没有则返回空数组） */
+export const skillVoiceLines = (heroName: string, skillName: string): string[] =>
+  SKILL_VOICE_LINES[heroName]?.[skillName] ?? [];
+
+/**
+ * 播放官方原声技能台词。
+ *
+ * 未收录的武将/技能返回 false 且**不发起请求** —— 与阵亡语音同一套白名单思路：
+ * 本项目是单页应用，缺文件时 vite preview / GitHub Pages 会回退到 index.html
+ * 并返回 200 + text/html，<audio> 静默播放失败（error.code=4），页面不报错、
+ * 只是没声音，是最难发现的一类回归。所以先查表再发请求。
+ */
+export function playOfficialSkillVoice(heroName: string, skillName: string): boolean {
+  const lines = SKILL_VOICE_LINES[heroName]?.[skillName];
+  if (!lines || lines.length === 0) return false;
+  // 随机取一句；文件按 1-based 序号命名
+  const pick = Math.floor(Math.random() * lines.length) + 1;
+  return playFile(`audio/skill-voice/${heroName}/${skillName}${pick}.mp3`);
+}
+
+/** 兼容旧调用：只用技能名（老的非官方素材，全局共享） */
 export function playSkillVoice(skillName: string): boolean {
   const slug = SKILL_SLUG[skillName];
   if (!slug) return false;

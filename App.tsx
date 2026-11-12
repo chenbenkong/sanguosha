@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { Hero, Player, Card, GamePhase, CardName, LogEntry, Identity, Suit, CardType, Equipment, EquipmentSlot } from './types';
 import { HEROES, INITIAL_DECK, EQUIP_META } from './constants';
 import { playSfx, SFX_FOR_NAME } from './src/audio/sfx';
-import { playCardVoice, playSkillVoice, playDeathVoice, playEnterVoice, hasCardVoice, playOfficialDeathVoice } from './src/audio/voice';
+import { playCardVoice, playSkillVoice, playDeathVoice, playEnterVoice, hasCardVoice, playOfficialDeathVoice, playOfficialSkillVoice } from './src/audio/voice';
 import CardComponent, { CardArtFilters } from './components/CardComponent';
 import TutorialOverlay from './src/components/TutorialOverlay';
 import { PortraitLightbox } from './src/components/PortraitLightbox';
@@ -6225,7 +6225,11 @@ const App: React.FC = () => {
       const w = window as unknown as { __r4skills?: Array<{ hero: string; skill: string; t: number }> };
       (w.__r4skills ||= []).push({ hero, skill, t: Date.now() });
     }
-    if (!isMutedRef.current) playSkillVoice(skill);
+    // 官方原声优先（按 武将+技能 两级查，同名技能在不同武将手里台词不同），
+    // 没有再退回旧的非官方素材（只按技能名全局共享）。
+    if (!isMutedRef.current && !playOfficialSkillVoice(hero, skill)) {
+      playSkillVoice(skill);
+    }
     // 找到发动者并高亮头像
     const caster = playersRef.current.find(p => p.hero.name === hero);
     if (caster) {
