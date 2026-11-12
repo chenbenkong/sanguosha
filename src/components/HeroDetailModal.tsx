@@ -2,6 +2,7 @@ import React, { useEffect } from 'react';
 import { Hero, Player, Identity } from '../../types';
 import { EQUIP_META } from '../../constants';
 import { getHeroDetail, SkillTag } from '../game/heroDetail';
+import { getHeroStory } from '../game/heroStory';
 import { heroFullCard2x, heroPortrait2x } from '../game/utils';
 import { useCardArtMode } from './game/useCardArtMode';
 import { CardArtToggle, FullCardImage } from './game/FullCardImage';
@@ -63,6 +64,8 @@ export const HeroDetailModal: React.FC<HeroDetailModalProps> = ({ hero, player, 
   const cardMode = artMode === 'card' && fullCard !== null;
   const artLabel = cardMode ? `${hero.name} 卡面` : `${hero.name} 立绘`;
   const { profile, skills } = getHeroDetail(hero);
+  /** 官方传记；无传记（蔡贞姬）时为 null，整段区块连标题一起不渲染 */
+  const story = getHeroStory(hero);
   // 对局实时状态（仅当传入 player 时渲染）
   const judgeZone = player?.judgeZone ?? [];
   const equipCount = player ? SLOT_ORDER.filter(s => player.equipment?.[s]).length : 0;
@@ -275,6 +278,19 @@ export const HeroDetailModal: React.FC<HeroDetailModalProps> = ({ hero, player, 
                   )}
                 </div>
               ))}
+
+              {/* 传记：官方文案，长度 56~705 字。不截断、不做二次滚动容器，
+                  交给弹层正文那一个滚动容器（flex-1 min-h-0 overflow-y-auto）消化，
+                  break-words 兜住无空格长串，保证窄屏也不出现横向溢出。 */}
+              {story !== null && (
+                <div className="rounded-lg border border-[#c8a45c]/30 bg-[#241b12]/80 p-3 md:p-4">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="w-[3px] h-3.5 rounded-sm bg-gradient-to-b from-[#f0d894] to-[#a8842c]" />
+                    <span className="text-xs font-bold tracking-[0.18em] text-[#d9c49a]">传记</span>
+                  </div>
+                  <p className="text-[12px] md:text-sm leading-relaxed modal-text break-words">{story}</p>
+                </div>
+              )}
 
               {/* 实战提示 */}
               <div className="rounded-lg border border-[#c8a45c]/30 bg-[#241b12]/80 p-3 md:p-4">

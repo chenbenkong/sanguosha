@@ -44,9 +44,15 @@ describe('官方原声技能台词', () => {
   });
 
   it('目录里没有表外的孤儿文件（防改名后残留）', () => {
+    // withFileTypes：同层还放着「素材说明.md」，直接 readdirSync 再当目录遍历
+    // 会 ENOTDIR 炸掉（这个错当时真的发生了，孤儿检查先于文档存在）。
+    // 只把武将目录下的 .mp3 纳入比对口径。
     const onDisk: string[] = [];
-    for (const hero of readdirSync(AUDIO_DIR)) {
-      for (const f of readdirSync(join(AUDIO_DIR, hero))) onDisk.push(join(hero, f));
+    for (const entry of readdirSync(AUDIO_DIR, { withFileTypes: true })) {
+      if (!entry.isDirectory()) continue;
+      for (const f of readdirSync(join(AUDIO_DIR, entry.name))) {
+        if (f.endsWith('.mp3')) onDisk.push(join(entry.name, f));
+      }
     }
     const table = new Set(expected.map((e) => e.path));
     expect(onDisk.filter((f) => !table.has(f))).toEqual([]);
