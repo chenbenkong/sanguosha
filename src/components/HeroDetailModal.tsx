@@ -273,8 +273,14 @@ export const HeroDetailModal: React.FC<HeroDetailModalProps> = ({ hero, player, 
                     <span className="text-[#9a8b74]">触发时机</span>
                     <span className="text-[#e8cf94]">{s.timing}</span>
                   </div>
-                  {s.quote && (
-                    <p className="mt-1.5 text-[11px] md:text-xs italic text-[#a99a80]">“{s.quote}”</p>
+                  {/* 台词：官方原文常常 2 句，逐句成行（1 句时与旧观感一致）；
+                      0 句时整块不渲染，避免出现只有标题的空台词区 */}
+                  {s.quotes.length > 0 && (
+                    <div className="mt-1.5 space-y-0.5">
+                      {s.quotes.map((q, qi) => (
+                        <p key={qi} className="text-[11px] md:text-xs italic text-[#a99a80]">“{q}”</p>
+                      ))}
+                    </div>
                   )}
                 </div>
               ))}

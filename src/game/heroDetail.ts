@@ -1,4 +1,5 @@
 import { Hero } from '../../types';
+import { officialSkillQuotes } from './skillQuotes';
 
 /** 官方武将牌上的技能类型标签 */
 export type SkillTag = '锁定技' | '限定技' | '觉醒技' | '主动技' | '被动技' | '主公技';
@@ -8,7 +9,7 @@ export interface SkillMeta {
   tags: SkillTag[];
   /** 触发时机（官方风格的一句话） */
   timing: string;
-  /** 官方风格技能台词 */
+  /** 手写近似台词；有官方原文时以官方原文为准（见 skillQuotes.ts） */
   quote: string;
 }
 
@@ -141,7 +142,8 @@ export interface HeroSkillView {
   tags: SkillTag[];
   desc: string;
   timing: string;
-  quote: string;
+  /** 台词：官方原文优先（常常 2 句，逐句一条），没收录时才回落到手写的近似句；都没有则为空数组 */
+  quotes: string[];
   /** 主公技在非主公身份时不生效 */
   isLord?: boolean;
 }
@@ -307,6 +309,19 @@ const PENDING_PROFILE: HeroProfile = {
   tip: '本轮已开放图鉴与立绘，技能逻辑尚未实装，暂不进入随机池、不可开局；实装后将分批加入对局。',
 };
 
+/**
+ * 技能台词：官方原文优先（同一技能常常 2 句），官方没收录时才回落到当初手写的近似句。
+ *
+ * 手写表（SKILL_META / BATCH6_SKILL_META）是官方文本还没到位时的近似写法，
+ * 现在官方原文已经入库，两者并存时一律以官方为准——否则同一页面上
+ * 「有官方原文的技能」与「只有手写近似的技能」会呈现两种口径。
+ */
+function resolveSkillQuotes(heroName: string, skillName: string, handwritten?: string): string[] {
+  const official = officialSkillQuotes(heroName, skillName);
+  if (official.length > 0) return official;
+  return handwritten ? [handwritten] : [];
+}
+
 /** 由武将数据生成详情面板所需的全部字段（不编造未实现技能） */
 export function getHeroDetail(hero: Hero): HeroDetailView {
   const names = hero.skillName.split('/').map(s => s.trim()).filter(Boolean);
@@ -318,7 +333,7 @@ export function getHeroDetail(hero: Hero): HeroDetailView {
       tags: meta?.tags ?? ['主动技'],
       desc: descs[i] || hero.skillDesc,
       timing: meta?.timing ?? '按技能描述',
-      quote: meta?.quote ?? '',
+      quotes: resolveSkillQuotes(hero.name, name, meta?.quote),
     };
   });
   if (hero.lordSkillName) {
@@ -328,7 +343,7 @@ export function getHeroDetail(hero: Hero): HeroDetailView {
       tags: ['主公技'],
       desc: hero.lordSkillDesc ?? '',
       timing: meta?.timing ?? '仅主公身份时生效',
-      quote: meta?.quote ?? '',
+      quotes: resolveSkillQuotes(hero.name, hero.lordSkillName, meta?.quote),
       isLord: true,
     });
   }
