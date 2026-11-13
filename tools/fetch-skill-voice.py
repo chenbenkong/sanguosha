@@ -18,6 +18,11 @@
 可重复执行：已存在且大于 1KB 的文件跳过。
 
 用法：python tools/fetch-skill-voice.py
+
+注意：脚本抓下来的是**原始码率**文件（约 128~192kbps），而仓库里入库的是
+64kbps 单声道转码版。若要重新抓取，抓完需要再转一次——命令与前后体积对照见
+public/audio/skill-voice/素材说明.md 的「码率与体积」一节。
+ffmpeg 不是本项目依赖，转码是一次性的。
 """
 import io, json, os, re, sys, urllib.request
 import concurrent.futures as cf

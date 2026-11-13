@@ -169,6 +169,30 @@ function splitSkillDesc(desc: string, names: string[]): string[] {
   return out;
 }
 
+/**
+ * 官方技能描述把类型写在最前面（「锁定技，…」），所以描述本身是权威来源。
+ *
+ * 手写元信息表（SKILL_META / BATCH6 / PENDING）没有收录这个技能时才走这里。
+ * 之所以不能一默认写死「主动技」：锁定技被显示成主动技是**事实错误**——
+ * 实战里一个锁定技不会给你「可以选择不发动」的余地，玩家按错误标签做判断会吃亏。
+ * 实测 7 个缺元信息的技能里有 1 个（诸葛果「羽化」）描述明确写着锁定技。
+ *
+ * 只认描述开头的类型词，不做全文匹配：「视为锁定技」这类从句会误判。
+ */
+function deriveTagsFromDesc(desc: string): SkillTag[] | null {
+  // 描述有两种写法：多技能武将经 splitSkillDesc 切分后不带技能名前缀，
+  // 单技能武将拿到的整段描述则可能自带「技能名：」。统一先剥掉可选前缀，
+  // 让这个函数对两种形状都成立，而不是依赖调用方传进来的恰好是哪种。
+  const body = desc.trimStart().replace(/^[^：:]{1,8}[：:]/, '');
+  const head = body.trimStart().slice(0, 8);
+  // 与 SkillTag 联合类型保持一致；转换技/使命技不在本作标签集里，不参与
+  const kinds: SkillTag[] = ['主公技', '锁定技', '限定技', '觉醒技'];
+  for (const k of kinds) {
+    if (head.startsWith(k)) return [k];
+  }
+  return null;
+}
+
 const FALLBACK_PROFILE: HeroProfile = { pack: '标准包', roles: ['均衡'], difficulty: 2, tip: '按技能描述的触发时机出牌，优先保证每回合都有稳定收益。' };
 
 /** 新增 30 名武将的技能类型/时机：技能逻辑尚未实装，仅用于详情面板如实展示 */
@@ -330,7 +354,7 @@ export function getHeroDetail(hero: Hero): HeroDetailView {
     const meta = SKILL_META[name] ?? BATCH6_SKILL_META[name] ?? PENDING_SKILL_META[name];
     return {
       name,
-      tags: meta?.tags ?? ['主动技'],
+      tags: meta?.tags ?? deriveTagsFromDesc(descs[i]) ?? ['主动技'],
       desc: descs[i] || hero.skillDesc,
       timing: meta?.timing ?? '按技能描述',
       quotes: resolveSkillQuotes(hero.name, name, meta?.quote),
