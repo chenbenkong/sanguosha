@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Hero, Player, Identity } from '../../types';
 import { EQUIP_META } from '../../constants';
 import { getHeroDetail, SkillTag } from '../game/heroDetail';
@@ -7,6 +7,7 @@ import { heroFullCard2x, heroPortrait2x } from '../game/utils';
 import { useCardArtMode } from './game/useCardArtMode';
 import { CardArtToggle } from './game/FullCardImage';
 import { Card3DViewer } from './Card3DViewer';
+import { hasOfficialSkillVoice, playOfficialSkillVoice } from '../audio/voice';
 
 interface HeroDetailModalProps {
   hero: Hero | null;
@@ -76,6 +77,31 @@ export const HeroDetailModal: React.FC<HeroDetailModalProps> = ({ hero, player, 
   const { mode: artMode, setMode: setArtMode } = useCardArtMode();
 
   /** 最近一次拖动结束的时刻，用来吞掉随之而来的那次 click */
+  /** 最近试听过的技能名（用于按钮的「播放中」反馈）+ 复位定时器 */
+  const [auditioning, setAuditioning] = useState<string | null>(null);
+  const auditionTimer = useRef<number | null>(null);
+
+  /**
+   * 试听该技能的官方原声。
+   *
+   * 详情页此前只能**看**到台词，要听到得等对局里真的发动一次技能。
+   * 这里把已经入库的官方语音直接接到台词旁边——同一份数据（skillVoiceLines.json）
+   * 既供战斗播放，也供这里点播。
+   *
+   * 无官方语音的技能不渲染按钮（由 hasOfficialSkillVoice 判定），
+   * 而不是渲染一个点了没反应的按钮。
+   */
+  const audition = useCallback((skillName: string) => {
+    if (!playOfficialSkillVoice(hero?.name ?? '', skillName)) return;
+    setAuditioning(skillName);
+    if (auditionTimer.current !== null) window.clearTimeout(auditionTimer.current);
+    auditionTimer.current = window.setTimeout(() => setAuditioning(null), 2200);
+  }, [hero?.name]);
+
+  useEffect(() => () => {
+    if (auditionTimer.current !== null) window.clearTimeout(auditionTimer.current);
+  }, []);
+
   const dragEndAt = useRef(0);
   const handleDragEnd = useCallback(() => { dragEndAt.current = performance.now(); }, []);
   const handleMaskClick = useCallback(() => {
@@ -298,6 +324,27 @@ export const HeroDetailModal: React.FC<HeroDetailModalProps> = ({ hero, player, 
                     ))}
                     {s.isLord && (
                       <span className="text-[10px] text-[#c8bda8]/70">（仅主公身份生效）</span>
+                    )}
+                    {/* 试听：仅当该武将该技能确有官方原声时出现。
+                        ml-auto 把它推到行尾，不与技能名/标签抢位置。 */}
+                    {hasOfficialSkillVoice(hero.name, s.name) && (
+                      <button
+                        type="button"
+                        onClick={() => audition(s.name)}
+                        aria-label={`试听 ${s.name} 台词`}
+                        title="试听官方原声"
+                        aria-pressed={auditioning === s.name}
+                        className={`ml-auto flex h-7 w-7 shrink-0 items-center justify-center rounded-full border transition-colors ${
+                          auditioning === s.name
+                            ? 'border-[#f0d894] bg-[#c8a45c]/35 text-[#f4e4bf]'
+                            : 'border-[#c8a45c]/45 text-[#d9c49a] hover:border-[#f0d894] hover:bg-[#c8a45c]/20'
+                        }`}
+                      >
+                        <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M11 5 6 9H3v6h3l5 4V5z" />
+                          <path d="M15.5 8.5a5 5 0 0 1 0 7" />
+                        </svg>
+                      </button>
                     )}
                   </div>
                   <p className="mt-1.5 text-[13px] md:text-sm leading-relaxed modal-text">{s.desc}</p>

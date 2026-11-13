@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { readFileSync, existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import LINES from './skillVoiceLines.json' with { type: 'json' };
+import { hasOfficialSkillVoice, skillVoiceLines } from './voice';
 
 /**
  * 官方原声技能台词的契约。
@@ -81,5 +82,41 @@ describe('官方原声技能台词', () => {
   it('技能名里不含路径分隔符（否则拼出的音频路径会跑出武将目录）', () => {
     const bad = pairs.filter(([, skill]) => skill.includes('/') || skill.includes('\\'));
     expect(bad.map(([h, s]) => h + '/' + s)).toEqual([]);
+  });
+});
+
+describe('试听按钮的可见性契约', () => {
+  /*
+   * 详情页的「试听」按钮只在确有官方原声时渲染，靠 hasOfficialSkillVoice 判定。
+   * 它一旦与数据脱钩就会出现两种坏结果：要么按钮点了没声音（hasOfficialSkillVoice
+   * 说 true 但文件不在），要么该有的武将看不到按钮（说 false 而文件明明在）。
+   */
+  it('有官方原声的武将会被判为可试听', () => {
+    expect(hasOfficialSkillVoice('曹操', '奸雄')).toBe(true);
+  });
+
+  it('图鉴没有的武将（蔡贞姬）与不存在的技能一律为 false，不产生死按钮', () => {
+    expect(hasOfficialSkillVoice('蔡贞姬', '舍裔')).toBe(false);
+    expect(hasOfficialSkillVoice('曹操', '这个技能不存在')).toBe(false);
+    expect(hasOfficialSkillVoice('查无此人', '奸雄')).toBe(false);
+  });
+
+  it('可试听的技能一定有非空台词可显示', () => {
+    expect(skillVoiceLines('曹操', '奸雄').length).toBeGreaterThan(0);
+    expect(skillVoiceLines('蔡贞姬', '舍裔')).toEqual([]);
+  });
+
+  it('data-has-voice 的口径与按钮一致：为 true 的每一条都能查到台词', () => {
+    // 反向校验：遍历数据里所有武将，凡 hasOfficialSkillVoice 为真者，
+    // skillVoiceLines 必须非空——两者读同一份表，不该出现分歧
+    const bad: string[] = [];
+    for (const hero of Object.keys(TABLE)) {
+      for (const skill of Object.keys(TABLE[hero])) {
+        if (hasOfficialSkillVoice(hero, skill) && skillVoiceLines(hero, skill).length === 0) {
+          bad.push(hero + '/' + skill);
+        }
+      }
+    }
+    expect(bad).toEqual([]);
   });
 });
