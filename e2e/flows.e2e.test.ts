@@ -163,7 +163,20 @@ describe('端到端 · 玩家真实流程', () => {
       // 这里要证的是「对局能走到结算、主循环不卡死」，不是「跑得快」；
       // 退出条件是结算界面出现（轮询），不是固定睡眠，卡死另有 App.tsx 的
       // stall watchdog 收尾，所以放宽预算不会让真卡死等更久。
-      const deadline = Date.now() + 600000;
+      // 预算 600s → 1200s。
+      //
+      // 依据（按时间排列的实测，都是同一份代码）：
+      //   本机 53/62/98/101/115/121/129/209s；
+      //   CI 227s / 285s（两次成功）；
+      //   CI 609s / 610s（两次卡在 600s deadline 上失败，同一提交里
+      //     706 单测与其余 4 个 e2e 全过、且全 0 条停滞告警）。
+      // 最近几次 CI 的 flows 文件整体耗时 742s，是此前 227s 的 3 倍多——
+      // 共享 runner 的算力波动就是这么大。
+      //
+      // 这里要证的是「对局能走到结算、主循环不卡死」，不是「跑得快」。
+      // 退出条件是轮询到结算界面出现，不是死等；真卡死另有 App.tsx 的
+      // stall watchdog 收尾（那会在日志里留下「结算停滞」告警，可据此区分）。
+      const deadline = Date.now() + 1200000;
       let over = { over: false, winner: null as string | null };
       while (Date.now() < deadline) {
         over = await isGameOver(ctx.page);
@@ -188,7 +201,7 @@ describe('端到端 · 玩家真实流程', () => {
       expect(exits.home).toBe(true);
 
       expect(ctx.errors).toEqual([]);
-    }, 660000);
+    }, 1320000);
   });
 
   describe('弃牌阶段', () => {
