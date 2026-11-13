@@ -37,6 +37,17 @@ export const openApp = async (baseUrl: string, opts: OpenAppOptions = {}): Promi
     executablePath: CHROME_PATH,
     headless: true,
     args: ['--no-sandbox', '--disable-dev-shm-usage', '--lang=zh-CN'],
+    // 启动超时从默认 30s 放宽到 90s。
+    //
+    // 实测依据：CI 上 5 个 e2e 文件串行、各自开关浏览器，跑到最后一个
+    // （coverage）时 runner 已被前面的会话拖慢，Chrome 30 秒内没能把
+    // WS endpoint 打出来，报「Timed out after 30000 ms while waiting for the
+    // WS endpoint URL to appear in stdout」——那一次 46 个单测文件与其余
+    // 4 个 e2e 文件全部通过，失败纯粹发生在「启动浏览器」这一步。
+    //
+    // 放宽这个超时不影响任何断言的强度：它只决定「等浏览器起来等多久」，
+    // 等不到仍然是失败，只是不再因为共享 runner 一时的资源紧张而误报。
+    timeout: 90_000,
   });
   const page = await browser.newPage();
   await page.setViewport({ width: 1440, height: 900, deviceScaleFactor: 1 });
