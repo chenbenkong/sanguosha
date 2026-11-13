@@ -101,6 +101,18 @@ describe('端到端：结算前钩子', () => {
       const before = await snapshot(ctx.page, 0);
       expect(before.name).toBe('孙茹');
 
+      // 喂伤害前先等对局空闲。
+      //
+      // `__devDamage` 是 `void combat.takeDamage(...)`——**不等待结算完成**。
+      // 若此刻主循环正在处理别的结算（isProcessing > 0），这 2 点火焰伤害会与
+      // 它并发，被后续状态覆盖或直接跳过，用例就在 15s 内等不到「释衅」日志。
+      // 实测本地偶发、CI 偶发，正是这个竞态。等空闲后再喂，事件序列才是确定的。
+      const idle = await until(ctx.page, 30000, async () => {
+        const s = await snapshot(ctx.page, 0);
+        return s.loop.isProcessing === 0;
+      });
+      expect(idle).toBe(true);
+
       // 喂 2 点火焰伤害：释衅从 damageBefore 返回 prevent
       await ctx.page.evaluate(() => {
         (window as unknown as { __devDamage: (v: number, s: number, a: number, n?: string) => void })
@@ -130,7 +142,8 @@ describe('端到端：结算前钩子', () => {
         (await snapshot(ctx.page, 0)).loop.turnIndex !== before.loop.turnIndex);
       expect(advanced).toBe(true);
 
-      // 对照：普通伤害不被释衅拦截，体力真的会掉
+      // 对照：普通伤害不被释衅拦截，体力真的会掉（同样先等空闲，理由同上）
+      await until(ctx.page, 30000, async () => (await snapshot(ctx.page, 0)).loop.isProcessing === 0);
       await ctx.page.evaluate(() => {
         (window as unknown as { __devDamage: (v: number, s: number, a: number, n?: string) => void })
           .__devDamage(0, 1, 1);
@@ -162,6 +175,11 @@ describe('端到端：结算前钩子', () => {
       expect(await startGameWithHero(ctx.page, '小乔')).toBe(true);
       expect(await probeReady(ctx.page)).toBe(true);
       expect((await snapshot(ctx.page, 0)).name).toBe('小乔');
+
+      // 构造判定牌前先等对局空闲：__devTrick / __devDeckOnly 都是直接改 ref，
+      // 若主循环此刻正在结算（isProcessing > 0），它随后的状态写回会把这批改动
+      // 覆盖掉，判定阶段就永远等不到——与释衅那条是同一类竞态。
+      expect(await until(ctx.page, 30000, async () => (await snapshot(ctx.page, 0)).loop.isProcessing === 0)).toBe(true);
 
       // 1) 给小乔挂一张【乐不思蜀】，她的判定阶段必定做一次判定
       await ctx.page.evaluate(() => {
