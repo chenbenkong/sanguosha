@@ -316,9 +316,24 @@ describe('端到端 · 3D 卡牌（引擎脚本拉不起来时）', () => {
     expect(hosts.length).toBeGreaterThan(0);
     expect(hosts.filter((h) => h.state === 'loading')).toEqual([]);
 
-    // 降级图要真的顶上：<img> 有 src 还不够，加载完了才有非零尺寸
-    await sleep(1500);
-    const painted = (await readC3DHosts(ctx.page)).filter((h) => h.rectW > 0 && h.rectH > 0);
+    // 降级图要真的顶上：<img> 有 src 还不够，加载完了才有非零尺寸。
+    //
+    // 不写固定 sleep(1500)：这里等的是「<img> 解码完成」，耗时取决于素材大小
+    // 与机器 IO，是个没有上界保证的固定睡眠——快机上白等，慢机上不够。
+    // 实测（preview）从灯箱打开到 fallback 图带非零尺寸只用了 77ms，
+    // 也就是说 1500ms 有 20 倍余量；改成轮询后常规路径反而更快返回，
+    // 而慢机器不再受 1500ms 这个拍脑袋的常数限制。
+    const paintDeadline = Date.now() + 15000;
+    let painted = (await readC3DHosts(ctx.page)).filter((h) => h.rectW > 0 && h.rectH > 0);
+    while (Date.now() < paintDeadline) {
+      const all = (await readC3DHosts(ctx.page)).filter((h) => h.rectW > 0 && h.rectH > 0);
+      if (all.length > 0 && all.every((h) => !!h.fallbackImg && h.fallbackImg.rectW > 0 && h.fallbackImg.rectH > 0)) {
+        painted = all;
+        break;
+      }
+      painted = all;
+      await sleep(100);
+    }
     expect(painted.length).toBeGreaterThan(0);
     for (const h of painted) {
       expect(h.state).toBe('fallback');

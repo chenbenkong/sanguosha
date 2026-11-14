@@ -216,7 +216,15 @@ describe('端到端 · 玩家真实流程', () => {
 
       // 弃牌阶段只在“轮到玩家且手牌超上限”时出现，需要推进若干回合。
       // 不能开托管：托管会替玩家自动弃牌，就测不到这条路径了。
-      const deadline = Date.now() + 150000;
+      //
+      // 预算 150s → 300s。依据（preview 实测，3 倍速、不开托管、轮询结束回合）：
+      //   弃牌阶段出现于 39272 / 61574 / 91467 / 110209 ms，3 次里有 1 次
+      //   到 180s 仍未出现。也就是说这个等待的分布尾部已经贴近原预算，
+      //   再叠加 CI 上 2~3 倍的减速，150s 必然偶发落空。
+      // 注意这里**不是**放宽断言强度：等不到时仍然是「用健康检查兜底并显式
+      // 返回」（见下方分支），只是不再让机器速度决定这条路径测不测得到。
+      // 真卡死由 App.tsx 的 stall watchdog 留下「结算停滞」告警，可据此区分。
+      const deadline = Date.now() + 300000;
       let prompt = { excess: null as number | null, picked: null as number | null, hasDiscardButton: false, discardEnabled: false };
       let phase: string | null = null;
       while (Date.now() < deadline) {
@@ -300,7 +308,10 @@ describe('端到端 · 玩家真实流程', () => {
       expect(discardCount).toBeGreaterThan(0);
 
       expect(ctx.errors).toEqual([]);
-    }, 240000);
+      // 用例超时必须大于「找弃牌阶段 300s + 后面选牌/推进/断言」的总和，
+      // 否则预算还没用完就先被 vitest 的 testTimeout 掐掉，报出来的是
+      // 超时而不是这里的断言原因。
+    }, 400000);
   });
 
   describe('技能弹窗', () => {
@@ -314,6 +325,9 @@ describe('端到端 · 玩家真实流程', () => {
       const started = await bootGame(ctx, { speed: 3 });
       expect(started).toBe(true);
 
+      // 预算依据（preview 实测，3 倍速不开托管）：蜜饴弹窗在开局后
+      // 39.9s 出现（同一流程 1 倍速 78.4s）。这里 70s 对 3 倍速仍有 ~1.75 倍
+      // 余量，且下面每轮都会先推进回合，不是干等。
       const deadline = Date.now() + 70000;
       let dialog: { label: string; text: string } | null = null;
       while (Date.now() < deadline && !dialog) {
@@ -383,13 +397,22 @@ describe('端到端 · 玩家真实流程', () => {
       const phaseBefore = before.phase;
       expect(phaseBefore).toBeTruthy();
 
-      // 存档在回合切换时落盘，等一个回合确保写出
-      await sleep(4000);
-      const saveBytes = await ctx.page.evaluate(() => {
-        const raw = localStorage.getItem('sgs-save-v1');
-        return raw ? raw.length : 0;
-      });
-      expect(saveBytes).toBeGreaterThan(0);
+      // 存档在开局时就会落一次（startGame 末尾 writeSave），此后每个回合开始
+      // 再落一次。实测（preview，3 局）存档出现在点下「确认出战」后 449ms，
+      // 所以原先固定等 4000ms 是够的；但它是**固定睡眠**，慢 runner 上
+      // localStorage 写入本身也可能被推迟。改成条件轮询：一出现就往下走
+      // （省掉 3.5s），15s 内没出现才失败，失败信息直接给出实际等待时长。
+      let saveBytes = 0;
+      const saveDeadline = Date.now() + 15000;
+      while (Date.now() < saveDeadline) {
+        saveBytes = await ctx.page.evaluate(() => {
+          const raw = localStorage.getItem('sgs-save-v1');
+          return raw ? raw.length : 0;
+        });
+        if (saveBytes > 0) break;
+        await sleep(200);
+      }
+      expect(saveBytes, '15s 内未写出存档').toBeGreaterThan(0);
 
       await ctx.page.reload({ waitUntil: 'networkidle2', timeout: 45000 });
       await sleep(2500);
@@ -406,15 +429,21 @@ describe('端到端 · 玩家真实流程', () => {
         const b = [...document.querySelectorAll('button')].find((x) => (x.textContent || '').includes('继续上一局'));
         if (b) (b as HTMLButtonElement).click();
       });
-      await sleep(3500);
+      // 读档是同步还原 + 一次重渲染，实测（preview）回到对局只要 209ms，
+      // 固定 3500ms 是纯浪费；改成轮询到真的回到对局，超时才失败。
+      const resumeDeadline = Date.now() + 15000;
+      let backInGame = false;
+      while (Date.now() < resumeDeadline && !backInGame) {
+        backInGame = await ctx.page.evaluate(() => {
+          const txt = document.body.innerText;
+          return txt.includes('当前阶段') || txt.includes('退出');
+        });
+        if (!backInGame) await sleep(150);
+      }
 
       const after = await readGameState(ctx.page);
       expect(after.phase).toBeTruthy();
-      // 恢复后回到对局界面，而不是停在首页
-      const backInGame = await ctx.page.evaluate(() => {
-        const txt = document.body.innerText;
-        return txt.includes('当前阶段') || txt.includes('退出');
-      });
+      // 恢复后回到对局界面，而不是停在首页（backInGame 已在上面的轮询里求出）
       expect(backInGame).toBe(true);
       await shot(ctx.page, 'flows-resume');
 

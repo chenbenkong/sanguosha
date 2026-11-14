@@ -3,7 +3,7 @@ import type { ChildProcess } from 'node:child_process';
 import { spawn } from 'node:child_process';
 import {
   openApp, startGameWithHero, readGameState, waitForSkillDialog,
-  dismissDialog, clickButton, sleep, shot,
+  dismissDialog, clickButton, setSpeedLevel, sleep, shot,
 } from './helpers';
 import { startPreview } from './preview';
 import type { E2EContext } from './helpers';
@@ -80,9 +80,32 @@ describe('端到端：真实浏览器', () => {
   }, 40000);
 
   it('曹轶「蜜饴」会向玩家弹出目标选择窗', async () => {
-    // 蜜饴在自己回合的准备阶段触发；若还没到自己的回合，先推进几轮
+    // 蜜饴在曹轶自己回合的准备阶段（onTurnStart）触发，所以要等的是
+    // 「回合自然轮回到曹轶」。这一步的耗时不由本用例控制：座位顺位随机、
+    // 每位 AI 的回合长度随出牌而变，只能靠轮询推进。
+    //
+    // 预算依据（preview 实测，3 倍速、不开托管）：
+    //   首个技能弹窗出现在开局后 14638 / 16533 ms；
+    // 原实现的问题不在总量而在**结构**：轮次上限固定 12 次，而每次循环
+    // 「结束回合 + sleep(2200) + waitForSkillDialog(1500)」的墙钟不是常数
+    // ——一旦某轮 dismissDialog 命中（弹窗在处理中），单轮就变成
+    // 800ms + 1500ms 的纯等待，12 轮约 18s 就用光了，慢 runner 上更容易
+    // 一圈都没转完就放弃。放弃分支只断言「对局还健康」，所以失败表现为
+    // 覆盖悄悄退化，而不是红灯——这类最不该留。
+    //
+    // 改成与时间预算挂钩：只要还在预算内就继续推进，并显式记录
+    // 推进了多少轮，便于在日志里区分「跑得少」和「机器慢」。
+    //
+    // 同时把速度切到 3 倍：本用例等的是「回合轮回到曹轶」，1 倍速下每个 AI
+    // 回合都要走完动画，实测同一流程 1 倍速 78.4s、3 倍速 39.9s（preview，
+    // 同样的推进脚本）。这不是放宽容差，而是把等待从「动画时长 × 回合数」
+    // 里摘出去——flows 的同类用例一直是这么做的。
+    await setSpeedLevel(ctx.page, 3);
+    const dialogDeadline = Date.now() + 75000;
+    let rounds = 0;
     let dialog = await waitForSkillDialog(ctx.page, 3000);
-    for (let i = 0; i < 12 && !dialog; i++) {
+    while (!dialog && Date.now() < dialogDeadline) {
+      rounds++;
       const dismissed = await dismissDialog(ctx.page);
       if (dismissed) { await sleep(800); }
       else {
@@ -97,10 +120,14 @@ describe('端到端：真实浏览器', () => {
       await shot(ctx.page, 'skill-dialog');
       await dismissDialog(ctx.page);
     } else {
-      // 若本轮没撞上，不误红；但要求对局仍然健康
+      // 若本轮没撞上，不误红；但要求对局仍然健康。
+      // 把轮次与耗时写进断言消息：历史上这次「没撞上」是静默的，
+      // 无法从日志判断到底是预算不够还是根本没在推进。
+      const st = await readGameState(ctx.page);
+      expect(st.phase, '75s / ' + rounds + ' 轮推进后仍未轮到曹轶准备阶段').toBeTruthy();
       expect(ctx.errors).toEqual([]);
     }
-  }, 90000);
+  }, 120000);
 
   it('全程无未捕获错误', async () => {
     expect(ctx.errors).toEqual([]);

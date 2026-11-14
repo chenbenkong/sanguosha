@@ -263,20 +263,29 @@ describe('端到端 · 覆盖补充', () => {
       // 用真实鼠标移动到卡片上：浮层靠 onPointerEnter(pointerType=mouse) 打开，
       // 合成事件或直接 dispatchEvent 测不到这条路径
       await card!.hover();
-      await sleep(600);
-
-      const tip = await ctx.page.evaluate(() => {
-        const el = document.querySelector('[data-testid="hero-skill-preview"]');
-        if (!el) return null;
-        const r = el.getBoundingClientRect();
-        return {
-          role: el.getAttribute('role'),
-          label: el.getAttribute('aria-label') || '',
-          text: (el.textContent || '').replace(/\s+/g, ' ').trim(),
-          width: r.width,
-          height: r.height,
-        };
-      });
+      // 浮层靠 onPointerEnter 触发一次 setState，正常在同一次重渲染内出现。
+      // 固定 600ms 在两处都是赌：慢机上没渲染完就取到 null（假红），
+      // 快机上白等。改成轮询到出现为止（1.5s 上限），失败时再快照一次拿现场。
+      let tip = await (async () => {
+        const deadline = Date.now() + 1500;
+        while (Date.now() < deadline) {
+          const t = await ctx.page.evaluate(() => {
+            const el = document.querySelector('[data-testid="hero-skill-preview"]');
+            if (!el) return null;
+            const r = el.getBoundingClientRect();
+            return {
+              role: el.getAttribute('role'),
+              label: el.getAttribute('aria-label') || '',
+              text: (el.textContent || '').replace(/\s+/g, ' ').trim(),
+              width: r.width,
+              height: r.height,
+            };
+          });
+          if (t) return t;
+          await sleep(100);
+        }
+        return null;
+      })();
 
       expect(tip).toBeTruthy();
       expect(tip!.role).toBe('tooltip');
@@ -291,12 +300,16 @@ describe('端到端 · 覆盖补充', () => {
 
       await shot(ctx.page, 'coverage-skill-preview');
 
-      // 指针移开卡片后浮层收起
+      // 指针移开卡片后浮层收起（同样轮询而不是固定 500ms）
       await ctx.page.mouse.move(5, 5);
-      await sleep(500);
-      const closed = await ctx.page.evaluate(
-        () => !document.querySelector('[data-testid="hero-skill-preview"]'),
-      );
+      let closed = false;
+      const closeDeadline = Date.now() + 2000;
+      while (Date.now() < closeDeadline && !closed) {
+        closed = await ctx.page.evaluate(
+          () => !document.querySelector('[data-testid="hero-skill-preview"]'),
+        );
+        if (!closed) await sleep(100);
+      }
       expect(closed).toBe(true);
 
       expect(ctx.errors).toEqual([]);

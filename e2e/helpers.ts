@@ -121,8 +121,23 @@ export const startGameWithHero = async (page: Page, heroName: string): Promise<b
   });
   if (!pos) return false;
   await page.mouse.click(pos.x, pos.y);
-  await sleep(3800);
-  return true;
+  // 等开局入场仪式真正退场，而不是固定睡 3800ms。
+  //
+  // 依据：BattleIntro 是 2200ms 起淡出、2600ms 调 onDone()，但计时从 React
+  // 挂载那一刻才开始，点击到挂载之间还要走一次 setScreen('game') 重渲染。
+  // 实测（preview，5 局）仪式消失于点击后 3509 / 3519 / 3528 / 3546 / 3568 ms
+  // ——固定 3800ms 只剩 232~291ms 余量。共享 runner 上慢一倍就会在仪式还没退场
+  // 时返回，调用方紧接着的断言（座位数 / 读档 / 首个探针）全部落在「主循环被
+  // 仪式门控暂停」的窗口里，属于典型的环境越慢越红。
+  //
+  // 改成条件轮询后：正常情况与原先一样（约 3.5s 返回），只是不再赌机器速度；
+  // 仪式一直不消失时在 20s 处返回 false，由调用方断言，不会静默继续。
+  const deadline = Date.now() + 20000;
+  while (Date.now() < deadline) {
+    if (await page.evaluate(() => !document.querySelector('.battle-intro'))) return true;
+    await sleep(100);
+  }
+  return false;
 };
 
 export const readGameState = (page: Page) =>

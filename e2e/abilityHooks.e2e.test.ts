@@ -87,11 +87,65 @@ const until = async (page: Page, timeoutMs: number, check: () => Promise<boolean
   return false;
 };
 
+/** 一次探针调用：[探针名, 实参列表] */
+type DevProbeCall = [name: string, args: unknown[]];
+
+/**
+ * 等主循环空闲再喂探针，且「判空闲」与「调探针」放在**同一次求值**里。
+ *
+ * 为什么不写成「先 until(...) 等空闲，再另起一次 evaluate 调探针」：
+ * 两次 evaluate 之间主循环仍可能重新进入结算（实测托管 + 3 倍速下
+ * isProcessing > 0 的时间占比 34.5%，25s 窗口 / 60ms 采样），而
+ * __devDamage 是 `void combat.takeDamage(...)`、不等结算完成，撞上就与
+ * 既有结算并发，状态被随后的写回覆盖——这正是此前两次 CI 偶发的成因。
+ * 同一次求值里「判断 → 调用」之间没有 await，主循环拿不到执行权，竞态窗口为零。
+ *
+ * 多个探针必须走同一次调用（例如 __devTrick + __devDeckOnly）：分两次
+ * evaluate 时中间那一段就是可被结算插入的窗口。
+ *
+ * @returns 探针是否真的在空闲时刻被调用；超时返回 false，由调用方断言，
+ *          避免「等空闲超时了还照旧往下喂」这种静默降级。
+ */
+const feedProbes = (
+  page: Page,
+  calls: DevProbeCall[],
+  timeoutMs = 30000,
+): Promise<boolean> =>
+  page.evaluate(
+    async (list: DevProbeCall[], budget: number): Promise<boolean> => {
+      const w = window as unknown as Record<string, unknown>;
+      for (const [name] of list) {
+        if (typeof w[name] !== 'function') return false;
+      }
+      const deadline = Date.now() + budget;
+      while (Date.now() < deadline) {
+        // 每轮重新读取：__sgDbg 是每次渲染新建的对象，缓存下来就是过期快照
+        const dbg = w.__sgDbg as { isProcessing?: number } | undefined;
+        if (dbg?.isProcessing === 0) {
+          for (const [name, a] of list) (w[name] as (...xs: unknown[]) => void)(...a);
+          return true;
+        }
+        await new Promise((r) => setTimeout(r, 100));
+      }
+      return false;
+    },
+    calls,
+    timeoutMs,
+  );
+
 describe('端到端：结算前钩子', () => {
   it('孙茹「释衅」免疫火焰伤害、普通伤害照常结算，且结算后主循环没有被锁死', async () => {
     const ctx = await openApp(BASE);
     try {
       expect(await startGameWithHero(ctx.page, '孙茹')).toBe(true);
+      // 开局入场仪式期间主循环被门控暂停（BattleIntro 2200ms 起淡出、2600ms 交还），
+      // 期间 isProcessing 恒为 0——探针此时喂进去会和仪式结束后的首轮结算撞车。
+      // 先等仪式退场再取快照。
+      // 实测（3 局，preview）：仪式在点下「确认出战」后 3162 / 3166 / 3183 ms 消失。
+      expect(
+        await until(ctx.page, 15000, () =>
+          ctx.page.evaluate(() => !document.querySelector('.battle-intro'))),
+      ).toBe(true);
       expect(await probeReady(ctx.page)).toBe(true);
       await setSpeedLevel(ctx.page, 3);
       // 托管：让 AI 代答【杀】的反应，避免用例被人类决策弹窗卡住
@@ -101,23 +155,9 @@ describe('端到端：结算前钩子', () => {
       const before = await snapshot(ctx.page, 0);
       expect(before.name).toBe('孙茹');
 
-      // 喂伤害前先等对局空闲。
-      //
-      // `__devDamage` 是 `void combat.takeDamage(...)`——**不等待结算完成**。
-      // 若此刻主循环正在处理别的结算（isProcessing > 0），这 2 点火焰伤害会与
-      // 它并发，被后续状态覆盖或直接跳过，用例就在 15s 内等不到「释衅」日志。
-      // 实测本地偶发、CI 偶发，正是这个竞态。等空闲后再喂，事件序列才是确定的。
-      const idle = await until(ctx.page, 30000, async () => {
-        const s = await snapshot(ctx.page, 0);
-        return s.loop.isProcessing === 0;
-      });
-      expect(idle).toBe(true);
-
-      // 喂 2 点火焰伤害：释衅从 damageBefore 返回 prevent
-      await ctx.page.evaluate(() => {
-        (window as unknown as { __devDamage: (v: number, s: number, a: number, n?: string) => void })
-          .__devDamage(0, 1, 2, 'fire');
-      });
+      // 喂 2 点火焰伤害：释衅从 damageBefore 返回 prevent。
+      // 等空闲与喂探针合并在一次求值里，理由见 feedProbes 的注释。
+      expect(await feedProbes(ctx.page, [['__devDamage', [0, 1, 2, 'fire']]])).toBe(true);
 
       const prevented = await until(ctx.page, 15000, async () =>
         (await snapshot(ctx.page, 0)).logs.some(l => l.includes('释衅') && l.includes('不受火焰伤害')));
@@ -142,12 +182,10 @@ describe('端到端：结算前钩子', () => {
         (await snapshot(ctx.page, 0)).loop.turnIndex !== before.loop.turnIndex);
       expect(advanced).toBe(true);
 
-      // 对照：普通伤害不被释衅拦截，体力真的会掉（同样先等空闲，理由同上）
-      await until(ctx.page, 30000, async () => (await snapshot(ctx.page, 0)).loop.isProcessing === 0);
-      await ctx.page.evaluate(() => {
-        (window as unknown as { __devDamage: (v: number, s: number, a: number, n?: string) => void })
-          .__devDamage(0, 1, 1);
-      });
+      // 对照组也走同一条「等空闲 + 喂探针」的原子路径。
+      // 原先这里是一次 until(...) 求值后再一次 evaluate：前一次的返回值没人接，
+      // 等空闲超时了也会照旧喂伤害——是本次要收掉的第二处同源竞态。
+      expect(await feedProbes(ctx.page, [['__devDamage', [0, 1, 1]]])).toBe(true);
       const hurt = await until(ctx.page, 20000, async () => {
         const s = await snapshot(ctx.page, 0);
         return s.logs.some(l => l.includes('孙茹 受到 1 点伤害')) || s.hp < before.hp;
@@ -173,23 +211,27 @@ describe('端到端：结算前钩子', () => {
     const ctx = await openApp(BASE);
     try {
       expect(await startGameWithHero(ctx.page, '小乔')).toBe(true);
+      // 同释衅：先等入场仪式退场（实测 3162 / 3166 / 3183 ms），仪式期间
+      // isProcessing 恒为 0，不代表主循环真的空闲。
+      expect(
+        await until(ctx.page, 15000, () =>
+          ctx.page.evaluate(() => !document.querySelector('.battle-intro'))),
+      ).toBe(true);
       expect(await probeReady(ctx.page)).toBe(true);
       expect((await snapshot(ctx.page, 0)).name).toBe('小乔');
 
       // 构造判定牌前先等对局空闲：__devTrick / __devDeckOnly 都是直接改 ref，
       // 若主循环此刻正在结算（isProcessing > 0），它随后的状态写回会把这批改动
       // 覆盖掉，判定阶段就永远等不到——与释衅那条是同一类竞态。
-      expect(await until(ctx.page, 30000, async () => (await snapshot(ctx.page, 0)).loop.isProcessing === 0)).toBe(true);
-
-      // 1) 给小乔挂一张【乐不思蜀】，她的判定阶段必定做一次判定
-      await ctx.page.evaluate(() => {
-        (window as unknown as { __devTrick: (spec: Array<{ id: number; cards: string[] }>) => void })
-          .__devTrick([{ id: 0, cards: ['乐不思蜀'] }]);
-      });
-      // 2) 牌堆重建成「方块杀」：判定牌只可能翻出方块
-      await ctx.page.evaluate((names) => {
-        (window as unknown as { __devDeckOnly: (n: string[]) => void }).__devDeckOnly(names);
-      }, Array.from({ length: 120 }, () => '♦杀'));
+      //
+      // 两个探针合并在**同一次**求值里调用：它们是配套的（先挂延时锦囊、再重建牌堆
+      // 保证判定只翻方块），分两次 evaluate 中间那一段就是结算可以插进来的窗口。
+      expect(
+        await feedProbes(ctx.page, [
+          ['__devTrick', [[{ id: 0, cards: ['乐不思蜀'] }]]],
+          ['__devDeckOnly', [Array.from({ length: 120 }, () => '♦杀')]],
+        ]),
+      ).toBe(true);
       // 3) 托管 + 3 倍速，让回合自己推到小乔的判定阶段
       await setSpeedLevel(ctx.page, 3);
       await enableTakeover(ctx.page);
