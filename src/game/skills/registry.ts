@@ -89,13 +89,15 @@ export interface SkillContext {
    * 每加一个技能就要改 types.ts、App.tsx 与存档。这里用 heroMemory 承载，
    * 不碰 Player 结构，也就不需要改存档格式。
    *
-   * scope 限定在「本人」：key 是标记名，值是数量。
+   * 默认作用于本人；给第三个参数传 playerId 可作用于**其他角色**
+   * （张楚「集众」给他人贴「信众」、董贵人「连枝」给自己与他人贴「绞」）。
+   * 注意：跨角色标记写的是对方的 heroMemory，所以同一份状态对所有技能可见。
    */
-  addMark: (name: string, count?: number) => void;
-  removeMark: (name: string, count?: number) => number;
-  markCount: (name: string) => number;
+  addMark: (name: string, count?: number, toPlayerId?: number) => void;
+  removeMark: (name: string, count?: number, fromPlayerId?: number) => number;
+  markCount: (name: string, ofPlayerId?: number) => number;
   /** 列出本人所有标记（UI / 日志用） */
-  marks: () => Record<string, number>;
+  marks: (ofPlayerId?: number) => Record<string, number>;
 }
 
 /** 一次伤害事件的描述 */
