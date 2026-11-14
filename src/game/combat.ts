@@ -473,6 +473,48 @@ const skillDeps = (): DispatchDeps => ({
     if (changed) addLog(`【复原武将牌】${p.hero.name} 解除翻面与横置`, 'skill');
   },
   deckShuffleCount: shuffleCountRef.current,
+  readArea: (pid: number, zone: 'hand' | 'equip' | 'judge') => {
+    const p = playersRef.current.find(x => x.id === pid);
+    if (!p) return [];
+    if (zone === 'hand') return [...p.hand];
+    if (zone === 'equip') {
+      const e = p.equipment ?? {};
+      return [e.weapon, e.armor, e.horsePlus, e.horseMinus].filter((c): c is Card => !!c);
+    }
+    return [...(p.judgeZone ?? [])];
+  },
+  discardFromArea: (pid: number, cards: Card[]) => {
+    const p = playersRef.current.find(x => x.id === pid);
+    if (!p) return 0;
+    const ids = new Set(cards.map(c => c.id));
+    const handCards = p.hand.filter(c => ids.has(c.id));
+    if (handCards.length > 0) {
+      updatePlayerWith(pid, pl => ({ hand: pl.hand.filter(c => !ids.has(c.id)) }));
+      setDiscardPile(prev => { const np = [...prev, ...handCards]; discardPileRef.current = np; return np; });
+    }
+    const e = p.equipment ?? {};
+    const equipCards = [e.weapon, e.armor, e.horsePlus, e.horseMinus]
+      .filter((c): c is Card => !!c && ids.has(c.id));
+    for (const broken of equipCards) {
+      updatePlayerWith(pid, pl => {
+        const nextEquip = { ...(pl.equipment ?? {}) };
+        (Object.keys(nextEquip) as Array<keyof typeof nextEquip>).forEach(k => {
+          if (nextEquip[k]?.id === broken.id) delete nextEquip[k];
+        });
+        return { equipment: nextEquip };
+      });
+      setDiscardPile(prev => { const np = [...prev, broken]; discardPileRef.current = np; return np; });
+      onEquipLost(pid, broken.name);
+      triggerXiaoji(pid, broken);
+    }
+    const judgeCards = (p.judgeZone ?? []).filter(c => ids.has(c.id));
+    if (judgeCards.length > 0) {
+      updatePlayer(pid, { judgeZone: (p.judgeZone ?? []).filter(c => !ids.has(c.id)) });
+      setDiscardPile(prev => { const np = [...prev, ...judgeCards]; discardPileRef.current = np; return np; });
+    }
+    return handCards.length + equipCards.length + judgeCards.length;
+  },
+  deckCount: deckRef.current.length,
   attackRange: (pid: number) => deps.getAttackRangeById(pid),
   setChained: (pid: number, chained: boolean) => {
     const p = playersRef.current.find(x => x.id === pid);

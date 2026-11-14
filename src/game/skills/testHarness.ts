@@ -106,6 +106,9 @@ export const noopDeps = (players: Player[]): DispatchDeps => ({
   flip: () => {},
   restoreGeneral: () => {},
   deckShuffleCount: 0,
+  readArea: () => [],
+  discardFromArea: () => 0,
+  deckCount: 0,
   attackRange: () => 1,
   setChained: () => {},
 });

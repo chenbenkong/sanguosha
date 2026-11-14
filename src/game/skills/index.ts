@@ -26,6 +26,7 @@ import './batch6new17';
 import './batch6new18';
 import './batch6new19';
 import './batch6new20';
+import './batch6new21';
 import './migrated1';
 import './migrated2';
 import './migrated3';

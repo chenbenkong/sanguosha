@@ -96,6 +96,9 @@ export interface DispatchDeps {
   flip: (playerId: number, flipped: boolean) => void;
   restoreGeneral: (playerId: number) => void;
   deckShuffleCount: number;
+  readArea: (playerId: number, zone: 'hand' | 'equip' | 'judge') => Card[];
+  discardFromArea: (playerId: number, cards: Card[]) => number;
+  deckCount: number;
   attackRange: (playerId: number) => number;
   setChained: (playerId: number, chained: boolean) => void;
 }
@@ -238,6 +241,9 @@ const ctxFor = (deps: DispatchDeps, self: Player, hero: string, skill: string): 
   flip: deps.flip,
   restoreGeneral: deps.restoreGeneral,
   deckShuffleCount: deps.deckShuffleCount,
+  readArea: deps.readArea,
+  discardFromArea: deps.discardFromArea,
+  deckCount: deps.deckCount,
   attackRange: deps.attackRange,
   setChained: deps.setChained,
 });

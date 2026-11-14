@@ -157,6 +157,20 @@ registerSkill({
      * 「区域」包含装备区 / 判定区，而 ctx 只有手牌的弃置入口（discard 只动 hand）。
      * 缺的是「按区域读 / 按区域弃」两个原语 —— 不写降级版本，否则会变成「只弃手牌」。
      */
+    /**
+     * 选项 3（弃牌阶段开始时：调整手牌至手牌上限，然后弃置一名角色区域内至多 2 张牌）
+     * **仍未实装**，但缺口比之前小了一格：
+     *
+     *   · 「区域弃牌」原语本轮已经有了（ctx.readArea / ctx.discardFromArea，
+     *     落宠用的就是它）；
+     *   · 卡住的是**时机**：discardPhaseSkip 是同步钩子（App 在渲染期算它，
+     *     返回 DiscardPhaseResult，不是 Promise），而「选择弃置哪两张牌」必须提问、
+     *     必须 await。要实装这一项，需要新增一个**异步**的弃牌阶段开始钩子
+     *     （例如 onDiscardPhaseBegin），并在 App.tsx 的弃牌阶段入口 await 它。
+     *
+     * 不写一个「自动挑牌」的同步版本：那会让真人玩家的选项 3 变成 AI 替他选牌。
+     */
+
     onPlayPhaseBegin: async (ctx: SkillContext, ev: PlayPhaseEvent) => {
       if (ev.owner.id !== ctx.self.id) return;
       const others = ctx.players.filter(p => !p.isDead);

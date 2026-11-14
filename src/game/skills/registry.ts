@@ -196,6 +196,17 @@ export interface SkillContext {
    * 没有任何可读的信号，所以「本回合进行过第一次洗牌」这类条件写不出来。
    */
   deckShuffleCount: number;
+  /**
+   * 读某角色某个区域的牌（拷贝）。zone: hand / equip / judge。
+   *
+   * 滕芳兰「落宠」要「弃置一名角色区域内的任意张牌」——「区域」包含装备区与判定区，
+   * 而 ctx.discard 只动 hand。判定区里躺着【乐不思蜀】这类延时锦囊，装备区是四匹马甲。
+   */
+  readArea: (playerId: number, zone: 'hand' | 'equip' | 'judge') => Card[];
+  /** 把 cards 从它们所在的区域（手牌 / 装备区 / 判定区）弃置，返回实际弃置的张数 */
+  discardFromArea: (playerId: number, cards: Card[]) => number;
+  /** 牌堆当前的张数（哀尘按 80 / 40 分档）；这是公开信息，不需要经过 peekDeck */
+  deckCount: number;
   /** 某角色当前的攻击范围数值（万年公主「兴汉」按它算摸牌数；不是布尔判定）。 */
   attackRange: (playerId: number) => number;
   /** 横置 / 解除横置（曹华「彩翼」阴形态「翻面并横置」）。铁索连环状态由引擎的传导逻辑消费。 */
