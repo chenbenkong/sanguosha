@@ -924,6 +924,34 @@ const App: React.FC = () => {
       // 它自己判断手牌是否清零并跑一次 afterCardLost（否则同一张牌会触发两次连营）。
     },
     log: (t: string) => addLog(t, 'skill'),
+    // 可选能力：牌堆顶预览 / 移出 / 改体力上限。
+    //
+    // 牌堆在本项目里是「数组尾部是顶」（见 L1361 slice(-x).reverse()），
+    // 所以预览取末尾 x 张反转，与 drawCards 的取牌顺序一致。
+    peekDeck: (count: number) => [...deckRef.current].slice(-count).reverse(),
+    deckTo: (count: number, destination: 'discard' | 'hand', toId?: number) => {
+      const n = Math.min(count, deckRef.current.length);
+      if (n <= 0) return [];
+      const taken = deckRef.current.slice(-n).reverse();
+      const rest = deckRef.current.slice(0, -n);
+      deckRef.current = rest;
+      setDeck(rest);
+      if (destination === 'discard') {
+        const nd = [...discardPileRef.current, ...taken];
+        discardPileRef.current = nd;
+        setDiscardPile(nd);
+      } else if (toId !== undefined) {
+        mutateHand(toId, h => [...h, ...taken]);
+      }
+      return taken;
+    },
+    changeMaxHp: (playerId: number, delta: number) => {
+      const p = playersRef.current.find(x => x.id === playerId);
+      if (!p) return;
+      const nextMax = Math.max(0, p.maxHp + delta);
+      const nextHp = Math.min(nextMax, Math.max(0, p.hp));
+      updatePlayer(playerId, { maxHp: nextMax, hp: nextHp });
+    },
     banner: (h: string, sk: string) => showSkillBanner(h, sk),
     delay: (ms: number) => delay(ms),
     skillsOn: (pid: number) => skillsOn(pid),

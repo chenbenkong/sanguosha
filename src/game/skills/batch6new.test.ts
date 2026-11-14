@@ -3,10 +3,11 @@ import { makeHarness, mkCard, mkPlayer, drawnFor } from './testHarness';
 import {
   dispatchTurnEnd, dispatchTurnStart, dispatchCardUsed,
   dispatchAfterDealDamage, dispatchDamageBefore, dispatchCardLost,
+  dispatchAfterDamage, dispatchJudge,
 } from './dispatch';
 import { skillHook } from './registry';
 import { seatDistance } from '../rules';
-import { Suit } from '../../../types';
+import { CardName, CardType, Suit } from '../../../types';
 import '../skills/index';
 
 /**
@@ -386,5 +387,250 @@ describe('夏侯徽「济困」', () => {
     expect(afterFirst).toBe(1);
     await dispatchCardLost(deps, { player: xh, cards: [card(), card(), card(), card()], cause: 'discard', handAfter: 0, fromEquip: false });
     expect(fx.logs.filter(l => l.includes('济困')).length).toBe(1);
+  });
+});
+// ══════════════════════════════════════════════════════════
+// 第三批 8 个技能（卢弈邀弈未实装，理由见 batch6new.ts）
+// ══════════════════════════════════════════════════════════
+
+describe('魏娆「簪金」', () => {
+  it('本回合用过牌 + 受到伤害后，弃一张装备牌令其回复 1 点', async () => {
+    const equipCard = mkCard({ name: CardName.QINGGANG, type: CardType.EQUIPMENT });
+    const wei = mkPlayer({ id: 0, name: '魏娆', hand: [card(), equipCard] });
+    const victim = mkPlayer({ id: 1, name: '甲', hp: 2, maxHp: 3 });
+    const { deps, fx } = makeHarness([wei, victim]);
+    // 魏娆在自己的回合内使用过牌（turnOwner 默认是 players[0]）
+    await dispatchCardUsed(deps, { source: wei, card: card(), targets: [victim], usedCount: 1 });
+    await dispatchAfterDamage(deps, { victim, source: wei, amount: 1, nature: 'normal', card: card() });
+    expect(fx.healed).toEqual([{ playerId: 1, amount: 1 }]);
+    expect(fx.discarded).toEqual([{ playerId: 0, count: 1 }]);
+    expect(fx.logs.some(l => l.includes('簪金'))).toBe(true);
+  });
+
+  it('本回合没使用过牌时不触发', async () => {
+    const equipCard = mkCard({ name: CardName.QINGGANG, type: CardType.EQUIPMENT });
+    const wei = mkPlayer({ id: 0, name: '魏娆', hand: [card(), equipCard] });
+    const victim = mkPlayer({ id: 1, name: '甲', hp: 2, maxHp: 3 });
+    const { deps, fx } = makeHarness([wei, victim]);
+    await dispatchAfterDamage(deps, { victim, source: wei, amount: 1, nature: 'normal', card: card() });
+    expect(fx.healed).toHaveLength(0);
+    expect(fx.logs.some(l => l.includes('簪金'))).toBe(false);
+  });
+
+  it('没有装备牌可弃时不发动（新回合会复位标记）', async () => {
+    const wei = mkPlayer({ id: 0, name: '魏娆', hand: [card()] });
+    const victim = mkPlayer({ id: 1, name: '甲', hp: 2, maxHp: 3 });
+    const { deps, fx } = makeHarness([wei, victim]);
+    await dispatchCardUsed(deps, { source: wei, card: card(), targets: [victim], usedCount: 1 });
+    await dispatchAfterDamage(deps, { victim, source: wei, amount: 1, nature: 'normal', card: card() });
+    expect(fx.healed).toHaveLength(0);
+    // 新回合开始后「本回合用过牌」复位，旧回合的用牌不再算数
+    await dispatchTurnStart(deps, victim);
+    await dispatchAfterDamage(deps, { victim, source: wei, amount: 1, nature: 'normal', card: card() });
+    expect(fx.healed).toHaveLength(0);
+  });
+});
+
+describe('魏娆「拾芳」', () => {
+  it('弃一张手牌，获得其他角色判定区的一张牌', async () => {
+    const le = mkCard({ name: CardName.LESI, type: CardType.SCROLL });
+    const wei = mkPlayer({ id: 0, name: '魏娆', hand: [card()] });
+    const victim = mkPlayer({ id: 1, name: '甲', judgeZone: [le] });
+    const { deps, fx } = makeHarness([wei, victim]);
+    const gained: Array<[number, number, string]> = [];
+    deps.gainCard = (from, to, c) => { gained.push([from, to, c.name]); };
+    await dispatchTurnEnd(deps, wei);
+    expect(fx.discarded).toEqual([{ playerId: 0, count: 1 }]);
+    expect(gained).toEqual([[1, 0, CardName.LESI]]);
+    expect(victim.judgeZone).toEqual([]);
+    expect(victim.isLeBuSiShu).toBe(false);
+    expect(fx.logs.some(l => l.includes('拾芳'))).toBe(true);
+  });
+
+  it('没人判定区有牌时不发动', async () => {
+    const wei = mkPlayer({ id: 0, name: '魏娆', hand: [card()] });
+    const victim = mkPlayer({ id: 1, name: '甲' });
+    const { deps, fx } = makeHarness([wei, victim]);
+    await dispatchTurnEnd(deps, wei);
+    expect(fx.discarded).toHaveLength(0);
+    expect(fx.logs.some(l => l.includes('拾芳'))).toBe(false);
+  });
+});
+
+describe('王荣「吉境」', () => {
+  it('按已记录的判定点数弃牌，回复 1 点体力', async () => {
+    const five = mkCard({ value: 5, rank: '5' });
+    const two = mkCard({ value: 2, rank: '2' });
+    const wr = mkPlayer({ id: 0, name: '王荣', hp: 2, maxHp: 3, hand: [five, two] });
+    const foe = mkPlayer({ id: 1, name: '甲' });
+    const { deps, fx } = makeHarness([wr, foe]);
+    await dispatchJudge(deps, { owner: wr, card: mkCard({ value: 7, rank: '7' }), reason: '吉境' });
+    await dispatchAfterDamage(deps, { victim: wr, source: foe, amount: 1, nature: 'normal', card: card() });
+    expect(fx.discarded).toEqual([{ playerId: 0, count: 2 }]);
+    expect(fx.healed).toEqual([{ playerId: 0, amount: 1 }]);
+    expect(fx.logs.some(l => l.includes('吉境'))).toBe(true);
+  });
+
+  it('没有判定记录时不触发（引擎无「主动发起判定」原语）', async () => {
+    const wr = mkPlayer({ id: 0, name: '王荣', hp: 2, maxHp: 3, hand: [mkCard({ value: 7 })] });
+    const foe = mkPlayer({ id: 1, name: '甲' });
+    const { deps, fx } = makeHarness([wr, foe]);
+    await dispatchAfterDamage(deps, { victim: wr, source: foe, amount: 1, nature: 'normal', card: card() });
+    expect(fx.healed).toHaveLength(0);
+    expect(fx.discarded).toHaveLength(0);
+  });
+
+  it('他角色的判定不记作吉境判定', async () => {
+    const wr = mkPlayer({ id: 0, name: '王荣', hp: 2, maxHp: 3, hand: [mkCard({ value: 7 })] });
+    const foe = mkPlayer({ id: 1, name: '甲' });
+    const { deps, fx } = makeHarness([wr, foe]);
+    await dispatchJudge(deps, { owner: foe, card: mkCard({ value: 7 }), reason: '乐不思蜀' });
+    await dispatchAfterDamage(deps, { victim: wr, source: foe, amount: 1, nature: 'normal', card: card() });
+    expect(fx.healed).toHaveLength(0);
+  });
+});
+
+describe('清河公主「长姬」', () => {
+  it('成为多目标牌目标时，摸其余目标数张牌', async () => {
+    const qh = mkPlayer({ id: 0, name: '清河公主' });
+    const a = mkPlayer({ id: 1, name: '甲' });
+    const b = mkPlayer({ id: 2, name: '乙' });
+    const src = mkPlayer({ id: 3, name: '丙' });
+    const { deps, fx } = makeHarness([qh, a, b, src]);
+    await dispatchCardUsed(deps, {
+      source: src, card: mkCard({ name: CardName.NANMAN }), targets: [qh, a, b], usedCount: 1,
+    });
+    expect(drawnFor(fx, 0)).toBe(2);
+    expect(fx.logs.some(l => l.includes('长姬'))).toBe(true);
+  });
+
+  it('单目标牌不触发', async () => {
+    const qh = mkPlayer({ id: 0, name: '清河公主' });
+    const src = mkPlayer({ id: 1, name: '甲' });
+    const { deps, fx } = makeHarness([qh, src]);
+    await dispatchCardUsed(deps, { source: src, card: mkCard(), targets: [qh], usedCount: 1 });
+    expect(drawnFor(fx, 0)).toBe(0);
+  });
+});
+
+describe('丁尚涴「讽言」', () => {
+  it('令体力与手牌均不大于你的角色交给你一张手牌', async () => {
+    const dsw = mkPlayer({ id: 0, name: '丁尚涴', hp: 3, hand: [card(), card()] });
+    const poor = mkPlayer({ id: 1, name: '甲', hp: 2, hand: [card()] });
+    const { deps, fx } = makeHarness([dsw, poor]);
+    const gained: Array<[number, number]> = [];
+    deps.gainCard = (from, to) => { gained.push([from, to]); };
+    await dispatchTurnEnd(deps, dsw);
+    expect(gained).toEqual([[1, 0]]);
+    expect(fx.logs.some(l => l.includes('讽言'))).toBe(true);
+  });
+
+  it('体力大于你的角色不可选', async () => {
+    const dsw = mkPlayer({ id: 0, name: '丁尚涴', hp: 1, hand: [card(), card()] });
+    const rich = mkPlayer({ id: 1, name: '甲', hp: 3, hand: [card()] });
+    const { deps, fx } = makeHarness([dsw, rich]);
+    await dispatchTurnEnd(deps, dsw);
+    expect(fx.logs.some(l => l.includes('讽言'))).toBe(false);
+  });
+
+  it('每回合限一次：新回合复位后可再发动', async () => {
+    const dsw = mkPlayer({ id: 0, name: '丁尚涴', hp: 3, hand: [card(), card()] });
+    const poor = mkPlayer({ id: 1, name: '甲', hp: 2, hand: [card()] });
+    const { deps, fx } = makeHarness([dsw, poor]);
+    deps.gainCard = () => {};
+    await dispatchTurnEnd(deps, dsw);
+    await dispatchTurnEnd(deps, dsw);
+    expect(fx.logs.filter(l => l.includes('讽言'))).toHaveLength(1);
+    await dispatchTurnStart(deps, dsw);
+    await dispatchTurnEnd(deps, dsw);
+    expect(fx.logs.filter(l => l.includes('讽言'))).toHaveLength(2);
+  });
+});
+
+describe('邓晚棠「承宠」', () => {
+  it('使用牌时黑牌多于红牌，随机弃一张黑牌', async () => {
+    const dwt = mkPlayer({
+      id: 0, name: '邓晚棠',
+      hand: [card({ suit: Suit.SPADE }), card({ suit: Suit.CLUB }), card({ suit: Suit.HEART })],
+    });
+    const foe = mkPlayer({ id: 1, name: '甲' });
+    const { deps, fx } = makeHarness([dwt, foe]);
+    await dispatchCardUsed(deps, { source: dwt, card: card(), targets: [foe], usedCount: 1 });
+    expect(fx.discarded).toEqual([{ playerId: 0, count: 1 }]);
+    expect(fx.logs.some(l => l.includes('承宠'))).toBe(true);
+  });
+
+  it('红牌不少于黑牌时不弃牌', async () => {
+    const dwt = mkPlayer({
+      id: 0, name: '邓晚棠',
+      hand: [card({ suit: Suit.SPADE }), card({ suit: Suit.HEART }), card({ suit: Suit.DIAMOND })],
+    });
+    const foe = mkPlayer({ id: 1, name: '甲' });
+    const { deps, fx } = makeHarness([dwt, foe]);
+    await dispatchCardUsed(deps, { source: dwt, card: card(), targets: [foe], usedCount: 1 });
+    expect(fx.discarded).toHaveLength(0);
+  });
+
+  it('回合外红牌多于黑牌时摸一张；自己回合内不触发', async () => {
+    const dwt = mkPlayer({
+      id: 0, name: '邓晚棠',
+      hand: [card({ suit: Suit.HEART }), card({ suit: Suit.DIAMOND })],
+    });
+    const foe = mkPlayer({ id: 1, name: '甲' });
+    const { deps, fx } = makeHarness([dwt, foe]);
+    // 自己回合内：不触发
+    await dispatchCardLost(deps, { player: dwt, cards: [card()], cause: 'discard', handAfter: 2, fromEquip: false });
+    expect(drawnFor(fx, 0)).toBe(0);
+    // 回合外（turnOwner 切到别人）：红 2 > 黑 0 → 摸一张
+    deps.turnOwner = foe;
+    await dispatchCardLost(deps, { player: dwt, cards: [card()], cause: 'discard', handAfter: 2, fromEquip: false });
+    expect(drawnFor(fx, 0)).toBe(1);
+    expect(fx.logs.some(l => l.includes('承宠') && l.includes('回合外'))).toBe(true);
+  });
+
+  it('回合外红牌不多于黑牌时不摸牌', async () => {
+    const dwt = mkPlayer({
+      id: 0, name: '邓晚棠',
+      hand: [card({ suit: Suit.HEART }), card({ suit: Suit.SPADE }), card({ suit: Suit.CLUB })],
+    });
+    const foe = mkPlayer({ id: 1, name: '甲' });
+    const { deps, fx } = makeHarness([dwt, foe]);
+    deps.turnOwner = foe;
+    await dispatchCardLost(deps, { player: dwt, cards: [card()], cause: 'discard', handAfter: 3, fromEquip: false });
+    expect(drawnFor(fx, 0)).toBe(0);
+  });
+});
+
+describe('曹宪「灵犀」', () => {
+  it('回合开始将至多体力上限张牌置于武将牌上', async () => {
+    const cx = mkPlayer({ id: 0, name: '曹宪', maxHp: 3, hand: [card(), card(), card(), card()] });
+    const foe = mkPlayer({ id: 1, name: '甲' });
+    const { deps, fx } = makeHarness([cx, foe]);
+    const before = cx.hand.length;
+    await dispatchTurnStart(deps, cx);
+    expect(cx.placedCards).toHaveLength(1);
+    expect(cx.hand).toHaveLength(before - 1);
+    // 「置于武将牌上」不进弃牌堆（对比「箜声」走 mutateHand，不碰弃牌堆）
+    expect(fx.discarded).toHaveLength(0);
+    expect(fx.logs.some(l => l.includes('灵犀'))).toBe(true);
+  });
+
+  it('手牌为空时不发动', async () => {
+    const cx = mkPlayer({ id: 0, name: '曹宪', hand: [] });
+    const foe = mkPlayer({ id: 1, name: '甲' });
+    const { deps, fx } = makeHarness([cx, foe]);
+    await dispatchTurnStart(deps, cx);
+    expect(fx.discarded).toHaveLength(0);
+    expect(cx.placedCards ?? []).toHaveLength(0);
+    expect(fx.logs.some(l => l.includes('灵犀'))).toBe(false);
+  });
+
+  it('玩家取消时不置牌', async () => {
+    const cx = mkPlayer({ id: 0, name: '曹宪', hand: [card()] });
+    const foe = mkPlayer({ id: 1, name: '甲' });
+    const { deps, fx } = makeHarness([cx, foe], { requestChoice: async () => ({ kind: 'cancel' }) });
+    await dispatchTurnEnd(deps, cx);
+    expect(fx.discarded).toHaveLength(0);
+    expect(cx.placedCards ?? []).toHaveLength(0);
   });
 });

@@ -52,6 +52,27 @@ export interface SkillContext {
   heroMemory: Record<string, unknown>;
   /** 每个技能一份的持久存储（跨回合保留） */
   memory: Record<string, unknown>;
+  /**
+   * 牌堆顶的牌（只读预览，不改变牌堆）。
+   *
+   * 供「观看牌堆顶 X 张」类技能（慧淑 / 灵慧 / 追姬 / 隅泣）。返回的牌是副本，
+   * 技能据此做展示与决策；真正取牌请用 draw（取牌堆顶）或 deckMove。
+   */
+  peekDeck: (count: number) => Card[];
+  /**
+   * 把牌堆顶的牌移到指定去处（「置于武将牌上」「置入弃牌堆」）。
+   *
+   * destination 目前支持 'discard'（弃牌堆）与 'hand'（手牌）。
+   * 需要「放在武将牌上」这类自定义区域时，把它记进 ctx.memory 并从牌堆移出即可。
+   */
+  deckTo: (count: number, destination: 'discard' | 'hand', toId?: number) => Card[];
+  /**
+   * 修改体力上限（困励 / 殇决 / 妆戎）。
+   *
+   * delta 可正可负；引擎会把 hp 夹在 [0, maxHp] 内（除非 allowZero 且 hp 已是 0）。
+   * 这是此前唯一无法通过 ctx 表达的「角色卡面改动」。
+   */
+  changeMaxHp: (playerId: number, delta: number) => void;
 }
 
 /** 一次伤害事件的描述 */
@@ -110,6 +131,19 @@ export interface SkillHooks {
   drawPhaseBegin?: (ctx: SkillContext, ev: DrawPhaseEvent) => DrawPhaseResult | null | void | Promise<DrawPhaseResult | null | void>;
   /** 弃牌阶段：返回 skip 表示跳过整个弃牌阶段（克己） */
   discardPhaseSkip?: (ctx: SkillContext, ev: DiscardPhaseEvent) => DiscardPhaseResult | null | void;
+  /**
+   * 一张牌的目标确定后、**结算前**（邀弈 / 劳燕 / 长姬）。
+   *
+   * 这是与 afterCardUsed 互补的时机：afterCardUsed 在 finally 里、伤害已结算，
+   * 那时再改目标只是「日志好看、规则错误」。需要拦截或改写目标的技能只能用这里。
+   *
+   * 返回 { targets } 表示改写目标列表；返回 null/undefined 表示不干预。
+   * 多个技能同时改写时按注册顺序串行，后一个看到的是前一个改过的列表。
+   */
+  onTargetsChosen?: (
+    ctx: SkillContext,
+    ev: CardTargetsEvent,
+  ) => CardTargetsResult | null | void | Promise<CardTargetsResult | null | void>;
   /** 角色不因使用/打出而失去牌后：弃置 / 被获得 / 移出装备区（枭姬 / 连营） */
   afterCardLost?: (ctx: SkillContext, ev: CardLostEvent) => Promise<void> | void;
   /**
@@ -145,6 +179,23 @@ export interface DrawPhaseResult {
   count?: number;
   /** 本次不以摸牌结算（技能已自行完成效果），引擎跳过摸牌 */
   replaced?: boolean;
+  /** 战报说明 */
+  note?: string;
+}
+
+/** 一张牌的目标已确定、尚未结算 */
+export interface CardTargetsEvent {
+  /** 使用者 */
+  source: Player;
+  /** 正在结算的牌 */
+  card: Card;
+  /** 当前目标（可能被前面的技能改过） */
+  targets: Player[];
+}
+
+/** onTargetsChosen 的返回值：改写后的目标列表 */
+export interface CardTargetsResult {
+  targets: Player[];
   /** 战报说明 */
   note?: string;
 }

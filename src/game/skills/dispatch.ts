@@ -42,6 +42,22 @@ export interface DispatchDeps {
   banner: (hero: string, skill: string) => void;
   delay: (ms: number) => Promise<void>;
   skillsOn: (playerId: number) => boolean;
+  /**
+   * 牌堆顶预览 / 移出 / 改体力上限（可选能力）。
+   *
+   * 做成可选而不是必填：这三个能力需要引擎把 deckRef 与 updatePlayer 暴露出来，
+   * 而引擎的调用点很多，一次性全接会牵动 combat.ts 的每一个 dispatch 调用。
+   * 提供它们的调用点（App.tsx 的 buildSkillDeps、combat.ts 的濒死/伤害路径）
+   * 逐一补齐即可；未提供时技能会看到 undefined，应自行降级或提前返回。
+   */
+  peekDeck?: (count: number) => Card[];
+  deckTo?: (count: number, destination: 'discard' | 'hand', toId?: number) => Card[];
+  changeMaxHp?: (playerId: number, delta: number) => void;
+  /**
+   * 一张牌的目标确定后、结算前的拦截（可选能力）。
+   * 未提供时 onTargetsChosen 不会被派发。
+   */
+  applyTargets?: (source: Player, card: Card, targets: Player[]) => Promise<Player[]>;
   /** 向玩家提问；AI/托管返回 null（由引擎既有 SkillChoiceModal 实现） */
   requestChoice: (req: {
     title: string;
@@ -116,6 +132,11 @@ const ctxFor = (deps: DispatchDeps, self: Player, hero: string, skill: string): 
   damage: deps.damage,
   gainCard: deps.gainCard,
   log: deps.log,
+  // 可选能力：未提供时给一个「明确失败」的桩，而不是 undefined，
+  // 这样技能里 `ctx.peekDeck(...)` 不会抛 TypeError，而是得到空数组并自行跳过。
+  peekDeck: deps.peekDeck ?? (() => []),
+  deckTo: deps.deckTo ?? (() => []),
+  changeMaxHp: deps.changeMaxHp ?? (() => {}),
   banner: () => deps.banner(hero, skill),
   delay: deps.delay,
   memory: memOf(hero, skill),
