@@ -27,7 +27,7 @@ import { FX_LABEL, FX_ORDER, FX_TAG } from './src/game/fx';
 import type { FxLevel } from './src/game/fx';
 import { createCombatEngine } from './src/game/combat';
 import './src/game/skills';
-import { dispatchTurnEnd, dispatchTurnStart, dispatchJudge, dispatchDrawBonus, dispatchHandLimitBonus, dispatchExemptHandCards, dispatchJudgeBefore, dispatchDrawPhaseBegin, dispatchDiscardPhaseSkip, dispatchCardLost } from './src/game/skills/dispatch';
+import { dispatchTurnEnd, dispatchTurnStart, dispatchJudge, dispatchDrawBonus, dispatchHandLimitBonus, dispatchExemptHandCards, dispatchJudgeBefore, dispatchDrawPhaseBegin, dispatchDiscardPhaseSkip, dispatchCardLost, dispatchDeath } from './src/game/skills/dispatch';
 import type { SkillChoiceReq } from './src/game/skills/dispatch';
 import type { CombatDeps, CombatEngine } from './src/game/combat';
 import { GameApiProvider } from './src/game/GameApiContext';
@@ -2376,6 +2376,16 @@ const App: React.FC = () => {
       humanReactionResolver.current = null;
     }
 
+    // 技能注册表：有角色阵亡后的时机（追德 / 善身）。
+    // 放在状态已写完、既有内联技能之后：这样技能看到的是「已阵亡」的一致快照，
+    // 也不会与上面那些 hero.name === 'X' 的老分支重复结算。
+    {
+      const dead = getPlayer(victimId);
+      const killer = killerId !== undefined ? playersRef.current.find(p => p.id === killerId) : undefined;
+      if (dead) {
+        await dispatchDeath(buildSkillDeps(), { dead, killer });
+      }
+    }
     // 羊徽瑜「劝封」：其他角色死亡后，可失去「弘仪」并获得其所有技能（替换武将牌），体力上限+1、回复1
     const quanfengOwner = playersRef.current.find(p => !p.isDead && p.id !== victimId && p.hero.name === '羊徽瑜' && skillsOn(p.id) && !p.quanfengUsed);
     if (quanfengOwner) {

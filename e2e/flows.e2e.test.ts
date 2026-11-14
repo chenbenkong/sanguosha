@@ -178,16 +178,45 @@ describe('端到端 · 玩家真实流程', () => {
       // stall watchdog 收尾（那会在日志里留下「结算停滞」告警，可据此区分）。
       const deadline = Date.now() + 1200000;
       let over = { over: false, winner: null as string | null };
+      // 卡点诊断：每 5 秒采样一次「回合/阶段是否推进」。
+      //
+      // 之前失败时只知道「1200s 没等到结算」，日志里 0 条停滞告警、
+      // 其余 4 个 e2e 全过（smoke 只用 20s）——说明**不是 runner 慢**，
+      // 而是这条对局真的停住了。但停在哪一步完全看不出来。
+      // 记下最后一个状态，失败时带进断言消息，下一次红就能直接定位。
+      const samples: Array<{ t: number; turn: number | null; phase: string | null; ui: string }> = [];
+      let lastSampleAt = 0;
       while (Date.now() < deadline) {
         over = await isGameOver(ctx.page);
         if (over.over) break;
+        if (Date.now() - lastSampleAt > 5000) {
+          lastSampleAt = Date.now();
+          const snap = await ctx.page.evaluate(() => {
+            const w = window as unknown as { __devTurn?: { turn: number; phase: string } };
+            const d = w.__devTurn;
+            const dialog = document.querySelector('[role=dialog]');
+            const endTurn = [...document.querySelectorAll('button')].find(
+              (b) => (b.textContent || '').trim() === '结束回合',
+            ) as HTMLButtonElement | undefined;
+            const ui = dialog
+              ? 'dialog:' + (dialog.getAttribute('aria-label') || (dialog.textContent || '').slice(0, 30))
+              : endTurn
+                ? (endTurn.disabled ? 'endTurn-disabled' : 'endTurn-ready')
+                : 'none';
+            return { turn: d?.turn ?? null, phase: d?.phase ?? null, ui };
+          });
+          samples.push({ t: Math.round((Date.now() - (deadline - 1200000)) / 1000), ...snap });
+          // 只留最近 20 条，避免长局把内存吃满
+          if (samples.length > 20) samples.shift();
+        }
         // 兜底推进：万一托管没接管到某个决策（例如弹窗先于托管出现），
         // 这里把弹窗点掉并结束回合，避免干等 20 秒读秒。
         await nudgeTurn(ctx.page);
         await sleep(1500);
       }
 
-      expect(over.over).toBe(true);
+      // 失败时把采样表带进消息：下一次红能直接看出卡在哪个阶段/哪个 UI
+      expect(over.over, '整局未到结算，最近的循环状态采样：' + JSON.stringify(samples.slice(-8))).toBe(true);
       // 结算页必须明确写出获胜方，而不是只留一块空白
       expect(over.winner).toBeTruthy();
       await shot(ctx.page, 'flows-game-over');

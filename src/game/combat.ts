@@ -1,7 +1,7 @@
 import React from 'react';
 import type { Card, EquipmentSlot, Player } from '../../types';
 import { canHuguan, tianzeCanStrike, cilvDrawCount, fangduEffect, yuanditriggers } from './skills-batch6';
-import { dispatchAfterDamage, dispatchAfterDealDamage, dispatchCardUsed, dispatchDamageBefore } from './skills/dispatch';
+import { dispatchAfterDamage, dispatchAfterDealDamage, dispatchCardUsed, dispatchDamageBefore, dispatchDying } from './skills/dispatch';
 import { CardName, CardType, GamePhase, Identity, Suit } from '../../types';
 import { setDeck, setDiscardPile } from './gameStore';
 import { rankValue, shuffle } from './utils';
@@ -2015,6 +2015,41 @@ export const createCombatEngine = (deps: CombatDeps): CombatEngine => {
   addLog(`☠️ ${victim.hero.name} 进入濒死状态，开始求桃！`, 'danger');
 
   try {
+    // 技能注册表：进入濒死、求桃之前的时机（御心 / 困励 / 殇决）。
+    // 放在既有内联技能之前：这些是「救人」类技能，越早给机会越符合规则
+    // （一旦有人出了桃，后面再救就是重复消耗）。
+    {
+      const cur = getPlayer(victimId);
+      if (cur) {
+        const saved = await dispatchDying({
+          players: playersRef.current,
+          turnOwner: playersRef.current.find(x => x.id === turnOwnerIdRef.current),
+          draw: (pid: number, n: number) => drawCards(pid, n),
+          discard: (pid: number, cards: Card[]) => discardCards(pid, cards),
+          heal: (pid: number, n: number) => recoverHp(pid, n),
+          damage: async (vid: number, sid: number, amt: number, cd?: Card) => { await takeDamage(vid, sid, amt, cd); },
+          gainCard: (fromId: number, toId: number, cd: Card) => {
+            mutateHand(fromId, h => h.filter(c => c.id !== cd.id));
+            mutateHand(toId, h => [...h, cd]);
+          },
+          log: (t: string) => addLog(t, 'skill'),
+          banner: (h: string, sk: string) => showSkillBanner(h, sk),
+          delay: (ms: number) => delay(ms),
+          skillsOn: (pid: number) => skillsOn(pid),
+          requestChoice: deps.requestChoice,
+        }, { victim: cur, source: undefined, needHp: 1 });
+        if (saved) {
+          updatePlayer(victimId, { hp: saved.hp });
+          addLog(saved.note ?? `${cur.hero.name} 因技能回复至 ${saved.hp} 点体力`, 'skill');
+          if (saved.hp > 0) {
+            recentlySavedRef.current[victimId] = Date.now();
+            await delay(300);
+            setDyingState(null);
+            return true;
+          }
+        }
+      }
+    }
     // 张琪瑛「真仪·后土」：自身濒死时，弃置“后土”并将一张手牌当【桃】使用
     const zqyVictim = getPlayer(victimId);
     if (zqyVictim && zqyVictim.hero.name === '张琪瑛' && skillsOn(victimId)

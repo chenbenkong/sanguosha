@@ -112,6 +112,22 @@ export interface SkillHooks {
   discardPhaseSkip?: (ctx: SkillContext, ev: DiscardPhaseEvent) => DiscardPhaseResult | null | void;
   /** 角色不因使用/打出而失去牌后：弃置 / 被获得 / 移出装备区（枭姬 / 连营） */
   afterCardLost?: (ctx: SkillContext, ev: CardLostEvent) => Promise<void> | void;
+  /**
+   * 有角色阵亡后（追德 / 善身）。
+   *
+   * 传的是**阵亡者**：技能拥有者自己的阵亡要用 self === ev.dead 判断。
+   * 与 afterDamage 分开是因为「死亡」不是伤害的子事件——
+   * 体力流失、技能致死、粮尽都可能导致阵亡，挂 damage 会漏。
+   */
+  afterDeath?: (ctx: SkillContext, ev: DeathEvent) => Promise<void> | void;
+  /**
+   * 有角色进入濒死状态、尚未结算求桃前（御心 / 困励 / 殇决）。
+   *
+   * 返回 heal 表示技能立即把体力拉回（引擎据此跳过求桃），
+   * 返回 null/undefined 表示不干预。注意这是**唯一**能救回濒死者的时机，
+   * 之后的 afterDamage 已经在求桃流程之后了。
+   */
+  onDying?: (ctx: SkillContext, ev: DyingEvent) => DyingResult | null | void | Promise<DyingResult | null | void>;
 }
 
 /**
@@ -129,6 +145,32 @@ export interface DrawPhaseResult {
   count?: number;
   /** 本次不以摸牌结算（技能已自行完成效果），引擎跳过摸牌 */
   replaced?: boolean;
+  /** 战报说明 */
+  note?: string;
+}
+
+/** 角色阵亡事件 */
+export interface DeathEvent {
+  /** 阵亡者 */
+  dead: Player;
+  /** 击杀者（体力流失等情况为 undefined） */
+  killer: Player | undefined;
+}
+
+/** 进入濒死事件：引擎在结算求桃之前派发 */
+export interface DyingEvent {
+  /** 濒死者 */
+  victim: Player;
+  /** 造成这次伤害的来源（体力流失为 undefined） */
+  source: Player | undefined;
+  /** 需要回复到多少点体力才算脱离濒死（通常是 1） */
+  needHp: number;
+}
+
+/** onDying 的返回值：技能已把体力拉回，引擎据此跳过求桃 */
+export interface DyingResult {
+  /** 回复后的体力值；引擎会把它写到 victim 上 */
+  hp: number;
   /** 战报说明 */
   note?: string;
 }

@@ -1,6 +1,7 @@
 import type {
   SkillContext, DamageEvent, CardUsedEvent, JudgeEvent,
   DrawPhaseEvent, DrawPhaseResult, DiscardPhaseEvent, DiscardPhaseResult, CardLostEvent,
+  DeathEvent, DyingEvent, DyingResult,
 } from './registry';
 import { skillHook, mergeDrawPhase } from './registry';
 import { mergeJudgeBefore, mergeDamageBefore } from './engineAbilities.ts';
@@ -306,3 +307,34 @@ export const dispatchCardLost = async (deps: DispatchDeps, ev: CardLostEvent): P
 
 /** 测试用：清空技能内存 */
 export const __clearSkillMemory = (): void => { MEMORY.clear(); HERO_MEMORY.clear(); };
+
+/** 有角色阵亡后（追德 / 善身） */
+export const dispatchDeath = async (deps: DispatchDeps, ev: DeathEvent): Promise<void> => {
+  // 用阵亡者 id 做 key：同一次死亡只该触发一遍，避免呼叫链重入时重复结算
+  await withGuard(`death-${ev.dead.id}`, async () => {
+    for (const { def, fn } of skillHook('afterDeath')) {
+      for (const self of ownersOf(deps, def.hero)) {
+        await fn(ctxFor(deps, self, def.hero, def.skill), ev);
+      }
+    }
+  });
+};
+
+/**
+ * 有角色进入濒死、求桃之前（御心 / 困励 / 殇决）。
+ *
+ * 返回第一个给出结果的技能（多个技能都想救时，先注册的优先），
+ * 都不干预则返回 null 由引擎走正常求桃流程。
+ */
+export const dispatchDying = async (
+  deps: DispatchDeps,
+  ev: DyingEvent,
+): Promise<DyingResult | null> => {
+  for (const { def, fn } of skillHook('onDying')) {
+    for (const self of ownersOf(deps, def.hero)) {
+      const r = await fn(ctxFor(deps, self, def.hero, def.skill), ev);
+      if (r && typeof r.hp === 'number') return r;
+    }
+  }
+  return null;
+};
