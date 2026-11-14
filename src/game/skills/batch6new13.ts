@@ -1,5 +1,6 @@
 import { registerSkill } from './registry';
-import type { SkillContext, DrawPhaseEvent, DrawPhaseResult } from './registry';
+import type { SkillContext, DrawPhaseEvent, DrawPhaseResult, PlayPhaseEvent } from './registry';
+import { CardName } from '../../../types';
 
 /**
  * 第六批女将 · 第 13 组：任婉（狷急 / 纫霜）+ 曹华（归离）+ 滕公主（幸宠 / 流年）。
@@ -147,6 +148,40 @@ registerSkill({
         + x + ' 张，基础 ' + ev.count + ' 张）');
       ctx.banner();
       return { count: x };
+    },
+
+    /**
+     * 选项 2（出牌阶段开始时）：失去 1 点体力，然后视为对一名角色使用【杀】。
+     *
+     * 选项 3（弃牌阶段开始时调整手牌并弃置一名角色区域内至多 2 张牌）**仍未实装**：
+     * 「区域」包含装备区 / 判定区，而 ctx 只有手牌的弃置入口（discard 只动 hand）。
+     * 缺的是「按区域读 / 按区域弃」两个原语 —— 不写降级版本，否则会变成「只弃手牌」。
+     */
+    onPlayPhaseBegin: async (ctx: SkillContext, ev: PlayPhaseEvent) => {
+      if (ev.owner.id !== ctx.self.id) return;
+      const others = ctx.players.filter(p => !p.isDead);
+      if (others.length === 0) return;
+      let targetId: number | undefined;
+      if (ctx.self.isHuman) {
+        const r = await ctx.requestChoice({
+          title: '狷急：是否执行选项 2（失去 1 点体力，视为对一名角色使用【杀】）',
+          mode: 'target',
+          targets: others.map(p => ({ id: p.id, name: p.hero.name, sub: '体力 ' + p.hp })),
+          min: 1,
+          max: 1,
+          cancelLabel: '不发动',
+        });
+        const picked = r && r.kind === 'target' ? r.ids?.[0] : undefined;
+        targetId = typeof picked === 'number' ? picked : undefined;
+      } else {
+        // AI：打体力最低的那个
+        targetId = [...others].sort((a, b) => a.hp - b.hp || a.id - b.id)[0].id;
+      }
+      if (targetId === undefined) return;
+      ctx.banner();
+      ctx.log('【狷急】' + ctx.self.hero.name + ' 执行选项 2：失去 1 点体力，视为使用【杀】');
+      await ctx.loseHp(ctx.self.id, 1);
+      await ctx.useCardAs(CardName.SHA, [targetId], { reason: '狷急' });
     },
   },
 });

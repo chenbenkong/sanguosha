@@ -48,6 +48,9 @@ registerSkill({
     onTurnStart: (ctx: SkillContext) => { delete ctx.memory.usedThisTurn; },
     onTurnEnd: async (ctx: SkillContext, ending: Player) => {
       if (ending.id !== ctx.self.id) return;
+      // 「化萍」发动后会失去「绡舞」。注册表按武将派发，撤不掉一个武将原生技能，
+      // 所以由化萍在 heroMemory 上写下这个开关，绡舞自己认它。
+      if (ctx.heroMemory.noXiaowu) return;
       if (ctx.memory.usedThisTurn) return;
       const ring = ringBySeat(ctx);
       const selfIdx = ring.findIndex(p => p.id === ctx.self.id);

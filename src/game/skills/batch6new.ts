@@ -269,27 +269,44 @@ registerSkill({
   hero: '文鸳',
   skill: '铿锵',
   hooks: {
-    onTurnStart: (ctx: SkillContext) => { delete ctx.memory.usedThisTurn; },
+    onTurnStart: (ctx: SkillContext) => {
+      delete ctx.memory.usedThisTurn;
+      delete ctx.memory.usedDraw;
+      delete ctx.memory.usedBoost;
+    },
     damageBefore: async (ctx: SkillContext, ev) => {
       if (ev.source?.id !== ctx.self.id) return null;
       if (ev.victim.id === ctx.self.id) return null;
       if (ev.amount <= 0) return null;
-      if (ctx.memory.usedThisTurn) return null;
+      // 「殇决」觉醒后，限次从「每回合限一次」变成「每回合每个选项各限一次」；
+      // 开关写在武将共享的 heroMemory 上（batch6new17.ts），原生技能撤不掉、只能自己认。
+      const perOption = !!ctx.heroMemory.kqPerOption;
+      if (!perOption && ctx.memory.usedThisTurn) return null;
+      if (perOption && ctx.memory.usedDraw && ctx.memory.usedBoost) return null;
+      const allChoices = [
+        { id: 'draw', label: `摸 ${ctx.self.maxHp} 张牌`, desc: '伤害不变' },
+        { id: 'boost', label: '此伤害 +1 并获得造成伤害的牌', desc: '对高威胁目标更划算' },
+      ];
+      const open = allChoices.filter(c =>
+        !perOption || !(c.id === 'draw' ? ctx.memory.usedDraw : ctx.memory.usedBoost));
       const picked = await ctx.requestChoice({
         title: '铿锵：造成伤害时选择一项',
         mode: 'choose',
-        choices: [
-          { id: 'draw', label: `摸 ${ctx.self.maxHp} 张牌`, desc: '伤害不变' },
-          { id: 'boost', label: '此伤害 +1 并获得造成伤害的牌', desc: '对高威胁目标更划算' },
-        ],
+        choices: open,
         cancelLabel: '不发动',
       });
       if (picked && picked.kind === 'cancel') return null;
-      // AI / 托管：对方体力 <= 1 时补刀，否则补牌
-      const pick = picked && picked.kind === 'choose'
+      // AI / 托管：对方体力 <= 1 时补刀，否则补牌（已用过的选项自动跳过）
+      const wanted = picked && picked.kind === 'choose'
         ? picked.id
         : (ev.victim.hp <= 1 ? 'boost' : 'draw');
+      const pick = open.some(c => c.id === wanted) ? wanted : open[0]?.id;
+      if (!pick) return null;
       ctx.memory.usedThisTurn = true;
+      if (perOption) {
+        if (pick === 'boost') ctx.memory.usedBoost = true;
+        else ctx.memory.usedDraw = true;
+      }
       if (pick === 'boost') {
         if (ev.card) ctx.gainCard(ctx.self.id, ctx.self.id, ev.card);
         ctx.log(`【铿锵】文鸳令对 ${ev.victim.hero.name} 的伤害 +1${ev.card ? `并获得【${ev.card.name}】` : ''}`);
