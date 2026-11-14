@@ -3,6 +3,7 @@ import type { Card, EquipmentSlot, Player } from '../../types';
 import { canHuguan, tianzeCanStrike, cilvDrawCount, fangduEffect, yuanditriggers } from './skills-batch6';
 import { dispatchAfterDamage, dispatchAfterDealDamage, dispatchCardUsed, dispatchDamageBefore, dispatchDying, dispatchTargets } from './skills/dispatch';
 import type { DispatchDeps } from './skills/dispatch';
+import type { UseCardAsOptions } from './skills/registry';
 import { CardName, CardType, GamePhase, Identity, Suit } from '../../types';
 import { setDeck, setDiscardPile } from './gameStore';
 import { rankValue, shuffle } from './utils';
@@ -61,6 +62,12 @@ export interface CombatDeps {
   guohuanghouLevelRef: React.RefObject<Record<number, number>>;
   handleDeath: (victimId: number, killerId?: number) => Promise<void>;
   hasGrantedSkill: (p: Player, skillName: string) => boolean;
+  /** 授予技能（ctx.grantSkill 的引擎侧实现；App 侧负责写回 grantedSkills） */
+  grantSkillById: (id: number, skillName: string, sourceSkill: string, durationTurns?: number) => boolean;
+  /** 收回技能（ctx.revokeSkill 的引擎侧实现） */
+  revokeSkillById: (id: number, skillName: string, reason: string) => boolean;
+  /** 当前轮数（从 1 开始）；「每轮首次」类技能用它去重 */
+  roundCountRef: React.RefObject<number>;
   hasWeimu: (p: Player) => boolean;
   hasZhangMark: (p: Player, mark: string) => boolean;
   humanReactionResolver: React.RefObject<((result: { played: boolean; isWuxie: boolean; }) => void) | null>;
@@ -128,6 +135,16 @@ export interface CombatDeps {
 
 export interface CombatEngine {
   resolveCardEffect: (source: Player, targets: Player[], card: Card) => Promise<void>;
+  /**
+   * 「视为使用一张牌」：走完整结算（无懈 / 响应 / 防具 / 伤害）。
+   * 技能侧的入口是 ctx.useCardAs。
+   */
+  useCardAs: (
+    playerId: number,
+    card: Card | CardName,
+    targetIds: number[],
+    opts?: UseCardAsOptions,
+  ) => Promise<boolean>;
   resolveWuxieChain: (sourceId: number, triggerCard: Card) => Promise<boolean>;
   triggerReaction: (responderId: number, sourceId: number, neededCard: CardName, triggerCard: Card, isSecondReaction?: boolean) => Promise<boolean>;
   askForPeaches: (victimId: number) => Promise<boolean>;
@@ -172,6 +189,9 @@ export const createCombatEngine = (deps: CombatDeps): CombatEngine => {
     guohuanghouLevelRef,
     handleDeath,
     hasGrantedSkill,
+    grantSkillById,
+    revokeSkillById,
+    roundCountRef,
     hasWeimu,
     hasZhangMark,
     humanReactionResolver,
@@ -244,6 +264,86 @@ export const createCombatEngine = (deps: CombatDeps): CombatEngine => {
  * 路径上退化成空桩，依赖它们的技能（隅泣、慧淑、灵慧…）注册了却永远静默不发动。
  * 这正是 skillCoverage 想防的「有实现但永不触发」。抽成一处后就不会再漂移。
  */
+/**
+ * 虚拟牌的牌面修正（「不可被响应」/「伤害 +N」）。
+ *
+ * 按**牌 id** 挂载：这两项是「这一张牌」的属性，不是使用者的属性 ——
+ * 双锐的【杀】不可被响应，同一角色下一张普通的【杀】不受影响。
+ * 用牌 id 做键的既有先例是马云禄「凤魄」的 fengpoBoostRef。
+ */
+const cardMods = new Map<string, { noResponse?: boolean; damageBonus?: number }>();
+
+/** 虚拟牌的自增序号：同一毫秒内连发两张同名虚拟牌时也要能区分 */
+let virtualCardSeq = 0;
+
+/**
+ * 「视为使用一张牌」。
+ *
+ * 走完整的 resolveCardEffect：无懈可击、【闪】/【杀】响应、防具与距离、
+ * 结算前修正（含 onTargetsChosen 的目标合法性否决）全都在里面。
+ * 这就是它必须是引擎原语的原因：用 ctx.damage 近似会跳过【闪】与八卦阵/仁王盾。
+ */
+const useCardAs = async (
+  playerId: number,
+  cardIn: Card | CardName,
+  targetIds: number[],
+  opts: UseCardAsOptions = {},
+): Promise<boolean> => {
+  const actor = getPlayer(playerId);
+  if (!actor || actor.isDead) return false;
+  const targets = targetIds
+    .map(id => getPlayer(id))
+    .filter((x): x is Player => !!x && !x.isDead);
+  // 目标全都不在场时不能退化成「对自己使用」—— 那会把「对他人使用【杀】」变成自杀
+  if (targetIds.length > 0 && targets.length === 0) return false;
+
+  let card: Card;
+  if (typeof cardIn === 'string') {
+    virtualCardSeq += 1;
+    const isBasic = cardIn === CardName.SHA || cardIn === CardName.SHAN
+      || cardIn === CardName.TAO || cardIn === CardName.JIU;
+    card = {
+      id: 'virtual-' + cardIn + '-' + playerId + '-' + virtualCardSeq,
+      name: cardIn,
+      type: isBasic ? CardType.BASIC : CardType.SCROLL,
+      suit: Suit.SPADE,
+      rank: 'K',
+      value: 13,
+      attribute: opts.attribute,
+      description: opts.reason || ('视为使用【' + cardIn + '】'),
+      imageColor: 'from-slate-700 to-slate-900',
+    };
+  } else {
+    // 传牌时沿用牌名 / 花色 / 点数，但换一个 id 结算：原牌可能还在某人手里
+    // （日彗要把同一张牌再对其他人使用一遍），沿用原 id 会让按牌 id 去重的
+    // 结算链（dispatchCardUsed / dispatchCardGain 的 withGuard）误判成重复。
+    virtualCardSeq += 1;
+    card = {
+      ...cardIn,
+      id: cardIn.id + '#virtual-' + virtualCardSeq,
+      attribute: opts.attribute ?? cardIn.attribute,
+      description: opts.reason || ('视为使用【' + cardIn.name + '】'),
+    };
+  }
+
+  if (opts.noResponse || opts.damageBonus) {
+    cardMods.set(card.id, { noResponse: opts.noResponse, damageBonus: opts.damageBonus });
+  }
+  addLog(
+    '【虚拟牌】' + actor.hero.name + ' 视为使用'
+    + (opts.ignoreDistance ? '无距离限制的' : '') + '【' + card.name + '】'
+    + (targets.length ? ' → ' + targets.map(t => t.hero.name).join('、') : '')
+    + (opts.reason ? '（' + opts.reason + '）' : ''),
+    'skill',
+  );
+  try {
+    await resolveCardEffect(actor, targets.length ? targets : [actor], card);
+  } finally {
+    cardMods.delete(card.id);
+  }
+  return true;
+};
+
 const skillDeps = (): DispatchDeps => ({
   players: playersRef.current,
   turnOwner: playersRef.current.find(x => x.id === turnOwnerIdRef.current),
@@ -322,6 +422,18 @@ const skillDeps = (): DispatchDeps => ({
     if (!p) return;
     const nextMax = Math.max(0, p.maxHp + delta);
     updatePlayer(pid, { maxHp: nextMax, hp: Math.min(nextMax, Math.max(0, p.hp)) });
+  },
+  // ── 第六批能力：视为使用牌 / 技能授予 / 轮数 ──
+  roundCount: roundCountRef.current,
+  useCardAs: (pid: number, cardIn: Card | CardName, targetIds: number[], opts?: UseCardAsOptions) =>
+    useCardAs(pid, cardIn, targetIds, opts),
+  grantSkill: (pid: number, skillName: string, sourceSkill: string, durationTurns?: number) =>
+    deps.grantSkillById(pid, skillName, sourceSkill, durationTurns),
+  revokeSkill: (pid: number, skillName: string, reason: string) =>
+    deps.revokeSkillById(pid, skillName, reason),
+  hasGrantedSkill: (pid: number, skillName: string) => {
+    const p = playersRef.current.find(x => x.id === pid);
+    return !!p && deps.hasGrantedSkill(p, skillName);
   },
 });
   // ── resolveCardEffect（App.tsx 原 L6301-7526）──
@@ -968,6 +1080,13 @@ const skillDeps = (): DispatchDeps => ({
         if (isLieGong) {
           addLog(`${source.hero.name} 发动「烈弓」，${effectiveTarget.hero.name} 无法闪避！`, 'skill');
           showSkillBanner(source.hero.name, '烈弓');
+          await takeDamage(effectiveTarget.id, source.id, 1, slashCard);
+          continue;
+        }
+
+        // 虚拟牌的「不可被响应」（黄舞蝶「双锐」：目标在攻击范围外时此【杀】不可被响应）
+        if (cardMods.get(slashCard.id)?.noResponse) {
+          addLog('【' + slashCard.name + '】不可被响应：' + effectiveTarget.hero.name + ' 无法出【闪】', 'skill');
           await takeDamage(effectiveTarget.id, source.id, 1, slashCard);
           continue;
         }
@@ -2417,6 +2536,18 @@ const skillDeps = (): DispatchDeps => ({
       addLog(`【凤魄】伤害 +${bonus}`, 'danger');
     }
 
+    // 虚拟牌的「伤害 +N」（双锐：目标在攻击范围内时伤害 +1）。
+    // 与「凤魄」同样按牌 id 一次性结算，避免多目标牌重复加成。
+    if (damageCard) {
+      const vmod = cardMods.get(damageCard.id);
+      if (vmod?.damageBonus) {
+        const bonus = vmod.damageBonus;
+        vmod.damageBonus = undefined;
+        finalAmount += bonus;
+        addLog('虚拟牌伤害 +' + bonus, 'danger');
+      }
+    }
+
     // 曹婴「凌人」：猜对的伤害加成（仅对应被猜测的目标）
     const lingrenBoost = damageCard ? lingrenBoostRef.current[damageCard.id] : undefined;
     if (lingrenBoost && lingrenBoost.targetId === victimId) {
@@ -3003,5 +3134,6 @@ const skillDeps = (): DispatchDeps => ({
     askForPeaches,
     takeDamage,
     triggerZhennan,
+    useCardAs,
   };
 };

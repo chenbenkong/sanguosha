@@ -2,6 +2,7 @@ import { describe, expect, it, beforeEach } from 'vitest';
 import { registerSkill, skillsOf, skillHook, registeredHeroCount, __clearRegistry } from './registry';
 import { dispatchTurnEnd, dispatchAfterDamage, dispatchJudge, __clearSkillMemory } from './dispatch';
 import type { DispatchDeps } from './dispatch';
+import { noopDeps } from './testHarness';
 import { CardName, CardType, Identity, Suit } from '../../../types';
 import type { Card, Player } from '../../../types';
 
@@ -19,21 +20,8 @@ const mkPlayerNamed = (heroName: string, o: Partial<Player> = {}): Player => ({
 
 const mkPlayer = (o: Partial<Player> = {}): Player => mkPlayerNamed('测试武将', o);
 
-const mkDeps = (players: Player[], over: Partial<DispatchDeps> = {}): DispatchDeps => ({
-  players,
-  turnOwner: players[0],
-  draw: () => [],
-  discard: () => {},
-  heal: () => 0,
-  damage: async () => {},
-  gainCard: () => {},
-  log: () => {},
-  banner: () => {},
-  delay: async () => {},
-  skillsOn: () => true,
-  requestChoice: async () => null,
-  ...over,
-});
+const mkDeps = (players: Player[], over: Partial<DispatchDeps> = {}): DispatchDeps =>
+  ({ ...noopDeps(players), ...over });
 
 beforeEach(() => { __clearRegistry(); __clearSkillMemory(); });
 

@@ -14,6 +14,28 @@ import type { CardName, Suit } from '../../../types.ts';
  */
 
 /** 技能可用的上下文：引擎注入，技能作者只读/通过它施加效果 */
+/**
+ * 「视为使用一张牌」的可选项。
+ *
+ * 为什么这必须是引擎原语，而不是用 ctx.damage 近似：一张牌的完整结算包含
+ * 无懈可击、【闪】/【杀】响应、防具与距离、结算前修正。用伤害近似会跳过
+ * 【闪】与八卦阵/仁王盾 —— 那是规则错误，不是「实现不完整」。
+ */
+export interface UseCardAsOptions {
+  /** 由谁使用；默认技能拥有者本人。日彗要令每个「信众」持有者各自使用此牌，用它指定他人。 */
+  asPlayerId?: number;
+  /** 属性（马伶俐「花火」的火【杀】） */
+  attribute?: 'fire' | 'thunder';
+  /** 无距离限制 */
+  ignoreDistance?: boolean;
+  /** 此牌不可被响应（黄舞蝶「双锐」） */
+  noResponse?: boolean;
+  /** 此牌造成的伤害 +N（黄舞蝶「双锐」） */
+  damageBonus?: number;
+  /** 战报与牌面描述 */
+  reason?: string;
+}
+
 export interface SkillContext {
   /** 触发者（技能拥有者） */
   self: Player;
@@ -113,6 +135,37 @@ export interface SkillContext {
   markCount: (name: string, ofPlayerId?: number) => number;
   /** 列出本人所有标记（UI / 日志用） */
   marks: (ofPlayerId?: number) => Record<string, number>;
+  /**
+   * 「视为使用一张牌」的通用入口（灵慧 / 锦绘 / 花火 / 双锐 / ☆ 狩星 / 纫霜 /
+   * 酖毒 / 日彗 / 风影 / 枕戈 / 狷急②）。
+   *
+   * card 传 Card 时按这张牌的牌名与花色点数结算（风影把一张手牌当黑色锦囊、
+   * 日彗把原牌再对其他人使用一遍）；传 CardName 时引擎合成一张虚拟牌。
+   * 牌**不会**从任何人手里被移走 —— 需要真正弃掉或交出的牌，
+   * 由技能自己先用 ctx.discard / ctx.gainCard 处理。
+   *
+   * 返回 false 表示使用者已阵亡，或给定的目标全部已阵亡（此时没有发生任何结算）。
+   */
+  useCardAs: (
+    card: Card | CardName,
+    targetIds: number[],
+    opts?: UseCardAsOptions,
+  ) => Promise<boolean>;
+  /**
+   * 授予技能（妆戎 → ☆ 神威/☆ 无双、双锐 → ☆ 狩星、殇决 → ☆ 困励、化萍）。
+   * durationTurns 省略表示永久；返回 false 表示对方已阵亡或已拥有该技能。
+   */
+  grantSkill: (skillName: string, toPlayerId?: number, durationTurns?: number) => boolean;
+  /** 收回技能（离宫失去慧淑/易数、伏械「失去一个其他技能」）。 */
+  revokeSkill: (skillName: string, ofPlayerId?: number, reason?: string) => boolean;
+  hasGrantedSkill: (skillName: string, ofPlayerId?: number) => boolean;
+  /**
+   * 当前轮数，从 1 开始。
+   *
+   * 「每轮首次」类技能（幸宠 / 纫霜 / 落宠 / 归离）用它去重。
+   * 不能用 onTurnStart 顶替 —— 那是「每回合」，一轮里有几个回合就会多发动几次。
+   */
+  roundCount: number;
 }
 
 /** 一次伤害事件的描述 */
@@ -209,6 +262,15 @@ export interface SkillHooks {
    * 之后的 afterDamage 已经在求桃流程之后了。
    */
   onDying?: (ctx: SkillContext, ev: DyingEvent) => DyingResult | null | void | Promise<DyingResult | null | void>;
+  /**
+   * 新一轮开始时（座位号回绕；落宠 / 幸宠 / 归离 / 哀尘）。
+   * 「每轮首次」用 ctx.roundCount 去重。
+   */
+  onRoundStart?: (ctx: SkillContext, round: number) => Promise<void> | void;
+  /** 出牌阶段开始时（帼武 / 铃音 / ☆ 狩星 / 狷急②）。被【乐不思蜀】跳过时不派发。 */
+  onPlayPhaseBegin?: (ctx: SkillContext) => Promise<void> | void;
+  /** 出牌阶段结束时（酖毒）。每回合至多派发一次。 */
+  onPlayPhaseEnd?: (ctx: SkillContext) => Promise<void> | void;
 }
 
 /**

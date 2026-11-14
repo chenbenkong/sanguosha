@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
-import { CardName, GamePhase } from '../../../types';
+import { CardName, CardType, GamePhase } from '../../../types';
 import type { Card, Player } from '../../../types';
-import { mkCard, mkPlayer } from './testHarness';
+import { mkCard, mkPlayer, noopDeps } from './testHarness';
 import { createCombatEngine } from '../combat';
 import type { CombatDeps, CombatEngine } from '../combat';
 import { dispatchJudgeBefore } from './dispatch';
@@ -95,6 +95,9 @@ const buildTrial = (roster: Roster): Trial => {
     aiDifficultyRef: ref('normal'),
     canReach: () => true,
     canUseWusheng: () => false,
+    grantSkillById: () => false,
+    revokeSkillById: () => false,
+    roundCountRef: ref(1),
     cangHuiUsedRef: ref(false),
     chainWaveRef: ref(null),
     deckRef: ref([]),
@@ -343,18 +346,8 @@ const applyJudgeBefore = async (
 describe('judgeBefore 在引擎里生效', () => {
   /** 与引擎一致的最小 DispatchDeps：players 用当前对局、log 收集起来 */
   const depsFor = (t: Trial, log: string[]) => ({
-    players: t.players(),
-    turnOwner: t.players()[0],
-    draw: () => [] as Card[],
-    discard: () => {},
-    heal: () => 0,
-    damage: async () => {},
-    gainCard: () => {},
+    ...noopDeps(t.players()),
     log: (text: string) => { log.push(text); },
-    banner: () => {},
-    delay: async () => {},
-    skillsOn: () => true,
-    requestChoice: async () => null,
   });
 
   it('返回 replaceWith 时最终判定牌被替换', async () => {
@@ -390,5 +383,81 @@ describe('judgeBefore 在引擎里生效', () => {
     const app = fs.readFileSync(path.resolve(__dirname, '../../../App.tsx'), 'utf8');
     expect(/finalCard = pre\.replaceWith/.test(app)).toBe(true);
     expect(/finalCard = \{ \.\.\.finalCard, suit: pre\.treatSuitAs \}/.test(app)).toBe(true);
+  });
+});
+
+/**
+ * ctx.useCardAs（视为使用一张牌）的引擎级验证。
+ *
+ * 这是第六批最关键的原语：灵慧 / 锦绘 / 花火 / 双锐 / ☆ 狩星 / 纫霜 / 酖毒 /
+ * 日彗 / 风影 / 枕戈 全靠它。它必须走**完整**结算，所以这里用真实引擎断言
+ * 伤害真的落地、【闪】真的被响应、noResponse / damageBonus 真的改变结果 ——
+ * 而不是只断言「调用了 dispatcher」。
+ */
+describe('useCardAs 在真实引擎里结算', () => {
+  const giveShan = (trial: Trial, id: number) => {
+    // 直接改对象：引擎用 getPlayer 从同一个 players 数组里找，能读到
+    trial.players().find(p => p.id === id)!.hand.push(
+      mkCard({ name: CardName.SHAN, type: CardType.BASIC }),
+    );
+  };
+
+  it('对他人使用虚拟【杀】走完整结算，造成 1 点伤害', async () => {
+    const t = buildTrial([{ name: '甲', id: 0 }, { name: '乙', id: 1, hp: 4 }]);
+    const ok = await t.engine.useCardAs(0, CardName.SHA, [1]);
+    expect(ok).toBe(true);
+    expect(t.hp(1)).toBe(3);
+  });
+
+  it('目标手上有【闪】时会被响应，伤害不落地（证明确实走了响应链）', async () => {
+    const t = buildTrial([{ name: '甲', id: 0 }, { name: '乙', id: 1, hp: 4 }]);
+    giveShan(t, 1);
+    await t.engine.useCardAs(0, CardName.SHA, [1]);
+    expect(t.hp(1)).toBe(4);
+  });
+
+  it('noResponse：同一局面下【闪】无法响应，伤害照常落地', async () => {
+    const t = buildTrial([{ name: '甲', id: 0 }, { name: '乙', id: 1, hp: 4 }]);
+    giveShan(t, 1);
+    await t.engine.useCardAs(0, CardName.SHA, [1], { noResponse: true, reason: '测试·双锐' });
+    expect(t.hp(1)).toBe(3);
+    expect(t.logs.some(l => l.includes('不可被响应'))).toBe(true);
+  });
+
+  it('damageBonus：伤害 +1 真的加到这次结算上', async () => {
+    const t = buildTrial([{ name: '甲', id: 0 }, { name: '乙', id: 1, hp: 5 }]);
+    await t.engine.useCardAs(0, CardName.SHA, [1], { damageBonus: 1 });
+    expect(t.hp(1)).toBe(3);
+  });
+
+  it('damageBonus 只作用于这一张牌（同一使用者下一张普通【杀】仍是 1 点）', async () => {
+    const t = buildTrial([{ name: '甲', id: 0 }, { name: '乙', id: 1, hp: 6 }]);
+    await t.engine.useCardAs(0, CardName.SHA, [1], { damageBonus: 1 });
+    expect(t.hp(1)).toBe(4);
+    await t.engine.useCardAs(0, CardName.SHA, [1]);
+    expect(t.hp(1)).toBe(3);
+  });
+
+  it('传一张真实的牌时沿用其牌名与花色，用新 id 结算（日彗 / 风影）', async () => {
+    const t = buildTrial([{ name: '甲', id: 0 }, { name: '乙', id: 1, hp: 4 }]);
+    const real = mkCard({ name: CardName.SHA, suit: '♥' as Card['suit'] });
+    const idBefore = real.id;
+    const suitBefore = real.suit;
+    await t.engine.useCardAs(0, real, [1]);
+    expect(t.hp(1)).toBe(3);
+    // 引擎不搬动、也不改写技能传进来的那张牌：它按同一牌名/花色结算一份副本
+    expect(real.id).toBe(idBefore);
+    expect(real.suit).toBe(suitBefore);
+    expect(t.logs.some(l => l.includes('【杀】'))).toBe(true);
+  });
+
+  it('使用者已阵亡 / 目标全部已阵亡时返回 false 且不结算', async () => {
+    const t = buildTrial([{ name: '甲', id: 0 }, { name: '乙', id: 1, hp: 4 }]);
+    t.players()[0].isDead = true;
+    expect(await t.engine.useCardAs(0, CardName.SHA, [1])).toBe(false);
+    t.players()[0].isDead = false;
+    t.players()[1].isDead = true;
+    expect(await t.engine.useCardAs(0, CardName.SHA, [1])).toBe(false);
+    expect(t.hp(1)).toBe(4);
   });
 });

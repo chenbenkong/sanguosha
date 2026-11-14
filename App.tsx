@@ -27,7 +27,8 @@ import { FX_LABEL, FX_ORDER, FX_TAG } from './src/game/fx';
 import type { FxLevel } from './src/game/fx';
 import { createCombatEngine } from './src/game/combat';
 import './src/game/skills';
-import { dispatchTurnEnd, dispatchTurnStart, dispatchJudge, dispatchDrawBonus, dispatchHandLimitBonus, dispatchExemptHandCards, dispatchJudgeBefore, dispatchDrawPhaseBegin, dispatchDiscardPhaseSkip, dispatchCardLost, dispatchDeath, dispatchCardGain } from './src/game/skills/dispatch';
+import { dispatchTurnEnd, dispatchTurnStart, dispatchJudge, dispatchDrawBonus, dispatchHandLimitBonus, dispatchExemptHandCards, dispatchJudgeBefore, dispatchDrawPhaseBegin, dispatchDiscardPhaseSkip, dispatchCardLost, dispatchDeath, dispatchCardGain, dispatchRoundStart, dispatchPlayPhaseBegin, dispatchPlayPhaseEnd } from './src/game/skills/dispatch';
+import type { DispatchDeps } from './src/game/skills/dispatch';
 import type { SkillChoiceReq } from './src/game/skills/dispatch';
 import type { CombatDeps, CombatEngine } from './src/game/combat';
 import { GameApiProvider } from './src/game/GameApiContext';
@@ -469,6 +470,12 @@ const App: React.FC = () => {
   const zoushiRevealedRef = useRef<Set<number>>(new Set()); // 「祸水」已明置
   const skillSealRef = useRef<Record<number, number>>({}); // 被「倾城」暗置：解封回合计数
   const turnCountRef = useRef<number>(0); // 全局回合计数（用于暗置解封）
+  // 轮数（座位号回绕时 +1，从 1 开始）。「每轮首次」类技能（幸宠 / 纫霜 / 落宠）用它去重
+  const roundCountRef = useRef<number>(1);
+  // 出牌阶段是否已经开始（值是该阶段的回合角色 id）。
+  // 出牌阶段的出口有多条（自然结束 / 托管 / 中途阵亡），用「进入下一个阶段」这一处
+  // 统一派发 onPlayPhaseEnd，比在每个出口各写一遍可靠。
+  const playPhaseOpenRef = useRef<number | null>(null);
   // 郭皇后「矫诏」/「殚心」
   const [hasUsedJiaozhao, setHasUsedJiaozhao] = useState<boolean>(false);
   const [guohuanghouLevel, setGuohuanghouLevel] = useState<number>(1);
@@ -908,7 +915,9 @@ const App: React.FC = () => {
   // 技能分发依赖的统一入口。此前每个 dispatch 调用点都手写一遍同样的 deps
   // 组装（draw/discard/heal/damage/gainCard/log/banner/delay/skillsOn/requestChoice），
   // 既重复又容易出现某处漏传字段。这里收成一份。
-  const buildSkillDeps = () => ({
+  // 显式标注返回类型：漏掉任何一个 DispatchDeps 字段都会在这里编译期报错，
+  // 而不是等运行时退化成空桩（邓晚棠「黛颊」就是这样坏了半个赛季的）。
+  const buildSkillDeps = (): DispatchDeps => ({
     players: playersRef.current,
     turnOwner: playersRef.current.find(p => p.id === turnOwnerIdRef.current),
     draw: (pid: number, c: number) => drawCardsRef.current!(pid, c),
@@ -1002,6 +1011,19 @@ const App: React.FC = () => {
       max: req.max,
       cancelLabel: req.cancelLabel,
     }, !isAiTakeoverRef.current),
+    // ── 第六批能力：视为使用牌 / 技能授予 / 轮数 ──
+    useCardAs: async (pid, cardIn, targetIds, opts) => {
+      if (!combatEngine) return false;
+      return combatEngine.useCardAs(pid, cardIn, targetIds, opts);
+    },
+    grantSkill: (pid, skillName, sourceSkill, durationTurns) =>
+      grantSkill(pid, skillName, sourceSkill, durationTurns),
+    revokeSkill: (pid, skillName, reason) => revokeSkill(pid, skillName, reason),
+    hasGrantedSkill: (pid, skillName) => {
+      const p = playersRef.current.find(x => x.id === pid);
+      return !!p && hasGrantedSkill(p, skillName);
+    },
+    roundCount: roundCountRef.current,
   });
 
   const excessCards = (p: Player) => {
@@ -2662,6 +2684,19 @@ const App: React.FC = () => {
         });
         // 通用：他人回合开始的技能 / 虚拟牌钩子
         await runTurnStartHooks(currentPlayer);
+        {
+          // 轮次信号：座位号回绕即新的一轮（与下方「卑弥呼·纵傀」用的是同一判据）。
+          // 放在 onTurnStart 之前 —— 「每轮开始」在语义上早于「回合开始」。
+          const isNewRound = roundLastTurnRef.current !== null && currentPlayer.id < roundLastTurnRef.current;
+          if (isNewRound) roundCountRef.current += 1;
+          await dispatchRoundStart({ ...buildSkillDeps(), turnOwner: currentPlayer }, roundCountRef.current);
+          // 上一回合若死在出牌阶段中途，onPlayPhaseEnd 还没派发过，这里补一次
+          if (playPhaseOpenRef.current !== null) {
+            const strayOwner = playPhaseOpenRef.current;
+            playPhaseOpenRef.current = null;
+            await dispatchPlayPhaseEnd(buildSkillDeps(), strayOwner);
+          }
+        }
           // 技能注册表：回合开始时机（新技能只需注册 onTurnStart，不必在此加分支）
           await dispatchTurnStart({ ...buildSkillDeps(), turnOwner: currentPlayer }, currentPlayer);
         // 「戚乱」击杀数清零已迁移到 src/game/skills/migrated3.ts（onTurnStart）
@@ -3137,6 +3172,13 @@ const App: React.FC = () => {
           await delay(600);
           setPhase(GamePhase.DISCARD);
           return;
+        }
+        // 出牌阶段开始（帼武 / 铃音 / ☆ 狩星 / 狷急②）。主循环对「同一回合 + 阶段」
+        // 有 turnStepRef 去重，所以这里每回合只跑一次；真正被跳过的情形在上面提前
+        // return 了，不会误报「开始」。
+        if (playPhaseOpenRef.current === null) {
+          playPhaseOpenRef.current = currentPlayer.id;
+          await dispatchPlayPhaseBegin(buildSkillDeps(), currentPlayer.id);
         }
         // 王元姬「谦冲」：出牌阶段开始时，若装备区不全黑/不全红，选一种牌型本回合无次数与距离限制
         if (currentPlayer.hero.name === '王元姬' && skillsOn(currentPlayer.id)) {
@@ -3811,6 +3853,12 @@ const App: React.FC = () => {
       
       // DISCARD PHASE
       else if (currentPhase === GamePhase.DISCARD) {
+        // 出牌阶段结束（酖毒）
+        if (playPhaseOpenRef.current !== null) {
+          const playOwner = playPhaseOpenRef.current;
+          playPhaseOpenRef.current = null;
+          await dispatchPlayPhaseEnd(buildSkillDeps(), playOwner);
+        }
         // 更新ref中的最新状态
         playersRef.current = players;
         const updatedPlayer = getPlayer(turnIndex);
@@ -3897,6 +3945,12 @@ const App: React.FC = () => {
 
       // END PHASE
       else if (currentPhase === GamePhase.END) {
+        // 出牌阶段结束（从出牌阶段直接跳到结束阶段的情形：阵亡 / 借刀等）
+        if (playPhaseOpenRef.current !== null) {
+          const playOwner = playPhaseOpenRef.current;
+          playPhaseOpenRef.current = null;
+          await dispatchPlayPhaseEnd(buildSkillDeps(), playOwner);
+        }
         dbgMark('end:enter');
         await delay(500);
 
@@ -6519,6 +6573,9 @@ const App: React.FC = () => {
     guohuanghouLevelRef,
     handleDeath,
     hasGrantedSkill,
+    grantSkillById: grantSkill,
+    revokeSkillById: (id: number, skillName: string, reason: string) => revokeSkill(id, skillName, reason),
+    roundCountRef,
     hasWeimu,
     hasZhangMark,
     humanReactionResolver,
@@ -6593,6 +6650,7 @@ const App: React.FC = () => {
     takeDamage: (victimId, sourceId, amount, damageCard, nature) =>
       getCombatEngine().takeDamage(victimId, sourceId, amount, damageCard, nature),
     triggerZhennan: (source, finalTargets, card) => getCombatEngine().triggerZhennan(source, finalTargets, card),
+    useCardAs: (playerId, card, targetIds, opts) => getCombatEngine().useCardAs(playerId, card, targetIds, opts),
   };
   // 引擎原始 resolveCardEffect（AI 侧在 cpuAI 内再包一层「止息」闸门时作为基底）
   const resolveCardEffectBase = combat.resolveCardEffect;

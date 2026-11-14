@@ -1,12 +1,12 @@
 import type {
   SkillContext, DamageEvent, CardUsedEvent, JudgeEvent,
   DrawPhaseEvent, DrawPhaseResult, DiscardPhaseEvent, DiscardPhaseResult, CardLostEvent,
-  DeathEvent, DyingEvent, DyingResult, CardTargetsEvent, CardGainEvent,
+  DeathEvent, DyingEvent, DyingResult, CardTargetsEvent, CardGainEvent, UseCardAsOptions,
 } from './registry';
 import { skillHook, mergeDrawPhase } from './registry';
 import { mergeJudgeBefore, mergeDamageBefore } from './engineAbilities.ts';
 import type { JudgeBeforeEvent, DamageBeforeEvent, JudgeBeforeResult, DamageBeforeResult } from './engineAbilities.ts';
-import type { Card, Player } from '../../../types';
+import type { Card, CardName, Player } from '../../../types';
 
 /**
  * 注册表分发器：引擎在每个时机调用一次，遍历所有已注册技能。
@@ -68,6 +68,23 @@ export interface DispatchDeps {
     max?: number;
     cancelLabel?: string;
   }) => Promise<{ kind: string; id?: string; ids?: Array<string | number> } | null>;
+  /**
+   * 「视为使用一张牌」。playerId 是**使用者**（通常是技能拥有者，
+   * 日彗是「信众」持有者）。引擎侧走完整的 resolveCardEffect：
+   * 无懈 / 响应 / 防具 / 伤害全都在里面。
+   */
+  useCardAs: (
+    playerId: number,
+    card: Card | CardName,
+    targetIds: number[],
+    opts?: UseCardAsOptions,
+  ) => Promise<boolean>;
+  /** 授予 / 收回 / 查询技能。playerId 是**被授予者**，sourceSkill 只用于战报。 */
+  grantSkill: (playerId: number, skillName: string, sourceSkill: string, durationTurns?: number) => boolean;
+  revokeSkill: (playerId: number, skillName: string, reason: string) => boolean;
+  hasGrantedSkill: (playerId: number, skillName: string) => boolean;
+  /** 当前轮数（从 1 开始）；「每轮首次」类技能用它去重 */
+  roundCount: number;
 }
 
 /** 每个技能一份的跨回合存储（key = hero + skill） */
@@ -189,6 +206,18 @@ const ctxFor = (deps: DispatchDeps, self: Player, hero: string, skill: string): 
     title: req.title,
     hint: req.hint ?? `${hero} 的「${skill}」`,
   }),
+  // 下面四项在 deps 层都要求显式给 playerId（技能可能作用于别人：
+  // 日彗令「信众」持有者各自使用牌、连枝令他人获得「受责」），
+  // 到 ctx 层再默认成技能拥有者本人，技能作者少写一个参数。
+  useCardAs: (card, targetIds, opts) =>
+    deps.useCardAs(opts?.asPlayerId ?? self.id, card, targetIds, opts),
+  grantSkill: (skillName, toPlayerId, durationTurns) =>
+    deps.grantSkill(toPlayerId ?? self.id, skillName, skill, durationTurns),
+  revokeSkill: (skillName, ofPlayerId, reason) =>
+    deps.revokeSkill(ofPlayerId ?? self.id, skillName, reason ?? skill),
+  hasGrantedSkill: (skillName, ofPlayerId) =>
+    deps.hasGrantedSkill(ofPlayerId ?? self.id, skillName),
+  roundCount: deps.roundCount,
 });
 
 /** 找出场上的技能拥有者（跳过已死亡 / 技能被封印的） */
@@ -220,6 +249,35 @@ export const dispatchTurnStart = async (deps: DispatchDeps, owner: Player): Prom
   for (const { def, fn } of skillHook('onTurnStart')) {
     for (const self of ownersOf(deps, def.hero)) {
       await fn(ctxFor(deps, self, def.hero, def.skill), owner);
+    }
+  }
+};
+
+/** 新一轮开始时（座位号回绕）。round 从 1 开始 */
+export const dispatchRoundStart = async (deps: DispatchDeps, round: number): Promise<void> => {
+  for (const { def, fn } of skillHook('onRoundStart')) {
+    for (const self of ownersOf(deps, def.hero)) {
+      await fn(ctxFor(deps, self, def.hero, def.skill), round);
+    }
+  }
+};
+
+/** 出牌阶段开始（只对该阶段的回合角色派发） */
+export const dispatchPlayPhaseBegin = async (deps: DispatchDeps, ownerId: number): Promise<void> => {
+  for (const { def, fn } of skillHook('onPlayPhaseBegin')) {
+    for (const self of ownersOf(deps, def.hero)) {
+      if (self.id !== ownerId) continue;
+      await fn(ctxFor(deps, self, def.hero, def.skill));
+    }
+  }
+};
+
+/** 出牌阶段结束（出口见 App.tsx 的 playPhaseOpenRef） */
+export const dispatchPlayPhaseEnd = async (deps: DispatchDeps, ownerId: number): Promise<void> => {
+  for (const { def, fn } of skillHook('onPlayPhaseEnd')) {
+    for (const self of ownersOf(deps, def.hero)) {
+      if (self.id !== ownerId) continue;
+      await fn(ctxFor(deps, self, def.hero, def.skill));
     }
   }
 };
