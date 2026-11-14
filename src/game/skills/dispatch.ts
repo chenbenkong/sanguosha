@@ -140,6 +140,30 @@ const ctxFor = (deps: DispatchDeps, self: Player, hero: string, skill: string): 
   deckTo: deps.deckTo ?? (() => []),
   changeMaxHp: deps.changeMaxHp ?? (() => {}),
   takeFromDeck: deps.takeFromDeck ?? (() => []),
+  // 通用标记：落在 heroMemOf(hero) 里（与 ctx.heroMemory 是同一份对象），
+  // 不碰 Player 结构，因此既不影响既有的四套 Player.*Marks 字段，也不用改存档格式。
+  // 用 'marks:' 前缀隔离，避免与技能自己的 heroMemory 键冲突。
+  addMark: (name: string, count = 1) => {
+    const m = heroMemOf(hero);
+    const key = 'marks:' + name;
+    m[key] = Number(m[key] ?? 0) + count;
+  },
+  removeMark: (name: string, count = 1) => {
+    const m = heroMemOf(hero);
+    const key = 'marks:' + name;
+    const cur = Number(m[key] ?? 0);
+    const next = Math.max(0, cur - count);
+    m[key] = next;
+    return cur - next;
+  },
+  markCount: (name: string) => Number(heroMemOf(hero)['marks:' + name] ?? 0),
+  marks: () => {
+    const out: Record<string, number> = {};
+    for (const [k, v] of Object.entries(heroMemOf(hero))) {
+      if (k.startsWith('marks:')) out[k.slice(6)] = Number(v);
+    }
+    return out;
+  },
   banner: () => deps.banner(hero, skill),
   delay: deps.delay,
   memory: memOf(hero, skill),

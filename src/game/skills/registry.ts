@@ -81,6 +81,21 @@ export interface SkillContext {
    * 牌堆里凑不齐时返回能凑到的部分，调用方按实际数量结算。
    */
   takeFromDeck: (pred: (c: Card) => boolean, count: number) => Card[];
+  /**
+   * 通用标记（「绞」「信众」「硝引」等）。
+   *
+   * 为什么做成通用而不是给每个技能加一个 Player 字段：现有代码里已经有
+   * zhangMarks / juMarks / meiyanMarks / shengduMarks 四套各自为政的标记数组，
+   * 每加一个技能就要改 types.ts、App.tsx 与存档。这里用 heroMemory 承载，
+   * 不碰 Player 结构，也就不需要改存档格式。
+   *
+   * scope 限定在「本人」：key 是标记名，值是数量。
+   */
+  addMark: (name: string, count?: number) => void;
+  removeMark: (name: string, count?: number) => number;
+  markCount: (name: string) => number;
+  /** 列出本人所有标记（UI / 日志用） */
+  marks: () => Record<string, number>;
 }
 
 /** 一次伤害事件的描述 */
