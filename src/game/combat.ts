@@ -522,6 +522,10 @@ const skillDeps = (): DispatchDeps => ({
     updatePlayer(pid, { isChained: chained });
     addLog(chained ? '【横置】' + p.hero.name + ' 被横置' : '【横置】' + p.hero.name + ' 解除横置', 'skill');
   },
+  // 额外回合只能在**回合结束时机**申请，而 onTurnEnd 只由 App.tsx 主循环派发；
+  // combat.ts 的 skillDeps 触不到回合循环，所以这里是有意空实现 ——
+  // 若有技能在伤害/响应链里调用它，静默忽略比半生效安全（归离不会在这种时机触发）。
+  requestExtraTurn: () => {},
 });
   // ── resolveCardEffect（App.tsx 原 L6301-7526）──
   const resolveCardEffect = async (source: Player, targets: Player[], card: Card) => {

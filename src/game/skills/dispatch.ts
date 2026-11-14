@@ -101,6 +101,7 @@ export interface DispatchDeps {
   deckCount: number;
   attackRange: (playerId: number) => number;
   setChained: (playerId: number, chained: boolean) => void;
+  requestExtraTurn: (playerId: number) => void;
 }
 
 /** 每个技能一份的跨回合存储（key = hero + skill） */
@@ -246,6 +247,7 @@ const ctxFor = (deps: DispatchDeps, self: Player, hero: string, skill: string): 
   deckCount: deps.deckCount,
   attackRange: deps.attackRange,
   setChained: deps.setChained,
+  requestExtraTurn: deps.requestExtraTurn,
 });
 
 /** 找出场上的技能拥有者（跳过已死亡 / 技能被封印的） */

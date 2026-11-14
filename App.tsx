@@ -472,6 +472,9 @@ const App: React.FC = () => {
   const turnCountRef = useRef<number>(0); // 全局回合计数（用于暗置解封）
   // 轮数（座位号回绕时 +1，从 1 开始）。「每轮首次」类技能（幸宠 / 纫霜 / 落宠）用它去重
   const roundCountRef = useRef<number>(1);
+  // 额外回合申请（曹华「归离」）：技能在 onTurnEnd 里写入申请的角色 id，
+  // 主循环在「计算下一位」处消费一次并清空。翻面的持有者仍会被翻面规则跳过。
+  const extraTurnRef = useRef<number | null>(null);
   // 出牌阶段是否已经开始（值是该阶段的回合角色 id）。
   // 出牌阶段的出口有多条（自然结束 / 托管 / 中途阵亡），用「进入下一个阶段」这一处
   // 统一派发 onPlayPhaseEnd，比在每个出口各写一遍可靠。
@@ -1105,6 +1108,9 @@ const App: React.FC = () => {
       if (!p) return;
       updatePlayer(pid, { isChained: chained });
       addLog(chained ? '【横置】' + p.hero.name + ' 被横置' : '【横置】' + p.hero.name + ' 解除横置', 'skill');
+    },
+    requestExtraTurn: (pid) => {
+      extraTurnRef.current = pid;
     },
   });
 
@@ -4416,8 +4422,21 @@ const App: React.FC = () => {
         playersRef.current = players;
 
         // 下一位存活角色：跳过阵亡玩家（规则实现见 src/game/rules.ts）
-        const nextIndex = nextAliveTurnIndex(playersRef.current.length ? playersRef.current : players, turnIndex);
-        
+        const aliveList = playersRef.current.length ? playersRef.current : players;
+        let nextIndex = nextAliveTurnIndex(aliveList, turnIndex);
+
+        // 额外回合（曹华「归离」）：申请在上面的 dispatchTurnEnd 里写入，这里消费一次。
+        // 只认**还活着**的申请者；持有者若翻面，由回合开始处的翻面规则照常跳过。
+        const extraId = extraTurnRef.current;
+        extraTurnRef.current = null;
+        if (extraId !== null) {
+          const ei = aliveList.findIndex(p => p.id === extraId && !p.isDead);
+          if (ei >= 0) {
+            addLog('【归离】' + (aliveList[ei].hero.name ?? '') + ' 执行一个额外的回合', 'skill');
+            nextIndex = ei;
+          }
+        }
+
         // 存档点：本回合结算完毕、下一位尚未开始时落盘
         setCheckpoint({ turnIndex: nextIndex, id: Date.now() });
 

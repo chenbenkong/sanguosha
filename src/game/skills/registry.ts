@@ -211,6 +211,14 @@ export interface SkillContext {
   attackRange: (playerId: number) => number;
   /** 横置 / 解除横置（曹华「彩翼」阴形态「翻面并横置」）。铁索连环状态由引擎的传导逻辑消费。 */
   setChained: (playerId: number, chained: boolean) => void;
+  /**
+   * 申请「在某角色当前回合结束后，由 playerId 执行一个额外回合」（曹华「归离」）。
+   *
+   * 只能在回合结束时机调用（onTurnEnd / 其后的钩子里）：标志由 App.tsx 主循环在
+   * 计算下一位时消费一次并清空 —— 与翻面跳过一样，这是**主循环级**的时序改动，
+   * 不靠任何 UI 补丁。额外回合的持有者若处于翻面状态，仍会被翻面规则跳过。
+   */
+  requestExtraTurn: (playerId: number) => void;
 }
 
 /** 一次回复体力事件（董絮「酖毒」、清河公主「谮构」） */

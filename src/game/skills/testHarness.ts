@@ -67,11 +67,13 @@ export interface Effects {
   /** ctx.grantSkill / ctx.revokeSkill 的调用记录 */
   granted: Array<{ playerId: number; skill: string; sourceSkill: string; durationTurns?: number }>;
   revoked: Array<{ playerId: number; skill: string; reason: string }>;
+  /** ctx.requestExtraTurn 的申请记录（玩家 id 序列） */
+  extraTurns: number[];
 }
 
 export const emptyEffects = (): Effects => ({
   drawn: [], discarded: [], healed: [], damaged: [], logs: [], banners: [],
-  usedCards: [], granted: [], revoked: [],
+  usedCards: [], granted: [], revoked: [], extraTurns: [],
 });
 
 /**
@@ -111,6 +113,7 @@ export const noopDeps = (players: Player[]): DispatchDeps => ({
   deckCount: 0,
   attackRange: () => 1,
   setChained: () => {},
+  requestExtraTurn: () => {},
 });
 
 /** 夹具里 grantSkill / hasGrantedSkill 的真实（进程内）语义 */
@@ -180,6 +183,7 @@ export const makeHarness = (players: Player[], opts: HarnessOptions = {}): Harne
       return true;
     },
     hasGrantedSkill: (playerId, skillName) => grantedByPlayer.get(playerId)?.has(skillName) ?? false,
+    requestExtraTurn: (playerId) => { fx.extraTurns.push(playerId); },
   };
   return { deps, fx };
 };
