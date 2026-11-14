@@ -75,9 +75,25 @@ describe('技能标签', () => {
  * 「按技能描述」，等于把这一格空着。锁死它，避免以后新增武将又悄悄退回兜底。
  */
 describe('技能触发时机（第六批 30 名女将）', () => {
-  const batchHeroes = () => HEROES.filter(h => h.pending);
+  /**
+   * 第六批 30 名女将的**名单**，按名字取。
+   *
+   * 以前这里是 HEROES.filter(h => h.pending)，把「批次身份」和「pending 开关」
+   * 混为一谈了：pending 的含义是「技能尚未实装、不可开局」，是会随实装进度消失的
+   * 生命周期状态，不是这批人的标识。技能装完就该解除 pending，于是这个 filter
+   * 从 30 人掉到 2 人，下面三条断言全部空转 —— 看着是绿，其实什么都没测。
+   */
+  const BATCH6_NAMES = [
+    '王荣', '全惠解', '柏灵筠', '曹金玉', '曹宪', '丁尚涴', '魏娆', '邓晚棠', '赵嫣', '芮姬',
+    '滕芳兰', '清河公主', '来莺儿', '李婉', '张楚', '夏侯徽', '万年公主', '黄舞蝶', '马伶俐', '陆文漪',
+    '董絮', '任婉', '曹华', '滕公主', '董贵人', '文鸳', '张怀', '宣公主', '吕玲绮', '卢弈',
+  ];
+  const batchHeroes = () => BATCH6_NAMES.map(n => HEROES.find(h => h.name === n))
+    .filter((h): h is NonNullable<typeof h> => !!h);
 
   it('这 30 名武将的每个技能都有具体时机，不是兜底文案', () => {
+    // 名单必须真的取满 30 人：取少了这三条会一起空转（曾经的缺陷）
+    expect(batchHeroes()).toHaveLength(30);
     const bad: string[] = [];
     for (const hero of batchHeroes()) {
       for (const s of getHeroDetail(hero).skills) {

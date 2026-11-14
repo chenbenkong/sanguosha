@@ -455,6 +455,35 @@ const PENDING_PROFILE: HeroProfile = {
 };
 
 /**
+ * 第六批女将中**技能已实装完毕**的 28 人。
+ *
+ * 她们原先挂着 pending:true（挡开局 + 显示「实装中」），但技能其实早已进注册表
+ * 并有单测覆盖 —— pending 是个过时的开关，不是「没装上」。实装完成后应当从这份
+ * 名单和 constants.ts 的 pending 里同时移除；还剩 宣公主「追姬」、吕玲绮「帼武」
+ * 两条未实装，所以那两人仍在 pending。
+ */
+const BATCH6_READY = new Set([
+  '王荣', '全惠解', '柏灵筠', '曹金玉', '曹宪', '丁尚涴', '魏娆', '邓晚棠', '赵嫣', '芮姬',
+  '滕芳兰', '清河公主', '来莺儿', '李婉', '张楚', '夏侯徽', '万年公主', '黄舞蝶', '马伶俐', '陆文漪',
+  '董絮', '任婉', '曹华', '滕公主', '董贵人', '文鸳', '张怀', '卢弈',
+]);
+
+/**
+ * 这批武将没有手写 profile，数据源（lore.json / manifest）里也**没有扩展包字段**，
+ * 所以不能编造「一将成名」「SP」之类的归属。这里只写能由技能本身证明的信息：
+ * 定位取自各技能的实际标签，提示点出技能名，难度保守取 2。
+ */
+const batch6Profile = (hero: Hero, skills: HeroSkillView[]): HeroProfile => {
+  const roles = [...new Set(skills.flatMap(s => s.tags.filter(t => t !== '主公技')))].slice(0, 2);
+  return {
+    pack: '新将',
+    roles: roles.length > 0 ? roles : ['均衡'],
+    difficulty: 2,
+    tip: '技能【' + skills.map(s => s.name).join('】【') + '】均已实装，按各技能的触发时机出牌即可。',
+  };
+};
+
+/**
  * 技能台词：官方原文优先（同一技能常常 2 句），官方没收录时才回落到当初手写的近似句。
  *
  * 手写表（SKILL_META / BATCH6_SKILL_META）是官方文本还没到位时的近似写法，
@@ -494,5 +523,8 @@ export function getHeroDetail(hero: Hero): HeroDetailView {
       isLord: true,
     });
   }
-  return { hero, profile: hero.pending ? PENDING_PROFILE : (HERO_PROFILES[hero.name] ?? FALLBACK_PROFILE), skills };
+  const profile = hero.pending
+    ? PENDING_PROFILE
+    : (HERO_PROFILES[hero.name] ?? (BATCH6_READY.has(hero.name) ? batch6Profile(hero, skills) : FALLBACK_PROFILE));
+  return { hero, profile, skills };
 }

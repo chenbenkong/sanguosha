@@ -141,8 +141,12 @@ describe('getHeroDetail', () => {
   });
 
   test('未写 profile 且非 pending 的武将回退到 FALLBACK_PROFILE（不崩溃、字段齐全）', () => {
-    const missing = HEROES.filter(h => !HERO_PROFILES[h.name] && !h.pending);
-    // 第六批新增的 30 名女将已标记 pending:true，走 PENDING_PROFILE 而非本回退分支
+    // 第六批解除 pending 后走 batch6Profile（pack「新将」），不属于本回退分支，
+    // 所以按名单排除；剩下的才是真正「既没 profile 也没 pending」的老将。
+    const BATCH6 = ['王荣','全惠解','柏灵筠','曹金玉','曹宪','丁尚涴','魏娆','邓晚棠','赵嫣','芮姬',
+      '滕芳兰','清河公主','来莺儿','李婉','张楚','夏侯徽','万年公主','黄舞蝶','马伶俐','陆文漪',
+      '董絮','任婉','曹华','滕公主','董贵人','文鸳','张怀','宣公主','吕玲绮','卢弈'];
+    const missing = HEROES.filter(h => !HERO_PROFILES[h.name] && !h.pending && !BATCH6.includes(h.name));
     for (const h of missing) {
       const d = getHeroDetail(h);
       expect(d.profile.pack).toBe('标准包');
@@ -152,15 +156,39 @@ describe('getHeroDetail', () => {
     }
   });
 
-  test('pending 只属于最新一批（第六轮 30 名女将），老武将不得残留 pending', () => {
+  test('pending 只留给技能尚未实装的武将，老武将不得残留 pending', () => {
     const pend = HEROES.filter(h => h.pending);
-    // 第五轮 30 名女将的技能已陆续实装，pending 已全部清除；
-    // 第六轮 30 名刚接入数据，技能实现待补，因此 pending 恰为这 30 名。
-    expect(pend).toHaveLength(30);
+    // 第六轮 30 名女将里 28 名的技能已全部进注册表并有单测，pending 随之清除；
+    // 只剩 宣公主「追姬」、吕玲绮「帼武」未实装，因此 pending 恰为这 2 名。
+    // 这条断言的价值：pending 是「不可开局」的硬开关，技能装完却还挂着，
+    // 玩家看到的就是「有技能却玩不了」——正是这次要修的缺陷。
+    // 用集合比而不是数组比：中文 sort 的次序依赖 collation，不该让断言去赌它
+    expect([...pend.map(h => h.name)].sort()).toEqual(['宣公主', '吕玲绮'].sort());
     expect(pend.every(h => h.gender === 'female')).toBe(true);
     expect(HEROES.filter(h => h.gender === 'female').length).toBe(108);
     // 规模只做下界断言，避免每加一批就要改一次数字
     expect(HEROES.length).toBeGreaterThanOrEqual(129);
+  });
+
+  test('已解除 pending 的第六批女将能开局，且档案不是「技能实装中」', () => {
+    for (const name of ['王荣', '赵嫣', '曹华', '卢弈', '董贵人']) {
+      const h = HEROES.find(x => x.name === name);
+      expect(h, name + ' 应当还在 HEROES 里').toBeTruthy();
+      expect(h!.pending, name + ' 技能已实装，不应再挂 pending').toBeFalsy();
+      const d = getHeroDetail(h!);
+      expect(d.profile.pack).not.toBe('新将·技能实装中');
+      expect(d.skills.length).toBeGreaterThan(0);
+      // 定位标签来自技能本身，不是写死的「均衡」
+      expect(d.profile.roles.length).toBeGreaterThan(0);
+    }
+  });
+
+  test('仍在 pending 的武将保持「不可开局」语义', () => {
+    for (const name of ['宣公主', '吕玲绮']) {
+      const h = HEROES.find(x => x.name === name)!;
+      expect(h.pending).toBe(true);
+      expect(getHeroDetail(h).profile.pack).toBe('新将·技能实装中');
+    }
   });
 
   test('有 profile 条目的武将使用自己的条目', () => {
