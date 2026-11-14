@@ -12,12 +12,13 @@ for(const f of fs.readdirSync(dir)){
   const t=fs.readFileSync(dir+'/'+f,'utf8');
   for(const m of t.matchAll(/hero:\s*'([^']+)'[\s\S]{0,120}?skill:\s*'([^']+)'/g))(reg[m[1]]||=[]).push(m[2]);
 }
-let todo=0,total=0;
+let todo=0,total=0;const lines=[];
 for(const o of pending){
   const h=(o.match(/name:\s*'([^']+)'/)||[])[1];
   const ss=(o.match(/skillName:\s*'([^']+)'/)||[])[1].split('/').map(s=>s.trim());
   const g=reg[h]||[];
   const parts=ss.map(s=>{const ok=g.includes(s);total++;if(!ok)todo++;return (ok?'[√]':'[ ]')+s;});
-  console.log(h.padEnd(6,' '), parts.join(' '));
+  lines.push(h.padEnd(6,' ')+' '+parts.join(' '));
 }
-console.log('\nTODO', todo, '/ TOTAL', total);
+console.log(lines.join('\n'));
+console.log('\nTODO '+todo+' / TOTAL '+total);
