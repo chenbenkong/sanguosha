@@ -1,7 +1,7 @@
 import type {
   SkillContext, DamageEvent, CardUsedEvent, JudgeEvent,
   DrawPhaseEvent, DrawPhaseResult, DiscardPhaseEvent, DiscardPhaseResult, CardLostEvent,
-  DeathEvent, DyingEvent, DyingResult,
+  DeathEvent, DyingEvent, DyingResult, CardTargetsEvent,
 } from './registry';
 import { skillHook, mergeDrawPhase } from './registry';
 import { mergeJudgeBefore, mergeDamageBefore } from './engineAbilities.ts';
@@ -53,6 +53,8 @@ export interface DispatchDeps {
   peekDeck?: (count: number) => Card[];
   deckTo?: (count: number, destination: 'discard' | 'hand', toId?: number) => Card[];
   changeMaxHp?: (playerId: number, delta: number) => void;
+  /** 按条件从牌堆里找牌（追德：杀/闪/桃/酒各一张）。返回找到的牌并从牌堆移除。 */
+  takeFromDeck?: (pred: (c: Card) => boolean, count: number) => Card[];
   /**
    * 一张牌的目标确定后、结算前的拦截（可选能力）。
    * 未提供时 onTargetsChosen 不会被派发。
@@ -137,6 +139,7 @@ const ctxFor = (deps: DispatchDeps, self: Player, hero: string, skill: string): 
   peekDeck: deps.peekDeck ?? (() => []),
   deckTo: deps.deckTo ?? (() => []),
   changeMaxHp: deps.changeMaxHp ?? (() => {}),
+  takeFromDeck: deps.takeFromDeck ?? (() => []),
   banner: () => deps.banner(hero, skill),
   delay: deps.delay,
   memory: memOf(hero, skill),
@@ -150,8 +153,19 @@ const ctxFor = (deps: DispatchDeps, self: Player, hero: string, skill: string): 
 });
 
 /** 找出场上的技能拥有者（跳过已死亡 / 技能被封印的） */
-const ownersOf = (deps: DispatchDeps, hero: string): Player[] =>
-  deps.players.filter(p => !p.isDead && p.hero.name === hero && deps.skillsOn(p.id));
+/**
+ * 找某武将的所有者。
+ *
+ * `includeDead` 默认为 false：绝大多数时机（回合、摸牌、伤害）都只该由活着的
+ * 角色触发。但 afterDeath 必须为 true —— 「当你死亡时」的技能（追德）
+ * 在那里要能找到**已经 isDead 的自己**，否则钩子永远派发不到本人。
+ * 这一点我最初漏了：加了 afterDeath 却仍走默认过滤，实测死者注册的
+ * afterDeath 一次都没跑。
+ */
+const ownersOf = (deps: DispatchDeps, hero: string, includeDead = false): Player[] =>
+  deps.players.filter(
+    p => (includeDead || !p.isDead) && p.hero.name === hero && deps.skillsOn(p.id),
+  );
 
 /** 回合结束 */
 export const dispatchTurnEnd = async (deps: DispatchDeps, ending: Player): Promise<void> => {
@@ -334,7 +348,8 @@ export const dispatchDeath = async (deps: DispatchDeps, ev: DeathEvent): Promise
   // 用阵亡者 id 做 key：同一次死亡只该触发一遍，避免呼叫链重入时重复结算
   await withGuard(`death-${ev.dead.id}`, async () => {
     for (const { def, fn } of skillHook('afterDeath')) {
-      for (const self of ownersOf(deps, def.hero)) {
+      // includeDead：必须能派发到「已经阵亡的本人」（追德）
+      for (const self of ownersOf(deps, def.hero, true)) {
         await fn(ctxFor(deps, self, def.hero, def.skill), ev);
       }
     }
@@ -358,4 +373,32 @@ export const dispatchDying = async (
     }
   }
   return null;
+};
+
+/**
+ * 一张牌的目标确定后、结算前的拦截（邀弈 / 劳燕 / 长姬）。
+ *
+ * 与 dispatchCardUsed 互补：后者在 finally 里、伤害已结算，那时改目标只是
+ * 「日志好看、规则错误」。需要拦截或改写目标的技能只能用这里。
+ *
+ * 按注册顺序**串行**执行，后一个技能看到的是前一个改过的列表——
+ * 这样「邀弈把目标改成我」之后，「劳燕」能基于新列表继续判断。
+ */
+export const dispatchTargets = async (
+  deps: DispatchDeps,
+  ev: CardTargetsEvent,
+): Promise<CardTargetsEvent> => {
+  let current = ev;
+  await withGuard(`targets-${ev.source.id}-${ev.card.id}`, async () => {
+    for (const { def, fn } of skillHook('onTargetsChosen')) {
+      for (const self of ownersOf(deps, def.hero)) {
+        const r = await fn(ctxFor(deps, self, def.hero, def.skill), current);
+        if (r && Array.isArray(r.targets)) {
+          current = { ...current, targets: r.targets };
+          if (r.note) deps.log(r.note);
+        }
+      }
+    }
+  });
+  return current;
 };

@@ -73,6 +73,14 @@ export interface SkillContext {
    * 这是此前唯一无法通过 ctx 表达的「角色卡面改动」。
    */
   changeMaxHp: (playerId: number, delta: number) => void;
+  /**
+   * 按条件从牌堆里找牌（追德：杀/闪/桃/酒各一张）。
+   *
+   * 与 deckTo 的区别：deckTo 只能从**顶部**取 count 张，
+   * 而「四张不同牌名」要求按牌名精确取。返回找到的牌（已从牌堆移除）；
+   * 牌堆里凑不齐时返回能凑到的部分，调用方按实际数量结算。
+   */
+  takeFromDeck: (pred: (c: Card) => boolean, count: number) => Card[];
 }
 
 /** 一次伤害事件的描述 */

@@ -1,7 +1,7 @@
 import React from 'react';
 import type { Card, EquipmentSlot, Player } from '../../types';
 import { canHuguan, tianzeCanStrike, cilvDrawCount, fangduEffect, yuanditriggers } from './skills-batch6';
-import { dispatchAfterDamage, dispatchAfterDealDamage, dispatchCardUsed, dispatchDamageBefore, dispatchDying } from './skills/dispatch';
+import { dispatchAfterDamage, dispatchAfterDealDamage, dispatchCardUsed, dispatchDamageBefore, dispatchDying, dispatchTargets } from './skills/dispatch';
 import { CardName, CardType, GamePhase, Identity, Suit } from '../../types';
 import { setDeck, setDiscardPile } from './gameStore';
 import { rankValue, shuffle } from './utils';
@@ -246,6 +246,34 @@ export const createCombatEngine = (deps: CombatDeps): CombatEngine => {
   // 孙鲁育「魅步」止息：统计本回合已使用的牌数（打出响应不经过此处，不受限制）
   if (zhixiRef.current?.id === source.id) zhixiRef.current.used += 1;
   try {
+    // 技能注册表：目标确定后、任何效果结算之前的拦截（邀弈 / 劳燕 / 长姬）。
+    //
+    // 放在 try 的最前面，因为这是唯一「还能改变结算对象」的时机：
+    // 之后的 afterCardUsed 在 finally 里、伤害已落地，那时改目标只会让日志
+    // 与实际伤害不一致。改写后的列表覆盖外层 targets 变量，后续所有分支
+    // （包括伤害与响应）都基于新目标。
+    {
+      const applied = await dispatchTargets({
+        players: playersRef.current,
+        turnOwner: playersRef.current.find(x => x.id === turnOwnerIdRef.current),
+        draw: (pid: number, n: number) => drawCards(pid, n),
+        discard: (pid: number, cards: Card[]) => discardCards(pid, cards),
+        heal: (pid: number, n: number) => recoverHp(pid, n),
+        damage: async (vid: number, sid: number, amt: number, cd?: Card) => { await takeDamage(vid, sid, amt, cd); },
+        gainCard: (fromId: number, toId: number, cd: Card) => {
+          mutateHand(fromId, h => h.filter(c => c.id !== cd.id));
+          mutateHand(toId, h => [...h, cd]);
+        },
+        log: (t: string) => addLog(t, 'skill'),
+        banner: (h: string, sk: string) => showSkillBanner(h, sk),
+        delay: (ms: number) => delay(ms),
+        skillsOn: (pid: number) => skillsOn(pid),
+        requestChoice: deps.requestChoice,
+      }, { source, card, targets });
+      if (applied.targets !== targets) {
+        targets = applied.targets;
+      }
+    }
     // 通用「勇决」（存嗣授予）：同势力角色本回合使用的第一张牌为【杀】时，结算后获得之
     {
       const key = `${source.id}-${turnCountRef.current}`;

@@ -10,6 +10,7 @@ import './batch8';
 import './batch6new';
 import './batch6new3';
 import './batch6new2';
+import './batch6new4';
 import './migrated1';
 import './migrated2';
 import './migrated3';

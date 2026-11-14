@@ -952,6 +952,20 @@ const App: React.FC = () => {
       const nextHp = Math.min(nextMax, Math.max(0, p.hp));
       updatePlayer(playerId, { maxHp: nextMax, hp: nextHp });
     },
+    takeFromDeck: (pred: (c: Card) => boolean, count: number) => {
+      const taken: Card[] = [];
+      const rest: Card[] = [];
+      // 从牌堆顶开始找（数组尾部是顶），保持与 drawCards 一致的可见顺序
+      for (let i = deckRef.current.length - 1; i >= 0; i--) {
+        const c = deckRef.current[i];
+        if (taken.length < count && pred(c)) taken.push(c);
+        else rest.unshift(c);
+      }
+      if (taken.length === 0) return [];
+      deckRef.current = rest;
+      setDeck(rest);
+      return taken;
+    },
     banner: (h: string, sk: string) => showSkillBanner(h, sk),
     delay: (ms: number) => delay(ms),
     skillsOn: (pid: number) => skillsOn(pid),
