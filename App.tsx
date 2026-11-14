@@ -1024,6 +1024,13 @@ const App: React.FC = () => {
       return !!p && hasGrantedSkill(p, skillName);
     },
     roundCount: roundCountRef.current,
+    distance: (fromId, toId) => getDistance(fromId, toId),
+    canReach: (fromId, toId) => {
+      const a = playersRef.current.find(p => p.id === fromId);
+      const b = playersRef.current.find(p => p.id === toId);
+      return !!a && !!b && canReach(a, b);
+    },
+    peekDiscard: () => [...discardPileRef.current],
   });
 
   const excessCards = (p: Player) => {
@@ -2692,9 +2699,9 @@ const App: React.FC = () => {
           await dispatchRoundStart({ ...buildSkillDeps(), turnOwner: currentPlayer }, roundCountRef.current);
           // 上一回合若死在出牌阶段中途，onPlayPhaseEnd 还没派发过，这里补一次
           if (playPhaseOpenRef.current !== null) {
-            const strayOwner = playPhaseOpenRef.current;
+            const strayOwner = playersRef.current.find(p => p.id === playPhaseOpenRef.current);
             playPhaseOpenRef.current = null;
-            await dispatchPlayPhaseEnd(buildSkillDeps(), strayOwner);
+            if (strayOwner) await dispatchPlayPhaseEnd(buildSkillDeps(), strayOwner);
           }
         }
           // 技能注册表：回合开始时机（新技能只需注册 onTurnStart，不必在此加分支）
@@ -3178,7 +3185,7 @@ const App: React.FC = () => {
         // return 了，不会误报「开始」。
         if (playPhaseOpenRef.current === null) {
           playPhaseOpenRef.current = currentPlayer.id;
-          await dispatchPlayPhaseBegin(buildSkillDeps(), currentPlayer.id);
+          await dispatchPlayPhaseBegin(buildSkillDeps(), currentPlayer);
         }
         // 王元姬「谦冲」：出牌阶段开始时，若装备区不全黑/不全红，选一种牌型本回合无次数与距离限制
         if (currentPlayer.hero.name === '王元姬' && skillsOn(currentPlayer.id)) {
@@ -3855,9 +3862,9 @@ const App: React.FC = () => {
       else if (currentPhase === GamePhase.DISCARD) {
         // 出牌阶段结束（酖毒）
         if (playPhaseOpenRef.current !== null) {
-          const playOwner = playPhaseOpenRef.current;
+          const playOwner = playersRef.current.find(p => p.id === playPhaseOpenRef.current);
           playPhaseOpenRef.current = null;
-          await dispatchPlayPhaseEnd(buildSkillDeps(), playOwner);
+          if (playOwner) await dispatchPlayPhaseEnd(buildSkillDeps(), playOwner);
         }
         // 更新ref中的最新状态
         playersRef.current = players;
@@ -3947,9 +3954,9 @@ const App: React.FC = () => {
       else if (currentPhase === GamePhase.END) {
         // 出牌阶段结束（从出牌阶段直接跳到结束阶段的情形：阵亡 / 借刀等）
         if (playPhaseOpenRef.current !== null) {
-          const playOwner = playPhaseOpenRef.current;
+          const playOwner = playersRef.current.find(p => p.id === playPhaseOpenRef.current);
           playPhaseOpenRef.current = null;
-          await dispatchPlayPhaseEnd(buildSkillDeps(), playOwner);
+          if (playOwner) await dispatchPlayPhaseEnd(buildSkillDeps(), playOwner);
         }
         dbgMark('end:enter');
         await delay(500);

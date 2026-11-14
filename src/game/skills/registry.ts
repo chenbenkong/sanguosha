@@ -166,6 +166,18 @@ export interface SkillContext {
    * 不能用 onTurnStart 顶替 —— 那是「每回合」，一轮里有几个回合就会多发动几次。
    */
   roundCount: number;
+  /** 两名角色的座位距离（与引擎 getDistance 同一实现）；角色不在场时返回 Infinity */
+  distance: (fromId: number, toId: number) => number;
+  /** from 是否在 to 的攻击范围内（万年公主「枕戈」、黄舞蝶「双锐」/「☆ 狩星」） */
+  canReach: (fromId: number, toId: number) => boolean;
+  /**
+   * 弃牌堆的**只读快照**（拷贝，改它不影响引擎）。
+   *
+   * 数组尾部是最近弃置的牌，与牌堆「尾部是顶」的约定一致。
+   * 董贵人「风影」要判断「本回合开始时弃牌堆里有哪些黑色基本牌 / 黑色普通锦囊牌」，
+   * 只能在回合开始时快照一次 —— 既有的 takeFromDiscard 是破坏性的，读不了。
+   */
+  peekDiscard: () => Card[];
 }
 
 /** 一次伤害事件的描述 */
@@ -268,9 +280,21 @@ export interface SkillHooks {
    */
   onRoundStart?: (ctx: SkillContext, round: number) => Promise<void> | void;
   /** 出牌阶段开始时（帼武 / 铃音 / ☆ 狩星 / 狷急②）。被【乐不思蜀】跳过时不派发。 */
-  onPlayPhaseBegin?: (ctx: SkillContext) => Promise<void> | void;
+  onPlayPhaseBegin?: (ctx: SkillContext, ev: PlayPhaseEvent) => Promise<void> | void;
   /** 出牌阶段结束时（酖毒）。每回合至多派发一次。 */
-  onPlayPhaseEnd?: (ctx: SkillContext) => Promise<void> | void;
+  onPlayPhaseEnd?: (ctx: SkillContext, ev: PlayPhaseEvent) => Promise<void> | void;
+}
+
+/**
+ * 出牌阶段事件。
+ *
+ * owner 是**这个阶段**的回合角色，不一定是技能拥有者 ——
+ * 李婉「别君」①看的就是别人的出牌阶段（其他角色可以交给她一张手牌）。
+ * 所以这个钩子对全场技能拥有者派发，「是不是我的阶段」由技能自己判断
+ * （与 onTurnStart / onTurnEnd 的约定一致）。
+ */
+export interface PlayPhaseEvent {
+  owner: Player;
 }
 
 /**

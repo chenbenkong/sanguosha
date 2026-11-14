@@ -99,6 +99,9 @@ export const noopDeps = (players: Player[]): DispatchDeps => ({
   revokeSkill: () => false,
   hasGrantedSkill: () => false,
   roundCount: 1,
+  distance: () => Infinity,
+  canReach: () => false,
+  peekDiscard: () => [],
 });
 
 /** 夹具里 grantSkill / hasGrantedSkill 的真实（进程内）语义 */

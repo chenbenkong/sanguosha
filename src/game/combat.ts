@@ -435,6 +435,13 @@ const skillDeps = (): DispatchDeps => ({
     const p = playersRef.current.find(x => x.id === pid);
     return !!p && deps.hasGrantedSkill(p, skillName);
   },
+  distance: (fromId: number, toId: number) => getDistance(fromId, toId),
+  canReach: (fromId: number, toId: number) => {
+    const a = getPlayer(fromId);
+    const b = getPlayer(toId);
+    return !!a && !!b && canReach(a, b);
+  },
+  peekDiscard: () => [...discardPileRef.current],
 });
   // ── resolveCardEffect（App.tsx 原 L6301-7526）──
   const resolveCardEffect = async (source: Player, targets: Player[], card: Card) => {

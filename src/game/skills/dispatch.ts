@@ -1,7 +1,7 @@
 import type {
   SkillContext, DamageEvent, CardUsedEvent, JudgeEvent,
   DrawPhaseEvent, DrawPhaseResult, DiscardPhaseEvent, DiscardPhaseResult, CardLostEvent,
-  DeathEvent, DyingEvent, DyingResult, CardTargetsEvent, CardGainEvent, UseCardAsOptions,
+  DeathEvent, DyingEvent, DyingResult, CardTargetsEvent, CardGainEvent, UseCardAsOptions, PlayPhaseEvent,
 } from './registry';
 import { skillHook, mergeDrawPhase } from './registry';
 import { mergeJudgeBefore, mergeDamageBefore } from './engineAbilities.ts';
@@ -85,6 +85,11 @@ export interface DispatchDeps {
   hasGrantedSkill: (playerId: number, skillName: string) => boolean;
   /** 当前轮数（从 1 开始）；「每轮首次」类技能用它去重 */
   roundCount: number;
+  /** 座位距离 / 攻击范围判定（按角色 id） */
+  distance: (fromId: number, toId: number) => number;
+  canReach: (fromId: number, toId: number) => boolean;
+  /** 弃牌堆的只读快照（尾部是最近弃置的牌） */
+  peekDiscard: () => Card[];
 }
 
 /** 每个技能一份的跨回合存储（key = hero + skill） */
@@ -218,6 +223,9 @@ const ctxFor = (deps: DispatchDeps, self: Player, hero: string, skill: string): 
   hasGrantedSkill: (skillName, ofPlayerId) =>
     deps.hasGrantedSkill(ofPlayerId ?? self.id, skillName),
   roundCount: deps.roundCount,
+  distance: deps.distance,
+  canReach: deps.canReach,
+  peekDiscard: deps.peekDiscard,
 });
 
 /** 找出场上的技能拥有者（跳过已死亡 / 技能被封印的） */
@@ -262,22 +270,22 @@ export const dispatchRoundStart = async (deps: DispatchDeps, round: number): Pro
   }
 };
 
-/** 出牌阶段开始（只对该阶段的回合角色派发） */
-export const dispatchPlayPhaseBegin = async (deps: DispatchDeps, ownerId: number): Promise<void> => {
+/** 出牌阶段开始。owner 是这个阶段的回合角色，对全场技能拥有者派发（见 PlayPhaseEvent） */
+export const dispatchPlayPhaseBegin = async (deps: DispatchDeps, owner: Player): Promise<void> => {
+  const ev: PlayPhaseEvent = { owner };
   for (const { def, fn } of skillHook('onPlayPhaseBegin')) {
     for (const self of ownersOf(deps, def.hero)) {
-      if (self.id !== ownerId) continue;
-      await fn(ctxFor(deps, self, def.hero, def.skill));
+      await fn(ctxFor(deps, self, def.hero, def.skill), ev);
     }
   }
 };
 
 /** 出牌阶段结束（出口见 App.tsx 的 playPhaseOpenRef） */
-export const dispatchPlayPhaseEnd = async (deps: DispatchDeps, ownerId: number): Promise<void> => {
+export const dispatchPlayPhaseEnd = async (deps: DispatchDeps, owner: Player): Promise<void> => {
+  const ev: PlayPhaseEvent = { owner };
   for (const { def, fn } of skillHook('onPlayPhaseEnd')) {
     for (const self of ownersOf(deps, def.hero)) {
-      if (self.id !== ownerId) continue;
-      await fn(ctxFor(deps, self, def.hero, def.skill));
+      await fn(ctxFor(deps, self, def.hero, def.skill), ev);
     }
   }
 };

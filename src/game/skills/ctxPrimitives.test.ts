@@ -3,7 +3,7 @@ import { __clearRegistry, registerSkill } from './registry';
 import {
   __clearSkillMemory, dispatchPlayPhaseBegin, dispatchPlayPhaseEnd, dispatchRoundStart, dispatchTurnStart,
 } from './dispatch';
-import { makeHarness, mkPlayer } from './testHarness';
+import { makeHarness, mkCard, mkPlayer } from './testHarness';
 import { CardName } from '../../../types';
 
 /**
@@ -43,6 +43,27 @@ describe('ctx.useCardAs', () => {
     });
     await dispatchTurnStart(deps, players[0]);
     expect(fx.usedCards[0].playerId).toBe(1);
+  });
+});
+
+describe('ctx 的距离 / 攻击范围 / 弃牌堆快照', () => {
+  it('distance / canReach / peekDiscard 直接透传引擎的实现', async () => {
+    const players = twoPlayers();
+    const { deps } = makeHarness(players);
+    deps.distance = (a, b) => a + b;
+    deps.canReach = (a, b) => a < b;
+    deps.peekDiscard = () => [mkCard({ name: CardName.TAO })];
+    const seen: unknown[] = [];
+    registerSkill({
+      hero: '甲', skill: '试距',
+      hooks: {
+        onTurnStart: (ctx) => {
+          seen.push(ctx.distance(0, 1), ctx.canReach(0, 1), ctx.canReach(1, 0), ctx.peekDiscard().length);
+        },
+      },
+    });
+    await dispatchTurnStart(deps, players[0]);
+    expect(seen).toEqual([1, true, false, 1]);
   });
 });
 
@@ -133,16 +154,15 @@ describe('出牌阶段钩子', () => {
     registerSkill({
       hero: '甲', skill: '试阶',
       hooks: {
-        onPlayPhaseBegin: (ctx) => { hits.push('begin:' + ctx.self.id); },
-        onPlayPhaseEnd: (ctx) => { hits.push('end:' + ctx.self.id); },
+        onPlayPhaseBegin: (ctx, ev) => { hits.push('begin:' + ev.owner.id + ':' + ctx.self.id); },
+        onPlayPhaseEnd: (ctx, ev) => { hits.push('end:' + ev.owner.id + ':' + ctx.self.id); },
       },
     });
-    await dispatchPlayPhaseBegin(deps, 1);
-    await dispatchPlayPhaseEnd(deps, 1);
-    expect(hits).toEqual([]);
-    await dispatchPlayPhaseBegin(deps, 0);
-    await dispatchPlayPhaseEnd(deps, 0);
-    expect(hits).toEqual(['begin:0', 'end:0']);
+    // 对全场派发（李婉「别君」①要看别人的出牌阶段），是不是自己的阶段由技能判断
+    await dispatchPlayPhaseBegin(deps, players[1]);
+    await dispatchPlayPhaseEnd(deps, players[1]);
+    await dispatchPlayPhaseBegin(deps, players[0]);
+    expect(hits).toEqual(['begin:1:0', 'end:1:0', 'begin:0:0']);
     expect(fx.logs).toHaveLength(0);
   });
 
