@@ -67,3 +67,56 @@ describe('技能标签', () => {
     expect(bad).toEqual([]);
   });
 });
+
+/**
+ * 第六批 30 名女将（77 个技能）的触发时机。
+ *
+ * 描述里只有「怎么用」，没有「什么时候能用」——而详情页原先的兜底文案正是
+ * 「按技能描述」，等于把这一格空着。锁死它，避免以后新增武将又悄悄退回兜底。
+ */
+describe('技能触发时机（第六批 30 名女将）', () => {
+  const batchHeroes = () => HEROES.filter(h => h.pending);
+
+  it('这 30 名武将的每个技能都有具体时机，不是兜底文案', () => {
+    const bad: string[] = [];
+    for (const hero of batchHeroes()) {
+      for (const s of getHeroDetail(hero).skills) {
+        if (!s.timing || s.timing === '按技能描述') bad.push(hero.name + '/' + s.name);
+      }
+    }
+    expect(bad).toEqual([]);
+  });
+
+  it('技能总数与表规模一致：30 名 × 技能数 = 77 条', () => {
+    const heroes = batchHeroes();
+    expect(heroes).toHaveLength(30);
+    const total = heroes.reduce((n, h) => n + getHeroDetail(h).skills.length, 0);
+    expect(total).toBe(77);
+  });
+
+  it('类型不能全是主动技：锁定/限定/觉醒技必须如实呈现', () => {
+    const all = batchHeroes().flatMap(h => getHeroDetail(h).skills);
+    const typed = all.filter(s => s.tags.some(t => t === '锁定技' || t === '限定技' || t === '觉醒技'));
+    const kinds = new Set(typed.flatMap(s => s.tags));
+    // 描述明确写了类型的 20 个技能，一个都不能漏
+    expect(typed.length).toBeGreaterThanOrEqual(20);
+    expect(kinds).toContain('锁定技');
+    expect(kinds).toContain('限定技');
+    expect(kinds).toContain('觉醒技');
+    // 也不能一律都是主动技
+    expect(all.every(s => s.tags.every(t => t === '主动技'))).toBe(false);
+  });
+
+  it('描述里写了类型词的技能，标签必须跟着描述走（不例外）', () => {
+    const kinds: SkillTag[] = ['主公技', '锁定技', '限定技', '觉醒技'];
+    const bad: string[] = [];
+    for (const hero of batchHeroes()) {
+      for (const s of getHeroDetail(hero).skills) {
+        const head = (s.desc || '').trimStart().slice(0, 8);
+        const declared = kinds.find(k => head.startsWith(k));
+        if (declared && !s.tags.includes(declared)) bad.push(hero.name + '/' + s.name + ':' + s.tags.join(','));
+      }
+    }
+    expect(bad).toEqual([]);
+  });
+});

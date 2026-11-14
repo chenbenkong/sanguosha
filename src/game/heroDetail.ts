@@ -172,7 +172,7 @@ function splitSkillDesc(desc: string, names: string[]): string[] {
 /**
  * 官方技能描述把类型写在最前面（「锁定技，…」），所以描述本身是权威来源。
  *
- * 手写元信息表（SKILL_META / BATCH6 / PENDING）没有收录这个技能时才走这里。
+ * 手写元信息表（SKILL_META / BATCH6 / PENDING / BATCH7）没有收录这个技能时才走这里。
  * 之所以不能一默认写死「主动技」：锁定技被显示成主动技是**事实错误**——
  * 实战里一个锁定技不会给你「可以选择不发动」的余地，玩家按错误标签做判断会吃亏。
  * 实测 7 个缺元信息的技能里有 1 个（诸葛果「羽化」）描述明确写着锁定技。
@@ -326,6 +326,127 @@ const BATCH6_SKILL_META: Record<string, SkillMeta> = {
   狐魅: { tags: ['主动技'], timing: '出牌阶段（每个选项限一次）', quote: '狐魅之惑，摄人心魄。' },
 };
 
+/**
+ * 第六批 30 名女将（77 个技能）的**触发时机**。
+ *
+ * 为什么只有 timing、没有 tags：技能类型由官方描述的类型前缀推导（deriveTagsFromDesc），
+ * 不在这里另写一份——两处各写一份必然漂移，而 lore.json 的类型字段与本项目标签实测
+ * 在 8 处冲突（23%），已判定不可信。描述里**没有**类型词、且能由文本证明是被动技的
+ * （纯事件触发：受到/造成伤害后、死亡时、结算结束后…），才在这里补 tags: ['被动技']，
+ * 否则一律回落到 deriveTagsFromDesc 的结果。
+ *
+ * 描述里有、但引擎侧没有的能力语义（转换技、使命技）不在本作标签集里，不臆造标签。
+ */
+const BATCH7_SKILL_META: Record<string, { timing: string; tags?: SkillTag[] }> = {
+  // 王荣
+  敏思: { timing: '出牌阶段限一次' },
+  吉境: { timing: '受到伤害后', tags: ['被动技'] },
+  追德: { timing: '你死亡时', tags: ['被动技'] },
+  // 全惠解
+  慧淑: { timing: '摸牌阶段结束时', tags: ['被动技'] },
+  易数: { timing: '回合外失去牌后', tags: ['被动技'] },
+  离宫: { timing: '准备阶段' },
+  // 柏灵筠
+  灵慧: { timing: '一名角色的结束阶段', tags: ['被动技'] },
+  黠策: { timing: '受到伤害后 / 造成伤害后', tags: ['被动技'] },
+  御心: { timing: '一名角色进入濒死状态时' },
+  // 曹金玉
+  隅泣: { timing: '一名角色受到伤害后（每回合限两次）', tags: ['被动技'] },
+  善身: { timing: '其他角色死亡时', tags: ['被动技'] },
+  娴静: { timing: '准备阶段' },
+  // 曹宪
+  灵犀: { timing: '出牌阶段开始时 / 结束时' },
+  知否: { timing: '你使用牌结算结束后', tags: ['被动技'] },
+  // 丁尚涴
+  讽言: { timing: '出牌阶段（各限一次）' },
+  抚悼: { timing: '游戏开始时 / 每回合首次指定对方为目标后 / 其死亡后', tags: ['被动技'] },
+  // 魏娆
+  拾芳: { timing: '出牌阶段限一次' },
+  簪金: { timing: '一名角色受到伤害后', tags: ['被动技'] },
+  // 邓晚棠
+  黛颊: { timing: '出牌阶段 / 受到伤害后 / 成为其他角色使用牌的目标时' },
+  承宠: { timing: '你使用牌时 / 回合外获得牌时' },
+  // 赵嫣
+  锦绘: { timing: '出牌阶段限一次' },
+  轻幔: { timing: '一名角色的回合结束时' },
+  // 芮姬
+  妄缘: { timing: '回合外失去牌后', tags: ['被动技'] },
+  俐影: { timing: '摸牌阶段外获得牌后（每回合限一次）', tags: ['被动技'] },
+  铃音: { timing: '出牌阶段开始时' },
+  // 滕芳兰
+  落宠: { timing: '每轮开始时' },
+  哀尘: { timing: '常时生效（按牌堆牌数切换效果）' },
+  // 清河公主
+  长姬: { timing: '一张牌指定多个目标时（你为目标之一）' },
+  谮构: { timing: '出牌阶段限一次' },
+  // 来莺儿
+  绡舞: { timing: '出牌阶段限一次' },
+  化萍: { timing: '一名角色死亡时' },
+  '☆ 沙舞': { timing: '使用【杀】指定目标后', tags: ['被动技'] },
+  // 李婉
+  联对: { timing: '一名角色使用牌结算结束后', tags: ['被动技'] },
+  别君: { timing: '其他角色的出牌阶段 / 受到伤害时' },
+  // 张楚
+  集众: { timing: '出牌阶段限一次' },
+  日彗: { timing: '你使用牌结算结束后（每回合限一次）', tags: ['被动技'] },
+  光噬: { timing: '准备阶段' },
+  // 夏侯徽
+  笃君: { timing: '游戏开始时 / 每回合首次造成或受到伤害后', tags: ['被动技'] },
+  济困: { timing: '累计失去 5 张牌后', tags: ['被动技'] },
+  // 万年公主
+  枕戈: { timing: '准备阶段' },
+  兴汉: { timing: '被「枕戈」选择过的角色用本回合第一张【杀】造成伤害后' },
+  // 黄舞蝶
+  双锐: { timing: '准备阶段' },
+  伏械: { timing: '出牌阶段' },
+  '☆ 狩星': { timing: '出牌阶段' },
+  '☆ 铩雪': { timing: '你对其他角色造成伤害后', tags: ['被动技'] },
+  // 马伶俐
+  硝引: { timing: '准备阶段 / 有「硝引」牌的角色受到伤害时' },
+  花火: { timing: '出牌阶段限一次' },
+  // 陆文漪
+  才韵: { timing: '出牌阶段限一次' },
+  怯言: { timing: '你成为其他角色使用牌的目标时' },
+  // 董絮
+  清冷: { timing: '你成为黑色非转化牌的目标后', tags: ['被动技'] },
+  酖毒: { timing: '出牌阶段结束时' },
+  // 任婉
+  狷急: { timing: '摸牌阶段 / 出牌阶段 / 弃牌阶段开始时' },
+  纫霜: { timing: '每轮首次进入濒死时 / 脱离濒死状态时' },
+  // 曹华
+  彩翼: { timing: '结束阶段（转换技）' },
+  归离: { timing: '你的第一个回合开始时 / 该角色每轮第一个回合的结束阶段', tags: ['被动技'] },
+  // 滕公主
+  幸宠: { timing: '每轮开始时' },
+  流年: { timing: '一名角色的回合结束时' },
+  // 董贵人
+  连枝: { timing: '游戏开始时 / 你进入濒死状态时 / 该角色死亡后', tags: ['被动技'] },
+  归罪: { timing: '黑色牌结算结束后（未造成伤害时）' },
+  风影: { timing: '你的回合内（每回合限一次）' },
+  '☆ 受责': { timing: '结束阶段' },
+  凌芳: { timing: '黑色牌结算结束后（此牌生效时）' },
+  // 文鸳
+  铿锵: { timing: '你造成伤害时（每回合限一次）', tags: ['被动技'] },
+  匮饬: { timing: '回合结束时' },
+  殇决: { timing: '当你进入濒死状态时' },
+  '☆ 困励': { timing: '当你进入濒死状态时' },
+  // 张怀
+  劳燕: { timing: '一张牌指定多个目标时（你为目标之一）' },
+  诀言: { timing: '你对其他角色使用单目标牌后', tags: ['被动技'] },
+  // 宣公主
+  齐眉: { timing: '出牌阶段限一次' },
+  追姬: { timing: '你死亡时', tags: ['被动技'] },
+  // 吕玲绮
+  帼武: { timing: '出牌阶段开始时' },
+  妆戎: { timing: '一名角色的回合结束时' },
+  '☆ 神威': { timing: '常时生效' },
+  '☆ 无双': { timing: '常时生效' },
+  // 卢弈
+  复学: { timing: '出牌阶段限一次' },
+  邀弈: { timing: '一名角色使用【杀】时', tags: ['被动技'] },
+  手谈: { timing: '常时生效' },
+};
+
 const PENDING_PROFILE: HeroProfile = {
   pack: '新将·技能实装中',
   roles: ['均衡'],
@@ -351,12 +472,14 @@ export function getHeroDetail(hero: Hero): HeroDetailView {
   const names = hero.skillName.split('/').map(s => s.trim()).filter(Boolean);
   const descs = splitSkillDesc(hero.skillDesc, names);
   const skills: HeroSkillView[] = names.map((name, i) => {
+    // 顺序固定：已实装技能的手写表（含人工校正过的 tags）> 描述推导 > 第六批的时机表
     const meta = SKILL_META[name] ?? BATCH6_SKILL_META[name] ?? PENDING_SKILL_META[name];
+    const batch7 = BATCH7_SKILL_META[name];
     return {
       name,
-      tags: meta?.tags ?? deriveTagsFromDesc(descs[i]) ?? ['主动技'],
+      tags: meta?.tags ?? deriveTagsFromDesc(descs[i]) ?? batch7?.tags ?? ['主动技'],
       desc: descs[i] || hero.skillDesc,
-      timing: meta?.timing ?? '按技能描述',
+      timing: meta?.timing ?? batch7?.timing ?? '按技能描述',
       quotes: resolveSkillQuotes(hero.name, name, meta?.quote),
     };
   });
