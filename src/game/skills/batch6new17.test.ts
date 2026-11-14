@@ -5,6 +5,7 @@ import {
 } from './dispatch';
 import { __clearGrantedSkills, makeHarness, mkCard, mkPlayer } from './testHarness';
 import { CardName } from '../../../types';
+import './batch6new';      // 「☆ 神威」注册在这里（更早的批次）
 import './batch6new17';
 
 /**

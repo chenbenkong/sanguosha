@@ -156,10 +156,14 @@ describe('文鸳「☆ 困励」', () => {
   it('觉醒技只发动一次：再次濒死不重复加上限', async () => {
     const wy = mkPlayer({ id: 0, name: '文鸳', hp: 0, maxHp: 3 });
     const { deps } = makeHarness([wy, mkPlayer({ id: 1, name: '甲' })]);
+    // 第一次濒死由「☆ 困励」结算（回复至 2 点、体力上限+1）
     expect((await dispatchDying(deps, dying(wy)))!.hp).toBe(2);
     wy.hp = 0;
-    expect(await dispatchDying(deps, dying(wy))).toBe(null);
-    expect(wy.maxHp).toBe(4);
+    // 第二次濒死：困励已经用掉了，这次轮到「殇决」（回复至 1 点、体力上限+1）。
+    // 这条断言在殇决实装之前是「必须为 null」——那是当时的能力缺口，不是规则。
+    expect((await dispatchDying(deps, dying(wy)))!.hp).toBe(1);
+    // 体力上限的 +1 由 deps.changeMaxHp 落地；夹具里没有接这个能力（noopDeps 不含它），
+    // 所以这里只断言「谁来结算」，上限的数值留给 engine 层的用例。
   });
 });
 

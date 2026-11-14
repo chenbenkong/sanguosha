@@ -135,7 +135,7 @@ describe('本批技能在能力补齐后的注册状态', () => {
    *   afterCardGain 钩子                       → 俐影
    * 于是它们翻转成正向。
    *
-   * 花火**保留反向**：它需要「使用一张牌」的入口，这个能力仍未提供。
+   * 花火**已翻转为正向**：ctx.useCardAs 落地之后它就能忠实实装了（batch6new18.ts）。
    * 这条是真实的能力缺口记录，删掉就等于假装它能用。
    */
   it('卢弈「邀弈」/ 张怀「劳燕」：onTargetsChosen 已接通，故已注册', () => {
@@ -151,7 +151,7 @@ describe('本批技能在能力补齐后的注册状态', () => {
     expect(skillsOf('芮姬').map(d => d.skill)).toContain('俐影');
   });
 
-  it('马伶俐「花火」：仍缺「使用一张牌」入口，故不注册（真实能力缺口）', () => {
-    expect(skillsOf('马伶俐').map(d => d.skill)).not.toContain('花火');
+  it('马伶俐「花火」：ctx.useCardAs 落地后已注册（batch6new18.ts）', () => {
+    expect(skillsOf('马伶俐').map(d => d.skill)).toContain('花火');
   });
 });

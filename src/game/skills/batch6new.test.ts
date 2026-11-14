@@ -56,20 +56,31 @@ describe('卢弈「手谈」', () => {
 });
 
 describe('吕玲绮「神威」', () => {
-  it('摸牌阶段多摸两张', () => {
+  // 手写 ctx 调 f.fn({} as never) 的老写法在这条技能加门闸之后会炸：
+  // 技能要读 ctx.hasGrantedSkill。改用真正的 dispatcher 跑，顺带把门闸也验了。
+  it('妆戎授予后：摸牌阶段多摸两张', async () => {
     const lv = mkPlayer({ id: 0, name: '吕玲绮' });
     const { deps } = makeHarness([lv]);
-    // drawPhaseBonus 由引擎加总，这里直接验证钩子返回值
-    const fns = skillHook('drawPhaseBonus');
-    const total = fns.reduce((a, f) => a + (f.def.hero === '吕玲绮' ? f.fn({} as never) : 0), 0);
-    expect(total).toBe(2);
-    void deps;
+    const { dispatchDrawBonus } = await import('./dispatch');
+    deps.hasGrantedSkill = (_p, n) => n === '☆ 神威';
+    expect(dispatchDrawBonus(deps, 0)).toBe(2);
   });
 
-  it('手牌上限 +2', () => {
-    const fns = skillHook('handLimitBonus');
-    const total = fns.reduce((a, f) => a + (f.def.hero === '吕玲绮' ? f.fn({} as never) : 0), 0);
-    expect(total).toBe(2);
+  it('妆戎授予后：手牌上限 +2', async () => {
+    const lv = mkPlayer({ id: 0, name: '吕玲绮' });
+    const { deps } = makeHarness([lv]);
+    const { dispatchHandLimitBonus } = await import('./dispatch');
+    deps.hasGrantedSkill = (_p, n) => n === '☆ 神威';
+    expect(dispatchHandLimitBonus(deps, 0)).toBe(2);
+  });
+
+  it('未授予时两个加成都是 0（「觉醒后获得」不是「天生就有」）', async () => {
+    const lv = mkPlayer({ id: 0, name: '吕玲绮' });
+    const { deps } = makeHarness([lv]);
+    const { dispatchDrawBonus, dispatchHandLimitBonus } = await import('./dispatch');
+    deps.hasGrantedSkill = () => false;
+    expect(dispatchDrawBonus(deps, 0)).toBe(0);
+    expect(dispatchHandLimitBonus(deps, 0)).toBe(0);
   });
 });
 

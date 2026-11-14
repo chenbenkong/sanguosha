@@ -36,10 +36,13 @@ const wishCap = (ctx: SkillContext): number => ctx.players.length;
 
 /** 读出（并在首次调用时初始化）「妄」区 */
 const wishOf = (ctx: SkillContext): Card[] => {
-  const cur = ctx.memory.wish;
+  // 「妄」是**武将牌上**的牌，属于这个武将而不是某一个技能 ——
+  // 用 heroMemory 而不是 memory：芮姬的「铃音」要读同一份「妄」，
+  // 写在 memory 里的话它只能读到一份空数组（欣缘记的、铃音看不见）。
+  const cur = ctx.heroMemory.wish;
   if (Array.isArray(cur)) return cur as Card[];
   const fresh: Card[] = [];
-  ctx.memory.wish = fresh;
+  ctx.heroMemory.wish = fresh;
   return fresh;
 };
 
@@ -57,7 +60,7 @@ const wishOf = (ctx: SkillContext): Card[] => {
 // 结果就是「牌凭空进了手牌、而『妄』没记上」——比不做还糟。
 // deckTo('discard') 只改牌堆与弃牌堆两处真实状态，不存在这个悬空写入。
 //
-// 「置于武将牌上」目前落在 ctx.memory.wish 里（任务书给的口径）：
+// 「置于武将牌上」目前落在 ctx.heroMemory.wish 里（任务书给的口径）：
 // Player.placedCards 确实是这条区域的既有字段（周妃「箜声」/曹宪「灵犀」在用），
 // 但技能侧没有「牌堆→自定义区域」的直达原语，把牌从手牌挪进 placedCards
 // 需要先 deckTo('hand')，正好撞上上面那个悬空写入问题。
@@ -88,7 +91,7 @@ registerSkill({
       const taken = ctx.deckTo(1, 'discard');
       if (!taken.length) return;
       wish.push(taken[0]);
-      ctx.memory.wish = wish;
+      ctx.heroMemory.wish = wish;
       ctx.log(
         '【妄缘】' + ctx.self.hero.name + ' 于回合外失去牌，将牌堆一张牌置于武将牌上，称为「妄」（共 '
         + wish.length + ' 张）',

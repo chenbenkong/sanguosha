@@ -69,8 +69,11 @@ registerSkill({
   skill: '☆ 神威',
   locked: true,
   hooks: {
-    drawPhaseBonus: () => 2,
-    handLimitBonus: () => 2,
+    // 门闸：这两个加成只有「妆戎」觉醒授予之后才该生效。
+    // 注册表是按**武将名**派发的，没有门闸的话吕玲绮从第一回合起就白拿 +2/+2，
+    // 「觉醒后获得技能」这半句就废了（batch6new17.ts 的妆戎负责授予）。
+    drawPhaseBonus: (ctx) => (ctx.hasGrantedSkill('☆ 神威') ? 2 : 0),
+    handLimitBonus: (ctx) => (ctx.hasGrantedSkill('☆ 神威') ? 2 : 0),
   },
 });
 

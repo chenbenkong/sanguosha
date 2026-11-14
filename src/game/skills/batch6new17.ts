@@ -71,16 +71,8 @@ registerSkill({
 });
 
 // ── 吕玲绮「☆ 神威」 ──────────────────────────────────
-registerSkill({
-  hero: '吕玲绮',
-  skill: SHENWEI,
-  locked: true,
-  hooks: {
-    // dispatchDrawBonus 只对「本阶段摸牌的那个人」派发（dispatch.ts:361 的 drawerId 过滤）
-    drawPhaseBonus: (ctx) => (ctx.hasGrantedSkill(SHENWEI) ? 2 : 0),
-    handLimitBonus: (ctx) => (ctx.hasGrantedSkill(SHENWEI) ? 2 : 0),
-  },
-});
+// 注册在 batch6new.ts（更早的批次已经装好），本轮只给它补上了「妆戎授予之后才生效」
+// 的门闸 —— 这里不再重复 registerSkill，否则两个实现会叠成 +4。
 
 // ── 吕玲绮「☆ 无双」 ──────────────────────────────────
 registerSkill({
