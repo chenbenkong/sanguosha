@@ -1,6 +1,7 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Hero } from '../../../types';
+import { getHeroDetail } from '../../game/heroDetail';
 import { heroSkillTags } from './heroSelectQuery';
 
 const PANEL_W = 340;
@@ -108,17 +109,18 @@ export const HeroSkillPreview: React.FC<{
         </div>
       )}
 
+      {/* 逐技能成块：以前是「【A / B】+ 整段描述」挤在一起，多个技能的规则
+          文本首尾相连，读不出边界。getHeroDetail 按「技能名：」切开，
+          每个技能单独一块、名与正文分行。 */}
       <div className="hero-skill-preview__body">
-        <div className="hero-skill-preview__skill">
-          <span className="hero-skill-preview__skill-name">【{hero.skillName}】</span>
-          <span className="hero-skill-preview__skill-desc">{hero.skillDesc}</span>
-        </div>
-        {hero.lordSkillName && (
-          <div className="hero-skill-preview__skill is-lord">
-            <span className="hero-skill-preview__skill-name">主公技【{hero.lordSkillName}】</span>
-            <span className="hero-skill-preview__skill-desc">{hero.lordSkillDesc}</span>
+        {getHeroDetail(hero).skills.map(s => (
+          <div key={s.name} className={'hero-skill-preview__skill' + (s.isLord ? ' is-lord' : '')}>
+            <span className="hero-skill-preview__skill-name">
+              {s.isLord ? '主公技' : ''}【{s.name}】
+            </span>
+            <span className="hero-skill-preview__skill-desc">{s.desc}</span>
           </div>
-        )}
+        ))}
       </div>
     </div>,
     document.body,

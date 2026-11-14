@@ -2247,6 +2247,38 @@ a:focus-visible {
   background: linear-gradient(180deg, rgba(8, 6, 4, 0) 0%, rgba(8, 6, 4, 0.82) 32%, rgba(8, 6, 4, 0.96) 100%);
 }
 
+/* 立绘模式铭条：名字/势力/勾玉从图面移到下方独立条带，图面零文字。
+   角标与勾玉的旧样式是 absolute（叠在图上），在铭条里要转回行内布局。
+   卡面模式没有铭条（官方牌面自带全部信息），这里只作用于 .hero-pick-strip 内。 */
+.hero-pick-strip {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px 5px;
+  background: linear-gradient(180deg, rgba(14, 10, 7, 0.92) 0%, rgba(10, 8, 6, 0.98) 100%);
+  border-top: 1px solid rgba(200, 164, 92, 0.28);
+  min-height: 34px;
+}
+.theme-light .hero-pick-strip {
+  background: linear-gradient(180deg, rgba(46, 33, 19, 0.94) 0%, rgba(32, 23, 13, 0.98) 100%);
+}
+.hero-pick-strip .hero-kingdom {
+  position: static;
+  width: 20px;
+  height: 20px;
+  font-size: 12px;
+  border-radius: 4px;
+}
+.hero-pick-strip .hero-hp {
+  position: static;
+  padding: 0;
+  background: none;
+  border: none;
+  box-shadow: none;
+}
+.hero-pick-strip .hero-pick-name { font-size: 17px; }
+
 /* 卡面模式：牌面按 2:3 完整显示，上下留白用深木色衬底。
    名字条会压住牌面下缘约两成的技能印刷区——缩略尺寸下这些字本就
    不可读（420w 源图文字带仅 6px，缩到 166px 宽约 2.3px/行），
@@ -4433,8 +4465,10 @@ a:focus-visible {
 }
 .hero-skill-toggle:active { background: rgba(200, 164, 92, 0.3); }
 @media (max-width: 767px) {
-  /* 底部 44px 是「技能」按钮的专属条带，脚注与名字条都要让开，否则被压住 */
-  .hero-pick-foot { padding-bottom: calc(44px + 0.25rem); }
+  /* 底部 44px 是「技能」按钮的专属条带。立绘模式的名字铭条改为在文档流里
+     自留这段高度：toggle 绝对定位压在条带上，正好落在预留的 padding 里，
+     不会盖住名字/势力/勾玉（旧写法是给已删除的 .hero-pick-foot 加 padding）。 */
+  .hero-pick-strip { padding-bottom: 44px; }
   /* 名字条整条上移到条带之上，而不是靠内边距把自己撑高——
      撑高会把它推进牌面印刷技能文本的区域，两行字叠在一起糊掉。
      再下沉到按钮底下（-6px 的重叠）：按钮 z-index:3 且不透明，看不见，

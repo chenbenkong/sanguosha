@@ -82,69 +82,71 @@ export const HeroCard: React.FC<{
         onTouchEnd={clearLongPress}
         onTouchMove={clearLongPress}
         onTouchCancel={clearLongPress}
-        className={`hero-pick hero-card group tilt w-full text-left kingdom-frame ${KINGDOM_CLASS[hero.kingdom] ?? ''}${cardMode ? ' is-fullcard' : ''}`}
+        className={`hero-pick hero-card group tilt w-full text-left kingdom-frame ${KINGDOM_CLASS[hero.kingdom] ?? ''}${cardMode ? ' is-fullcard' : ' flex flex-col'}`}
         aria-pressed={selected}
         aria-label={`选择 ${hero.name}`}
         aria-describedby={preview ? `hero-skill-${hero.id}` : undefined}
         title={`${hero.name}（${hero.kingdom} · ${hero.maxHp} 体力）【${hero.skillName}】${hero.skillDesc}${hero.lordSkillName ? ` 主公技【${hero.lordSkillName}】${hero.lordSkillDesc}` : ''}`}
       >
-        <img
-          src={fullCard ?? hero.avatarUrl}
-          alt={hero.name}
-          loading="lazy"
-          decoding="async"
-          className={
-            cardMode
-              ? 'absolute inset-0 w-full h-full object-contain transition-transform duration-500 group-hover:scale-[1.04]'
-              : 'absolute inset-0 w-full h-full object-cover object-top transition-transform duration-500 group-hover:scale-[1.04]'
-          }
-        />
-        {!cardMode && <div className="hero-pick-shade" />}
-
-        {/* 卡面模式不叠自家势力/勾玉：官方牌面已印了势力色块与勾玉，
-            再叠一层既重复又盖住牌面信息。 */}
-        {!cardMode && <span className="hero-kingdom absolute top-2 left-2">{hero.kingdom}</span>}
-
-        {/* right-[54px] + 内联紧凑内边距：8 列（min-[1200px]）时卡片仅 ~145px 宽，
-            4 颗勾玉的默认内边距会把勾玉推到左上势力角标上。压缩 6px 后
-            势力角标 / 勾玉 / 右上 44px 详情按钮三者互不重叠。 */}
-        {!cardMode && <span className="hero-hp absolute top-2 right-2" title={`体力上限 ${hero.maxHp}`}>
-          <span className="hero-hp-pips" style={{ gap: 1, maxWidth: 44, flexWrap: 'nowrap' }}>
-            {Array.from({ length: hero.maxHp }).map((_, i) => (
-              <i key={i} className="hero-hp-pip" style={{ width: 8 }} />
-            ))}
-          </span>
-        </span>}
-
-        {selected && (
-          <span className="absolute right-2 top-10 w-6 h-6 rounded-full bg-[#d4af37] text-[#241a0e] flex items-center justify-center text-xs font-bold shadow-lg">
-            ✓
-          </span>
-        )}
-
         {cardMode ? (
-          /* 卡面模式下技能文本、势力、勾玉都印在牌面上，只补一条武将名——
-             卡面原名的竖排书法在缩略尺寸下难认，横排名字负责扫视识别。 */
-          <div className="hero-pick-namebar absolute inset-x-0 bottom-0 pl-2 pr-[42px] pb-1.5 pt-6">
-            <span className="font-ancient hero-pick-name leading-tight text-[#f4e4bf] drop-shadow-[0_1px_3px_rgba(0,0,0,0.85)]">
-              {hero.name}
-            </span>
-            {hero.pending && <span className="hero-lord-chip">实装中</span>}
-            {hero.lordSkillName && <span className="hero-lord-chip">主公技</span>}
-          </div>
-        ) : (
-          <div className="hero-pick-foot absolute inset-x-0 bottom-0 pl-2.5 pr-[42px] pb-2.5 pt-8">
-            <div className="hero-pick-title truncate">{hero.description}</div>
-            <div className="font-ancient hero-pick-name leading-tight text-[#f4e4bf] drop-shadow-[0_1px_3px_rgba(0,0,0,0.85)]">
-              {hero.name}
-            </div>
-            <div className="hero-pick-skill">
-              <span className="truncate">【{hero.skillName}】</span>
+          <>
+            <img
+              src={fullCard ?? hero.avatarUrl}
+              alt={hero.name}
+              loading="lazy"
+              decoding="async"
+              className="absolute inset-0 w-full h-full object-contain transition-transform duration-500 group-hover:scale-[1.04]"
+            />
+            {selected && (
+              <span className="absolute right-2 top-10 w-6 h-6 rounded-full bg-[#d4af37] text-[#241a0e] flex items-center justify-center text-xs font-bold shadow-lg">
+                ✓
+              </span>
+            )}
+            {/* 卡面模式下技能文本、势力、勾玉都印在牌面上，只补一条武将名——
+                卡面原名的竖排书法在缩略尺寸下难认，横排名字负责扫视识别。
+                （势力角标与勾玉在立绘模式已移入铭条，卡面模式本就不渲染它们。） */}
+            <div className="hero-pick-namebar absolute inset-x-0 bottom-0 pl-2 pr-[42px] pb-1.5 pt-6">
+              <span className="font-ancient hero-pick-name leading-tight text-[#f4e4bf] drop-shadow-[0_1px_3px_rgba(0,0,0,0.85)]">
+                {hero.name}
+              </span>
               {hero.pending && <span className="hero-lord-chip">实装中</span>}
               {hero.lordSkillName && <span className="hero-lord-chip">主公技</span>}
             </div>
-            <div className="hero-pick-desc line-clamp-3">{hero.skillDesc}</div>
-          </div>
+          </>
+        ) : (
+          <>
+            {/* 立绘模式：图面上不再叠任何文字。势力角标 / 名字 / 勾玉移到下方
+                与卡片一体的铭条里（文档流，不是绝对定位浮层）；技能文本交给
+                悬停速览（HeroSkillPreview）与详情弹窗，卡面上从不缺地方读名字。 */}
+            <div className="relative flex-1 min-h-0 overflow-hidden">
+              <img
+                src={hero.avatarUrl}
+                alt={hero.name}
+                loading="lazy"
+                decoding="async"
+                className="absolute inset-0 w-full h-full object-cover object-top transition-transform duration-500 group-hover:scale-[1.04]"
+              />
+              <div className="hero-pick-shade" />
+              {selected && (
+                <span className="absolute left-2 top-2 w-6 h-6 rounded-full bg-[#d4af37] text-[#241a0e] flex items-center justify-center text-xs font-bold shadow-lg">
+                  ✓
+                </span>
+              )}
+            </div>
+            <div className="hero-pick-strip">
+              <span className="hero-kingdom">{hero.kingdom}</span>
+              <span className="font-ancient hero-pick-name truncate leading-none">{hero.name}</span>
+              {hero.pending && <span className="hero-lord-chip">实装中</span>}
+              {hero.lordSkillName && <span className="hero-lord-chip">主公技</span>}
+              <span className="hero-hp ml-auto" title={`体力上限 ${hero.maxHp}`}>
+                <span className="hero-hp-pips" style={{ gap: 1, flexWrap: 'nowrap' }}>
+                  {Array.from({ length: hero.maxHp }).map((_, i) => (
+                    <i key={i} className="hero-hp-pip" style={{ width: 6, height: 10 }} />
+                  ))}
+                </span>
+              </span>
+            </div>
+          </>
         )}
       </button>
 
@@ -159,7 +161,10 @@ export const HeroCard: React.FC<{
         }}
         aria-label={`查看 ${hero.name} 详情`}
         title={`查看 ${hero.name} 详情`}
-        className="absolute bottom-2 right-2 z-20 flex h-9 w-9 md:h-10 md:w-10 items-center justify-center rounded-full border border-[#c8a45c]/70 bg-[#0a0806]/82 text-[#f4e4bf] backdrop-blur-[2px] transition-colors hover:border-[#f0d894] hover:bg-[#c8a45c]/35 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#f0d894]"
+        className={
+          'absolute right-2 z-20 flex h-9 w-9 md:h-10 md:w-10 items-center justify-center rounded-full border border-[#c8a45c]/70 bg-[#0a0806]/82 text-[#f4e4bf] backdrop-blur-[2px] transition-colors hover:border-[#f0d894] hover:bg-[#c8a45c]/35 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#f0d894] '
+          + (cardMode ? 'bottom-2' : 'top-2')
+        }
       >
         <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <circle cx="12" cy="12" r="9" />

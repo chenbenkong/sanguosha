@@ -4,6 +4,7 @@ import { BackgroundCarousel } from '../BackgroundCarousel';
 import { BACKGROUND_IMAGES, CAROUSEL_CONFIG } from '../../config/backgrounds';
 import { IconSpeaker, IconMotion, IconDice, IconArrowLeft, ThemeIcon } from '../Icons';
 import { HeroCard } from './HeroCard';
+import { getHeroDetail } from '../../game/heroDetail';
 import { HERO_PAGE_SIZE, filterHeroes, parseHeroQuery } from './heroSelectQuery';
 import { useRecentHeroes } from './useRecentHeroes';
 import { useCardArtMode } from './useCardArtMode';
@@ -351,10 +352,18 @@ export const HeroSelectScreen: React.FC<{
                       武将详情
                     </button>
                   </div>
-                  <p className={'mt-0.5 text-xs leading-relaxed truncate ' + (theme === 'dark' ? 'text-[#c8bda8]' : 'text-[#5a4c38]')}>
-                    {selectedHero.skillDesc}
-                    {selectedHero.lordSkillName && <span className={'ml-2 ' + (theme === 'dark' ? 'text-[#d9b46a]' : 'text-[#8b6914]')}>主公技【{selectedHero.lordSkillName}】{selectedHero.lordSkillDesc}</span>}
-                  </p>
+                  {/* 每个技能单独一行（以前整段 skillDesc 连排，多技能边界不清）。
+                      行过长仍单行截断——完整文本在悬停速览与详情弹窗里。 */}
+                  <div className={'mt-0.5 space-y-0.5 text-xs leading-snug ' + (theme === 'dark' ? 'text-[#c8bda8]' : 'text-[#5a4c38]')}>
+                    {getHeroDetail(selectedHero).skills.map(s => (
+                      <p key={s.name} className="line-clamp-1">
+                        <span className={'font-bold ' + (s.isLord ? (theme === 'dark' ? 'text-[#d9b46a]' : 'text-[#8b6914]') : '')}>
+                          {s.isLord ? '主公技' : ''}【{s.name}】
+                        </span>
+                        {s.desc}
+                      </p>
+                    ))}
+                  </div>
                 </div>
               </>
             ) : (

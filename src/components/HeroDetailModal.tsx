@@ -259,29 +259,19 @@ export const HeroDetailModal: React.FC<HeroDetailModalProps> = ({ hero, player, 
                 aria-label={`放大查看 ${artLabel}`}
                 title={cardMode ? '点击放大 2x 卡面' : '点击放大 2x 立绘'}
               >
-                {cardMode && fullCard ? (
-                  /* 卡面是 2:3 整幅、下半部分印着技能文本，object-cover 会把它裁掉，
-                     所以交给 3D 查看器在 2:3 的定尺寸容器里整幅铺开：容器尺寸确定，
-                     引擎按挂载点建画布，画布即容器，不会溢出也不会撑破弹层 */
-                  <div className="block w-full aspect-[2/3] bg-[#0d0a07] border border-black/40">
-                    <Card3DViewer
-                      src={fullCard}
-                      meta={{ name: hero.name, faction: hero.kingdom }}
-                      alt={artLabel}
-                      controls={false}
-                      onDragEnd={handleDragEnd}
-                    />
-                  </div>
-                ) : (
-                  <img
-                    src={heroPortrait2x(hero.avatarUrl)}
+                {/* 卡面与立绘共用 3D 查看器（图鉴同款 WebGL 引擎，按住拖动可旋转）：
+                    以前只有官方卡面上 3D、立绘是静态图，切换「卡面/立绘」时观感断裂。
+                    2:3 定尺寸容器不变 —— 引擎按挂载点建画布，不会溢出也不会撑破弹层；
+                    WebGL2 不可用时查看器内部降级为静态 <img>，与改动前一致。 */}
+                <div className="block w-full aspect-[2/3] bg-[#0d0a07] border border-black/40">
+                  <Card3DViewer
+                    src={cardMode && fullCard ? fullCard : heroPortrait2x(hero.avatarUrl)}
+                    meta={{ name: hero.name, faction: hero.kingdom }}
                     alt={artLabel}
-                    aria-label={artLabel}
-                    loading="eager"
-                    decoding="async"
-                    className="block w-full aspect-[2/3] object-cover object-top"
+                    controls={false}
+                    onDragEnd={handleDragEnd}
                   />
-                )}
+                </div>
                 <span className="absolute right-2 bottom-2 text-[11px] px-2 py-1 rounded bg-black/70 text-[#e8cf94] border border-[#c8a45c]/40 opacity-90 group-hover:opacity-100">
                   放大查看
                 </span>

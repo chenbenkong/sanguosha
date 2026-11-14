@@ -73,11 +73,13 @@ export const PortraitLightbox: React.FC<PortraitLightboxProps> = ({ hero, onClos
 
   if (!hero) return null;
 
-  /** 白名单外的武将（马云禄、蔡贞姬）没有官方卡面，恒回落静态立绘 */
   const fullCard = heroFullCard2x(hero);
-  /** 只有「卡面模式 + 确有全卡面」才进 3D，其余一律静态立绘 */
-  const use3d = mode === 'card' && fullCard !== null;
-  const label = use3d ? `${hero.name} 卡面` : `${hero.name} 立绘`;
+  /** 「卡面模式 + 确有全卡面」看卡面，其余（含无卡面的马云禄/蔡贞姬）看立绘。
+   *  两种图都进 3D 查看器：立绘以前是静态 <img>，与详情弹窗的 3D 立绘不一致；
+   *  WebGL2 不可用时查看器内部自动降级为静态图，行为不劣于旧版。 */
+  const cardArt = mode === 'card' && fullCard !== null;
+  const artSrc = cardArt ? (fullCard as string) : heroPortrait2x(hero.avatarUrl);
+  const label = cardArt ? `${hero.name} 卡面` : `${hero.name} 立绘`;
 
   return (
     <div
@@ -88,27 +90,17 @@ export const PortraitLightbox: React.FC<PortraitLightboxProps> = ({ hero, onClos
       aria-label={label}
     >
       <div className="relative flex flex-col items-center" onClick={(e) => e.stopPropagation()}>
-        {use3d ? (
-          /* 2:3 定尺寸宿主：88vw 与 84vh 谁先卡住就用谁，两者互为 2:3，
-             所以这个框既不会溢出视口，也不会给引擎一个零尺寸挂载点 */
-          <div className="w-[min(88vw,56vh)] h-[min(84vh,132vw)]">
-            <Card3DViewer
-              src={String(fullCard)}
-              meta={{ name: hero.name, faction: hero.kingdom }}
-              alt={label}
-              controls
-              onDragEnd={handleDragEnd}
-            />
-          </div>
-        ) : (
-          <img
-            src={heroPortrait2x(hero.avatarUrl)}
+        {/* 2:3 定尺寸宿主：88vw 与 84vh 谁先卡住就用谁，两者互为 2:3，
+            所以这个框既不会溢出视口，也不会给引擎一个零尺寸挂载点 */}
+        <div className="w-[min(88vw,56vh)] h-[min(84vh,132vw)]">
+          <Card3DViewer
+            src={artSrc}
+            meta={{ name: hero.name, faction: hero.kingdom }}
             alt={label}
-            aria-label={label}
-            draggable={false}
-            className="block h-auto w-auto max-h-[86vh] max-w-[92vw] rounded-lg border border-[#c8a45c]/60 shadow-[0_18px_60px_rgba(0,0,0,0.75)] object-contain"
+            controls
+            onDragEnd={handleDragEnd}
           />
-        )}
+        </div>
         {/* 说明行 */}
         <div className="mt-2 flex flex-wrap items-center justify-center gap-x-2 gap-y-1.5 text-[#e8cf94]">
           <span className="font-ancient text-xl">{hero.name}</span>
