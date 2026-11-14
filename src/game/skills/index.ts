@@ -7,6 +7,7 @@
 import './batch6';
 import './batch7';
 import './batch8';
+import './batch6new';
 import './migrated1';
 import './migrated2';
 import './migrated3';

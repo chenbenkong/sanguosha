@@ -1744,7 +1744,11 @@ const App: React.FC = () => {
     const otherHeroes = HEROES.filter(h => h.id !== hero.id && !h.pending).sort(() => Math.random() - 0.5);
     // 仅本地开发：?ai=关银屏,诸葛果,... 指定 AI 武将，用于逐个验证新技能。
     // 生产构建里 import.meta.env.DEV 为 false，这段会被移除，不影响线上。
-    const debugDev = (import.meta as unknown as { env?: { DEV?: boolean } }).env?.DEV === true;
+    // 必须直接写 import.meta.env.DEV：vite 只在**静态可见**时把它替换成字面量。
+    // 之前这里写成 (import.meta as unknown as {...}).env?.DEV，类型断言挡住了静态替换，
+    // 运行时读到 undefined，debugDev 恒为 false —— 于是 ?ai= 阵容指定与 __devState/
+    // __devTrick 等探针在 dev 构建里也从未生效（实测「探针就位: false」）。
+    const debugDev = import.meta.env.DEV;
     const debugNames = debugDev
       ? (new URLSearchParams(window.location.search).get('ai') || '').split(',').map(s => s.trim()).filter(Boolean)
       : [];
