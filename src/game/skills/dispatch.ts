@@ -57,11 +57,6 @@ export interface DispatchDeps {
   takeFromDeck?: (pred: (c: Card) => boolean, count: number) => Card[];
   takeFromDiscard?: (pred: (c: Card) => boolean, count: number) => Card[];
   loseHp?: (playerId: number, amount: number) => Promise<void>;
-  /**
-   * 一张牌的目标确定后、结算前的拦截（可选能力）。
-   * 未提供时 onTargetsChosen 不会被派发。
-   */
-  applyTargets?: (source: Player, card: Card, targets: Player[]) => Promise<Player[]>;
   /** 向玩家提问；AI/托管返回 null（由引擎既有 SkillChoiceModal 实现） */
   requestChoice: (req: {
     title: string;

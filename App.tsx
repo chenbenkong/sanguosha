@@ -2663,36 +2663,7 @@ const App: React.FC = () => {
         // 通用：他人回合开始的技能 / 虚拟牌钩子
         await runTurnStartHooks(currentPlayer);
           // 技能注册表：回合开始时机（新技能只需注册 onTurnStart，不必在此加分支）
-          await dispatchTurnStart({
-            players: playersRef.current,
-            turnOwner: currentPlayer,
-            draw: (pid: number, c: number) => drawCardsRef.current!(pid, c),
-            discard: (pid: number, cards: Card[]) => discardCards(pid, cards),
-            heal: (pid: number, c: number) => recoverHp(pid, c),
-            damage: async (vid: number, sid: number, amt: number, cd?: Card) => {
-              if (combatEngine) await combatEngine.takeDamage(vid, sid, amt, cd);
-            },
-            gainCard: (fromId: number, toId: number, cd: Card) => {
-              mutateHand(fromId, h => h.filter(c => c.id !== cd.id));
-              mutateHand(toId, h => [...h, cd]);
-            },
-            log: (t: string) => addLog(t, 'skill'),
-            banner: (h: string, sk: string) => showSkillBanner(h, sk),
-            delay: (ms: number) => delay(ms),
-            skillsOn: (pid: number) => skillsOn(pid),
-            requestChoice: (req: SkillChoiceReq) => requestSkillChoice({
-              skill: req.title,
-              owner: '技能',
-              title: req.title,
-              hint: req.hint,
-              mode: req.mode,
-              choices: req.choices,
-              targets: req.targets,
-              min: req.min,
-              max: req.max,
-              cancelLabel: req.cancelLabel,
-            }, !isAiTakeoverRef.current),
-          }, currentPlayer);
+          await dispatchTurnStart({ ...buildSkillDeps(), turnOwner: currentPlayer }, currentPlayer);
         // 「戚乱」击杀数清零已迁移到 src/game/skills/migrated3.ts（onTurnStart）
         ganluUsedRef.current = false;
         setHasUsedGanlu(false);
@@ -3134,36 +3105,7 @@ const App: React.FC = () => {
         // 基础摸牌数：周瑜「英姿」已迁移到注册表（drawPhaseBonus +1），此处只给基础 2 张
         let drawCount = 2 + fumianExtra;
         // 技能注册表：摸牌阶段的额外摸牌（新技能只需注册 drawPhaseBonus）
-        const regDrawBonus = dispatchDrawBonus({
-          players: playersRef.current,
-          turnOwner: currentPlayer,
-          draw: (pid: number, n: number) => drawCardsRef.current!(pid, n),
-          discard: (pid: number, cards: Card[]) => discardCards(pid, cards),
-          heal: (pid: number, n: number) => recoverHp(pid, n),
-          damage: async (victimId: number, sourceId: number, amount: number, cd?: Card) => {
-            if (combatEngine) await combatEngine.takeDamage(victimId, sourceId, amount, cd);
-          },
-          gainCard: (fromId: number, toId: number, cd: Card) => {
-            mutateHand(fromId, h => h.filter(c => c.id !== cd.id));
-            mutateHand(toId, h => [...h, cd]);
-          },
-          log: (t: string) => addLog(t, 'skill'),
-          banner: (h: string, sk: string) => showSkillBanner(h, sk),
-          delay: (ms: number) => delay(ms),
-          skillsOn: (pid: number) => skillsOn(pid),
-          requestChoice: (req: SkillChoiceReq) => requestSkillChoice({
-            skill: req.title,
-            owner: '技能',
-            title: req.title,
-            hint: req.hint,
-            mode: req.mode,
-            choices: req.choices,
-            targets: req.targets,
-            min: req.min,
-            max: req.max,
-            cancelLabel: req.cancelLabel,
-          }, !isAiTakeoverRef.current),
-        }, currentPlayer.id);
+        const regDrawBonus = dispatchDrawBonus({ ...buildSkillDeps(), turnOwner: currentPlayer }, currentPlayer.id);
         drawCount += regDrawBonus;
         if (fumianExtra > 0) {
           addLog(`【福绵】吴苋摸牌阶段额外摸 ${fumianExtra} 张牌`, 'skill');
@@ -4080,36 +4022,7 @@ const App: React.FC = () => {
         const endingPlayer = getPlayer(turnIndex);
         // 技能注册表：回合结束时机统一分发（新技能只需注册，不必在此加分支）
         if (endingPlayer) {
-          await dispatchTurnEnd({
-            players: playersRef.current,
-            turnOwner: endingPlayer,
-            draw: (pid: number, n: number) => drawCardsRef.current!(pid, n),
-            discard: (pid: number, cards: Card[]) => discardCards(pid, cards),
-            heal: (pid: number, n: number) => recoverHp(pid, n),
-            damage: async (victimId: number, sourceId: number, amount: number, cd?: Card) => {
-              if (combatEngine) await combatEngine.takeDamage(victimId, sourceId, amount, cd);
-            },
-            gainCard: (fromId: number, toId: number, cd: Card) => {
-              mutateHand(fromId, h => h.filter(c => c.id !== cd.id));
-              mutateHand(toId, h => [...h, cd]);
-            },
-            log: (t: string) => addLog(t, 'skill'),
-            banner: (h: string, sk: string) => showSkillBanner(h, sk),
-            delay: (ms: number) => delay(ms),
-            skillsOn: (pid: number) => skillsOn(pid),
-            requestChoice: (req: SkillChoiceReq) => requestSkillChoice({
-              skill: req.title,
-              owner: '技能',
-              title: req.title,
-              hint: req.hint,
-              mode: req.mode,
-              choices: req.choices,
-              targets: req.targets,
-              min: req.min,
-              max: req.max,
-              cancelLabel: req.cancelLabel,
-            }, !isAiTakeoverRef.current),
-          }, endingPlayer);
+          await dispatchTurnEnd({ ...buildSkillDeps(), turnOwner: endingPlayer }, endingPlayer);
         }
         // 张春华「伤逝」已迁移到 src/game/skills/migrated2.ts（onTurnEnd）
 
@@ -6457,29 +6370,7 @@ const App: React.FC = () => {
     {
       const judgeOwnerPre = playersRef.current.find(x => x.id === playerId);
       if (judgeOwnerPre) {
-        const pre = await dispatchJudgeBefore({
-          players: playersRef.current,
-          turnOwner: playersRef.current.find(x => x.id === turnOwnerIdRef.current),
-          draw: (pid: number, c: number) => drawCardsRef.current!(pid, c),
-          discard: (pid: number, cards: Card[]) => discardCards(pid, cards),
-          heal: (pid: number, c: number) => recoverHp(pid, c),
-          damage: async (vid: number, sid: number, amt: number, cd?: Card) => {
-            if (combatEngine) await combatEngine.takeDamage(vid, sid, amt, cd);
-          },
-          gainCard: (fromId: number, toId: number, cd: Card) => {
-            mutateHand(fromId, h => h.filter(c => c.id !== cd.id));
-            mutateHand(toId, h => [...h, cd]);
-          },
-          log: (t: string) => addLog(t, 'skill'),
-          banner: (h: string, sk: string) => showSkillBanner(h, sk),
-          delay: (ms: number) => delay(ms),
-          skillsOn: (pid: number) => skillsOn(pid),
-          requestChoice: (req: SkillChoiceReq) => requestSkillChoice({
-            skill: req.title, owner: '技能', title: req.title, hint: req.hint,
-            mode: req.mode, choices: req.choices, targets: req.targets,
-            min: req.min, max: req.max, cancelLabel: req.cancelLabel,
-          }, !isAiTakeoverRef.current),
-        }, { owner: judgeOwnerPre, reason, card: finalCard });
+        const pre = await dispatchJudgeBefore(buildSkillDeps(), { owner: judgeOwnerPre, reason, card: finalCard });
         if (pre.replaceWith) {
           addLog(`【改判】判定牌被替换为【${pre.replaceWith.name}】`, 'skill');
           finalCard = pre.replaceWith;
@@ -6498,36 +6389,7 @@ const App: React.FC = () => {
 
     // 技能注册表：判定牌生效后（新技能只需注册 afterJudge，不必在此加分支）
     {
-      const judgeSkillDeps = {
-        players: playersRef.current,
-        turnOwner: playersRef.current.find(x => x.id === turnOwnerIdRef.current),
-        draw: (pid: number, n: number) => drawCardsRef.current!(pid, n),
-        discard: (pid: number, cards: Card[]) => discardCards(pid, cards),
-        heal: (pid: number, n: number) => recoverHp(pid, n),
-        damage: async (victimId: number, sourceId: number, amount: number, cd?: Card) => {
-          if (combatEngine) await combatEngine.takeDamage(victimId, sourceId, amount, cd);
-        },
-        gainCard: (fromId: number, toId: number, cd: Card) => {
-          mutateHand(fromId, h => h.filter(c => c.id !== cd.id));
-          mutateHand(toId, h => [...h, cd]);
-        },
-        log: (t: string) => addLog(t, 'skill'),
-        banner: (h: string, sk: string) => showSkillBanner(h, sk),
-        delay: (ms: number) => delay(ms),
-        skillsOn: (pid: number) => skillsOn(pid),
-        requestChoice: (req: SkillChoiceReq) => requestSkillChoice({
-          skill: req.title,
-          owner: '技能',
-          title: req.title,
-          hint: req.hint,
-          mode: req.mode,
-          choices: req.choices,
-          targets: req.targets,
-          min: req.min,
-          max: req.max,
-          cancelLabel: req.cancelLabel,
-        }, !isAiTakeoverRef.current),
-      };
+      const judgeSkillDeps = buildSkillDeps();
       const judgeOwner = playersRef.current.find(x => x.id === playerId);
       if (judgeOwner) {
         await dispatchJudge(judgeSkillDeps, { owner: judgeOwner, card: finalCard, reason });
