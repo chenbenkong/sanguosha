@@ -80,11 +80,11 @@ export function playCardVoice(cardName: string, gender: 'male' | 'female' = 'mal
  * 官方真人原声「技能」台词（v3.58 新增）。
  *
  * 为什么必须按「武将 + 技能」两级查，而不能像 SKILL_SLUG 那样只按技能名：
- * 同名技能在不同武将手里的台词并不相同——实测 158 个技能条目对应 311 句，
+ * 同名技能在不同武将手里的台词并不相同——实测 223 个技能条目对应 440 句，
  * 存在同名不同词的情况。只按技能名做全局映射会把台词配错人。
  *
- * 一个技能通常有多句（1~6 句），运行时随机取一句，避免同一局里
- * 反复发动同一技能时听到完全一样的一句。
+ * 每个技能有 1~2 句（223 个条目里 217 个是 2 句、6 个是 1 句），运行时随机取一句，
+ * 避免同一局里反复发动同一技能时听到完全一样的一句。
  *
  * 文件位置：public/audio/skill-voice/<武将名>/<技能名><序号>.mp3
  * 序号从 1 开始，对应 SKILL_VOICE_LINES[武将][技能] 数组下标 + 1。
@@ -122,9 +122,10 @@ export function playSkillVoice(skillName: string): boolean {
   return playFile(`audio/skill/${slug}.mp3`);
 }
 
-// 仅这些武将有本地阵亡语音（与 public/audio/die 下的实际文件一致）。
+// 仅这些武将有本地阵亡语音（与本文件的 DEATH_VOICE_HEROES 及 public/audio/die 一致）。
 // 未收录的武将直接返回 false，由调用方回退合成音效，避免产生 404 与控制台报错。
-// 全部 45 名武将都有阵亡语音：前 24 名为 noname 公开素材，其余 21 名为 TTS 合成
+// 白名单登记 45 名：前 24 名为 noname 公开素材，其余 21 名为 TTS 合成。
+// 目录里另有 1 个不再被引用的遗留 lvbu.mp3（武将 id 为 lubu），故文件名数 46 ≠ 白名单 45。
 const DEATH_VOICE_HEROES = new Set([
   'bulianshi', 'caiwenji', 'caocao', 'daqiao', 'diaochan', 'ganning', 'guanyu',
   'huangyueying', 'huangzhong', 'liubei', 'lubu', 'lvmeng', 'simayi', 'sunquan',
@@ -141,9 +142,9 @@ const DEATH_VOICE_HEROES = new Set([
  * 官方真人原声阵亡台词（v3.56 新增）。
  *
  * 与上面的 audio/die/<id>.mp3 并存而不是替换：老目录按武将 id（拼音）命名，
- * 覆盖 45 名（含 TTS 合成）；新目录按**武将中文名**命名，覆盖 92 名，包含
- * 全部 69 名新女将。文件名与 public/images/heroes/<中文名>.webp 同一套命名，
- * 引擎侧给 hero.name 就能拼路径，不必再维护 id→拼音 映射表。
+ * 覆盖 45 名（含 TTS 合成）；新目录按**武将中文名**命名，覆盖 123 名。文件名与
+ * public/images/heroes/<中文名>.webp 同一套命名，引擎侧给 hero.name 就能拼路径，
+ * 不必再维护 id→拼音 映射表。
  *
  * 优先级：官方原声 > 旧目录 > 合成提示音。
  */
@@ -162,7 +163,7 @@ export function playDeathVoice(heroId: string): boolean {
   return playFile(`audio/die/${heroId}.mp3`);
 }
 
-/** 登场台词：45 名武将均有本地文件（真实素材或 TTS 合成） */
+/** 登场台词：白名单 45 名武将均有本地文件（全部 TTS 合成；目录里另有 1 个遗留 lvbu.mp3） */
 export function playEnterVoice(heroId: string): boolean {
   if (!DEATH_VOICE_HEROES.has(heroId)) return false;
   return playFile(`audio/enter/${heroId}.mp3`);

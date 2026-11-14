@@ -1,12 +1,12 @@
 /**
  * 3D 卡牌引擎（图鉴站 SGKCard3D）的按需加载与能力探测。
  *
- * 引擎本体是 public/vendor/card3d.js（510KB 的 WebGL 渲染器，含 three.js 与
- * 镭射着色器），来自 chenbenkong/sanguosha-cards 的 vendor/card3d.js。
+ * 引擎本体是 public/vendor/card3d.js（510,839 字节 / 约 499 KiB 的 WebGL 渲染器，
+ * 含 three.js 与镭射着色器），来自 chenbenkong/sanguosha-cards 的 vendor/card3d.js。
  *
  * 三条刻意的设计：
  *
- *  1. **用 <script> 按需注入，不进打包产物**。它只有 510KB 且只在打开卡牌
+ *  1. **用 <script> 按需注入，不进打包产物**。它有 511 KB 且只在打开卡牌
  *     查看器时才需要，塞进 bundle 会让每个首屏用户都付这份钱。
  *  2. **单例 Promise**。同一时刻可能有两个查看器（详情弹层 + 放大灯箱），
  *     但脚本只该注入一次；并发调用共享同一个 loading Promise。
@@ -52,10 +52,11 @@ export interface Card3DCreateOptions {
   interactive?: boolean;
   /** 允许一路转到背面 */
   freeSpin?: boolean;
-  /** 装裱内边（相对卡面的放大比例） */
+  /** 装裱内边（相对卡面的放大比例，引擎默认 1.14） */
   fit?: number;
-  /** 贴图最长边上限 */
+  /** 贴图最长边上限（超过则等比缩小；0 = 不限制） */
   maxTexWidth?: number;
+  /** 入场动画（尊重 prefers-reduced-motion） */
   entrance?: boolean;
   canvasClass?: string;
   onReady?: () => void;
@@ -78,13 +79,13 @@ const SCRIPT_URL = `${import.meta.env.BASE_URL}vendor/card3d.js`;
 /** 引擎就绪前的加载 Promise；失败后置为 null 以便下次重试 */
 let pending: Promise<Card3DEngine | null> | null = null;
 
-/** 加载超时。510KB 在慢网下也要给够时间，但不能无限等 */
+/** 加载超时。511 KB 在慢网下也要给够时间，但不能无限等 */
 const LOAD_TIMEOUT_MS = 20000;
 
 /**
  * WebGL2 是否可用。
  *
- * 先探测再注入脚本：没有 WebGL2 时连 510KB 都不必下载。注意用完要主动
+ * 先探测再注入脚本：没有 WebGL2 时连 511 KB 都不必下载。注意用完要主动
  * 释放探测用的上下文——浏览器对同时存在的 WebGL 上下文数量有上限
  * （通常 16 个），探测时泄漏一个就少一个。
  */

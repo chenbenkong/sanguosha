@@ -1,7 +1,7 @@
 # 三国杀：五人军争（sanguosha）
 
 > 浏览器里就能玩的《三国杀》身份局：React 19 + TypeScript + Vite 单页应用，
-> 内置 AI 对手，99 名武将、完整回合阶段机与技能注册表，无需后端、无需下载。
+> 内置 AI 对手，129 名武将、完整回合阶段机与技能注册表，无需后端、无需下载。
 
 ![对局界面：技能向玩家请求选择目标](docs/images/screenshot-game.png)
 
@@ -76,14 +76,14 @@ sanguosha/
 | 文件 | 作用 |
 | --- | --- |
 | `registry.ts` | 定义 `SkillDef` / `SkillHooks` / `SkillContext`，提供 `registerSkill()` |
-| `dispatch.ts` | 9 个 `dispatch*` 分发器，遍历注册表并按时机调用技能钩子；内含递归深度保护 |
+| `dispatch.ts` | 14 个 `dispatch*` 分发器，遍历注册表并按时机调用技能钩子；内含递归深度保护 |
 | `index.ts` | 注册入口：只负责 `import` 各个 batch 文件 —— **新技能在这里加一行** |
-| `batch6.ts` / `batch7.ts` / `batch8.ts` / `migrated1.ts` | 各批次的技能实现，共 52 处 `registerSkill()` |
+| `batch6.ts` / `batch6new.ts` / `batch7.ts` / `batch8.ts` / `migrated*.ts` | 各批次的技能实现，共 86 处 `registerSkill()`（实测 `grep -c 'registerSkill({'` 求和） |
 | `testHarness.ts` | 不启动 React 的牌局夹具（造牌、造人、记录副作用） |
 | `*.test.ts` | 行为测试 + 三个守卫测试（见「测试体系」） |
 
-现状：`constants.ts` 的 `HEROES` 共声明 99 名武将，其中 **52 个技能已迁入注册表**，
-其余仍以 `LEGACY_INLINE` 清单登记在 `skillCoverage.test.ts` 里，**该清单只允许缩小**。
+现状：`constants.ts` 的 `HEROES` 共声明 129 名武将，其中 **86 个技能已迁入注册表**，
+其余仍以 `LEGACY_INLINE` 清单登记在 `skillCoverage.test.ts` 里（当前 177 条），**该清单只允许缩小**。
 
 ## 如何添加一个新武将技能
 
@@ -131,7 +131,7 @@ registerSkill({
 });
 ```
 
-**9 个可用钩子**（都定义在 `registry.ts` 的 `SkillHooks` 里）：
+**14 个可用钩子**（都定义在 `registry.ts` 的 `SkillHooks` 里）：
 
 | 钩子 | 触发时机 | 返回 |
 | --- | --- | --- |
@@ -143,7 +143,12 @@ registerSkill({
 | `afterCardUsed` | 任意角色使用一张牌后 | `void` |
 | `afterJudge` | 判定牌生效后 | `void` |
 | `handLimitBonus` | 弃牌阶段前 | 手牌上限增量 `number` |
+| `judgeBefore` | 判定牌翻出后、生效前 | 可替换判定牌 `JudgeBeforeResult` / `null` |
+| `damageBefore` | 伤害结算前 | 可改数值/防止/转移 `DamageBeforeResult` / `null` |
 | `exemptHandCards` | 弃牌阶段前 | 不计入手牌上限的牌数 `number` |
+| `drawPhaseBegin` | 摸牌阶段开始 | 可改写摸牌数 `DrawPhaseResult` / `null` |
+| `discardPhaseSkip` | 弃牌阶段 | 返回 `skip` 跳过整个弃牌阶段 |
+| `afterCardLost` | 不因使用/打出而失去牌后 | `void` |
 
 **`SkillContext`（`ctx`）能做什么**：
 `draw` / `discard` / `heal` / `damage` / `gainCard` 施加效果；
@@ -193,9 +198,9 @@ it('某武将「技能名」受伤后摸一张', async () => {
 
 | 命令 | 框架 | 规模 | 职责 |
 | --- | --- | --- | --- |
-| `npm run test:unit` | Vitest | 30 个文件 / **558 条** | 规则、技能行为、AI 策略、存档、静态结构体检 |
+| `npm run test:unit` | Vitest | 47 个文件 / **721 条** | 规则、技能行为、AI 策略、存档、静态结构体检 |
 | `npm test` | `node:test`（原生） | 1 个文件 / **14 条** | `src/game/rules.test.ts` 核心规则用例，不经任何适配层 |
-| `npm run test:e2e` | Vitest + puppeteer-core | **6 条** | 真实 Chrome 里跑一局：加载无报错、能选将开局、回合能推进、技能弹窗会出现 |
+| `npm run test:e2e` | Vitest + puppeteer-core | **24 条** | 真实 Chrome 里跑一局：加载无报错、能选将开局、回合能推进、技能弹窗会出现 |
 
 `npm test` 与 `npm run test:unit` 都能跑 `src/game/rules.test.ts`：Vitest 侧通过
 `vitest.config.ts` 的别名把 `node:test` / `node:assert` 指向 `tests/shims/node-test.ts` 适配层，
@@ -211,7 +216,7 @@ e2e 需要 **系统 Chrome**（用 `puppeteer-core` 而不是完整 puppeteer，
 E2E_CHROME="/path/to/chrome" npm run test:e2e
 ```
 
-e2e 会自己起 `vite preview`（端口 7300），所以**必须先有 `dist/` 产物**：跑过 `npm run build` 再跑 e2e。
+e2e 会自己起 `vite preview`（端口由 `pickFreePort()` 动态分配，不再固定 7300），所以**必须先有 `dist/` 产物**：跑过 `npm run build` 再跑 e2e。
 
 ### 三个「防 bug 守卫」
 
@@ -245,7 +250,7 @@ e2e 会自己起 `vite preview`（端口 7300），所以**必须先有 `dist/` 
 
 **e2e 全红 / 报找不到浏览器？**
 确认装了系统 Chrome，或用 `E2E_CHROME` 指定路径；再确认已 `npm run build`（e2e 依赖 `dist/`）。
-端口 7300 被占用时 e2e 起不来，先释放端口。
+e2e 的 preview 端口是动态分配的，一般不冲突；若报端口相关错误，先确认没有残留的 `vite preview` 进程。
 
 **`npm test` 通过但 `npm run test:unit` 失败？**
 两者跑的是不同集合。`test:unit` 覆盖 `tests/**` 与 `src/**` 全部用例，
@@ -265,7 +270,7 @@ e2e 会自己起 `vite preview`（端口 7300），所以**必须先有 `dist/` 
 
 ## 最近更新
 
-当前版本号：`APP_VERSION`（`src/game/constants.ts`）。以下为最后的 3 条成文更新记录。
+当前版本号：`APP_VERSION`（`src/game/constants.ts`）。以下为最近的成文更新记录。
 
 **v3.63** 新增 **30 名女将**（99 → 129 名）：全部取自图鉴库，卡面/立绘/称号/势力/
 体力/技能原文/台词/传记/语音齐备；技能实现待补，标记「技能实装中」。
