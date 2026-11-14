@@ -2,6 +2,7 @@ import React from 'react';
 import type { Card, EquipmentSlot, Player } from '../../types';
 import { canHuguan, tianzeCanStrike, cilvDrawCount, fangduEffect, yuanditriggers } from './skills-batch6';
 import { dispatchAfterDamage, dispatchAfterDealDamage, dispatchCardUsed, dispatchDamageBefore, dispatchDying, dispatchTargets } from './skills/dispatch';
+import type { DispatchDeps } from './skills/dispatch';
 import { CardName, CardType, GamePhase, Identity, Suit } from '../../types';
 import { setDeck, setDiscardPile } from './gameStore';
 import { rankValue, shuffle } from './utils';
@@ -234,6 +235,70 @@ export const createCombatEngine = (deps: CombatDeps): CombatEngine => {
     zhuquePrefRef,
   } = deps;
 
+/**
+ * 技能派发用的依赖。**所有时机共用这一份**，不要在调用点各写一个字面量。
+ *
+ * 为什么必须统一：这个对象在 combat.ts 里原本被复制了 6 份（伤害后/造成伤害后/
+ * 濒死/改目标等）。我加 peekDeck / deckTo / takeFromDeck / changeMaxHp 时只补了
+ * App.tsx 的 buildSkillDeps，6 份副本全都没跟上——于是那些能力在伤害、濒死等
+ * 路径上退化成空桩，依赖它们的技能（隅泣、慧淑、灵慧…）注册了却永远静默不发动。
+ * 这正是 skillCoverage 想防的「有实现但永不触发」。抽成一处后就不会再漂移。
+ */
+const skillDeps = (): DispatchDeps => ({
+  players: playersRef.current,
+  turnOwner: playersRef.current.find(x => x.id === turnOwnerIdRef.current),
+  draw: (pid: number, n: number) => drawCards(pid, n),
+  discard: (pid: number, cards: Card[]) => discardCards(pid, cards),
+  heal: (pid: number, n: number) => recoverHp(pid, n),
+  damage: async (vid: number, sid: number, amt: number, cd?: Card) => { await takeDamage(vid, sid, amt, cd); },
+  gainCard: (fromId: number, toId: number, cd: Card) => {
+    mutateHand(fromId, h => h.filter(c => c.id !== cd.id));
+    mutateHand(toId, h => [...h, cd]);
+  },
+  log: (t: string) => addLog(t, 'skill'),
+  banner: (h: string, sk: string) => showSkillBanner(h, sk),
+  delay: (ms: number) => delay(ms),
+  skillsOn: (pid: number) => skillsOn(pid),
+  requestChoice: deps.requestChoice,
+  // 牌堆顶在数组尾部（与 drawCards 的取牌顺序一致）
+  peekDeck: (count: number) => [...deckRef.current].slice(-count).reverse(),
+  deckTo: (count: number, destination: 'discard' | 'hand', toId?: number) => {
+    const n = Math.min(count, deckRef.current.length);
+    if (n <= 0) return [];
+    const taken = deckRef.current.slice(-n).reverse();
+    const rest = deckRef.current.slice(0, -n);
+    deckRef.current = rest;
+    setDeck(rest);
+    if (destination === 'discard') {
+      const nd = [...discardPileRef.current, ...taken];
+      discardPileRef.current = nd;
+      setDiscardPile(nd);
+    } else if (toId !== undefined) {
+      mutateHand(toId, h => [...h, ...taken]);
+    }
+    return taken;
+  },
+  takeFromDeck: (pred: (c: Card) => boolean, count: number) => {
+    const taken: Card[] = [];
+    const rest: Card[] = [];
+    // 从牌堆顶开始找，保持与可见顺序一致
+    for (let i = deckRef.current.length - 1; i >= 0; i--) {
+      const c = deckRef.current[i];
+      if (taken.length < count && pred(c)) taken.push(c);
+      else rest.unshift(c);
+    }
+    if (taken.length === 0) return [];
+    deckRef.current = rest;
+    setDeck(rest);
+    return taken;
+  },
+  changeMaxHp: (pid: number, delta: number) => {
+    const p = playersRef.current.find(x => x.id === pid);
+    if (!p) return;
+    const nextMax = Math.max(0, p.maxHp + delta);
+    updatePlayer(pid, { maxHp: nextMax, hp: Math.min(nextMax, Math.max(0, p.hp)) });
+  },
+});
   // ── resolveCardEffect（App.tsx 原 L6301-7526）──
   const resolveCardEffect = async (source: Player, targets: Player[], card: Card) => {
   // 董白「黠慧」：他人获得的黑色牌在体力减少前不能使用
@@ -254,21 +319,7 @@ export const createCombatEngine = (deps: CombatDeps): CombatEngine => {
     // （包括伤害与响应）都基于新目标。
     {
       const applied = await dispatchTargets({
-        players: playersRef.current,
-        turnOwner: playersRef.current.find(x => x.id === turnOwnerIdRef.current),
-        draw: (pid: number, n: number) => drawCards(pid, n),
-        discard: (pid: number, cards: Card[]) => discardCards(pid, cards),
-        heal: (pid: number, n: number) => recoverHp(pid, n),
-        damage: async (vid: number, sid: number, amt: number, cd?: Card) => { await takeDamage(vid, sid, amt, cd); },
-        gainCard: (fromId: number, toId: number, cd: Card) => {
-          mutateHand(fromId, h => h.filter(c => c.id !== cd.id));
-          mutateHand(toId, h => [...h, cd]);
-        },
-        log: (t: string) => addLog(t, 'skill'),
-        banner: (h: string, sk: string) => showSkillBanner(h, sk),
-        delay: (ms: number) => delay(ms),
-        skillsOn: (pid: number) => skillsOn(pid),
-        requestChoice: deps.requestChoice,
+        ...skillDeps(),
       }, { source, card, targets });
       if (applied.targets !== targets) {
         targets = applied.targets;
@@ -1541,21 +1592,7 @@ export const createCombatEngine = (deps: CombatDeps): CombatEngine => {
     try {
       const usedCount = [...firstUsedCardRef.current].filter(k => k.startsWith(`${source.id}-`)).length;
       await dispatchCardUsed({
-        players: playersRef.current,
-        turnOwner: playersRef.current.find(p => p.id === turnOwnerIdRef.current),
-        draw: (pid: number, c: number) => drawCards(pid, c),
-        discard: (pid: number, cards: Card[]) => discardCards(pid, cards),
-        heal: (pid: number, c: number) => recoverHp(pid, c),
-        damage: async (vid: number, sid: number, amt: number, cd?: Card) => { await takeDamage(vid, sid, amt, cd); },
-        gainCard: (fromId: number, toId: number, cd: Card) => {
-          mutateHand(fromId, h => h.filter(c => c.id !== cd.id));
-          mutateHand(toId, h => [...h, cd]);
-        },
-        log: (t: string) => addLog(t, 'skill'),
-        banner: (h: string, sk: string) => showSkillBanner(h, sk),
-        delay: (ms: number) => delay(ms),
-        skillsOn: (pid: number) => skillsOn(pid),
-        requestChoice: deps.requestChoice,
+        ...skillDeps(),
       }, { source, card, targets, usedCount });
     } catch (e) {
       addLog('技能结算异常：' + String(e), 'warning');
@@ -2050,21 +2087,7 @@ export const createCombatEngine = (deps: CombatDeps): CombatEngine => {
       const cur = getPlayer(victimId);
       if (cur) {
         const saved = await dispatchDying({
-          players: playersRef.current,
-          turnOwner: playersRef.current.find(x => x.id === turnOwnerIdRef.current),
-          draw: (pid: number, n: number) => drawCards(pid, n),
-          discard: (pid: number, cards: Card[]) => discardCards(pid, cards),
-          heal: (pid: number, n: number) => recoverHp(pid, n),
-          damage: async (vid: number, sid: number, amt: number, cd?: Card) => { await takeDamage(vid, sid, amt, cd); },
-          gainCard: (fromId: number, toId: number, cd: Card) => {
-            mutateHand(fromId, h => h.filter(c => c.id !== cd.id));
-            mutateHand(toId, h => [...h, cd]);
-          },
-          log: (t: string) => addLog(t, 'skill'),
-          banner: (h: string, sk: string) => showSkillBanner(h, sk),
-          delay: (ms: number) => delay(ms),
-          skillsOn: (pid: number) => skillsOn(pid),
-          requestChoice: deps.requestChoice,
+          ...skillDeps(),
         }, { victim: cur, source: undefined, needHp: 1 });
         if (saved) {
           updatePlayer(victimId, { hp: saved.hp });
@@ -2443,21 +2466,7 @@ export const createCombatEngine = (deps: CombatDeps): CombatEngine => {
       const srcPre = sourceId >= 0 ? getPlayer(sourceId) : undefined;
       if (victimPre) {
         const pre = await dispatchDamageBefore({
-          players: playersRef.current,
-          turnOwner: playersRef.current.find(p => p.id === turnOwnerIdRef.current),
-          draw: (pid: number, c: number) => drawCards(pid, c),
-          discard: (pid: number, cards: Card[]) => discardCards(pid, cards),
-          heal: (pid: number, c: number) => recoverHp(pid, c),
-          damage: async (vid: number, sid: number, amt: number, cd?: Card) => { await takeDamage(vid, sid, amt, cd); },
-          gainCard: (fromId: number, toId: number, cd: Card) => {
-            mutateHand(fromId, h => h.filter(c => c.id !== cd.id));
-            mutateHand(toId, h => [...h, cd]);
-          },
-          log: (t: string) => addLog(t, 'skill'),
-          banner: (h: string, sk: string) => showSkillBanner(h, sk),
-          delay: (ms: number) => delay(ms),
-          skillsOn: (pid: number) => skillsOn(pid),
-          requestChoice: deps.requestChoice,
+          ...skillDeps(),
         }, {
           victim: victimPre,
           source: srcPre,
@@ -2750,38 +2759,10 @@ export const createCombatEngine = (deps: CombatDeps): CombatEngine => {
           card: damageCard,
         };
         await dispatchAfterDamage({
-          players: playersRef.current,
-          turnOwner: playersRef.current.find(x => x.id === turnOwnerIdRef.current),
-          draw: (pid: number, n: number) => drawCards(pid, n),
-          discard: (pid: number, cards: Card[]) => discardCards(pid, cards),
-          heal: (pid: number, n: number) => recoverHp(pid, n),
-          damage: async (vid: number, sid: number, amt: number, cd?: Card) => { await takeDamage(vid, sid, amt, cd); },
-          gainCard: (fromId: number, toId: number, cd: Card) => {
-            mutateHand(fromId, h => h.filter(c => c.id !== cd.id));
-            mutateHand(toId, h => [...h, cd]);
-          },
-          log: (t: string) => addLog(t, 'skill'),
-          banner: (h: string, sk: string) => showSkillBanner(h, sk),
-          delay: (ms: number) => delay(ms),
-          skillsOn: (pid: number) => skillsOn(pid),
-          requestChoice: deps.requestChoice,
+          ...skillDeps(),
         }, ev);
         await dispatchAfterDealDamage({
-          players: playersRef.current,
-          turnOwner: playersRef.current.find(x => x.id === turnOwnerIdRef.current),
-          draw: (pid: number, n: number) => drawCards(pid, n),
-          discard: (pid: number, cards: Card[]) => discardCards(pid, cards),
-          heal: (pid: number, n: number) => recoverHp(pid, n),
-          damage: async (vid: number, sid: number, amt: number, cd?: Card) => { await takeDamage(vid, sid, amt, cd); },
-          gainCard: (fromId: number, toId: number, cd: Card) => {
-            mutateHand(fromId, h => h.filter(c => c.id !== cd.id));
-            mutateHand(toId, h => [...h, cd]);
-          },
-          log: (t: string) => addLog(t, 'skill'),
-          banner: (h: string, sk: string) => showSkillBanner(h, sk),
-          delay: (ms: number) => delay(ms),
-          skillsOn: (pid: number) => skillsOn(pid),
-          requestChoice: deps.requestChoice,
+          ...skillDeps(),
         }, ev);
       }
     }
