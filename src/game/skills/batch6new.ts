@@ -61,11 +61,10 @@ registerSkill({
 // ── 吕玲绮「神威」 ────────────────────────────────────
 // 锁定技，①摸牌阶段，你多摸两张牌；②你的手牌上限+2。
 // 两条都是纯数值增量，各用一个钩子表达。
+// 注册名必须与 HEROES.skillName 逐字一致（含 `☆ ` 前缀），否则 registry 按名匹配不到，
+// 技能永远不触发——skillCoverage 的「幽灵技能」守卫会把这个错误揪出来。
 registerSkill({
   hero: '吕玲绮',
-  // 注册名必须与 HEROES.skillName 逐字一致（含 `☆ ` 前缀），
-  // 否则 registry 按名匹配不到，技能永远不触发——skillCoverage 的
-  // 「幽灵技能」守卫会把这个错误揪出来。
   skill: '☆ 神威',
   locked: true,
   hooks: {

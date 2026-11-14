@@ -77,7 +77,7 @@ registerSkill({
 // ── 吕玲绮「☆ 无双」 ──────────────────────────────────
 registerSkill({
   hero: '吕玲绮',
-  skill: WUSHUANG,
+  skill: '☆ 无双',
   locked: true,
   // 效果完全由引擎消费：combat.ts 的 triggerReaction 里
   // isLubuWushuang = 吕布本人的「无双」 || hasGrantedSkill(无双 | ☆ 无双)，
