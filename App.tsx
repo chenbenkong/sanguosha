@@ -27,7 +27,7 @@ import { FX_LABEL, FX_ORDER, FX_TAG } from './src/game/fx';
 import type { FxLevel } from './src/game/fx';
 import { createCombatEngine } from './src/game/combat';
 import './src/game/skills';
-import { dispatchTurnEnd, dispatchTurnStart, dispatchJudge, dispatchDrawBonus, dispatchHandLimitBonus, dispatchExemptHandCards, dispatchJudgeBefore, dispatchDrawPhaseBegin, dispatchDiscardPhaseSkip, dispatchCardLost, dispatchDeath } from './src/game/skills/dispatch';
+import { dispatchTurnEnd, dispatchTurnStart, dispatchJudge, dispatchDrawBonus, dispatchHandLimitBonus, dispatchExemptHandCards, dispatchJudgeBefore, dispatchDrawPhaseBegin, dispatchDiscardPhaseSkip, dispatchCardLost, dispatchDeath, dispatchCardGain } from './src/game/skills/dispatch';
 import type { SkillChoiceReq } from './src/game/skills/dispatch';
 import type { CombatDeps, CombatEngine } from './src/game/combat';
 import { GameApiProvider } from './src/game/GameApiContext';
@@ -1003,6 +1003,8 @@ const App: React.FC = () => {
   // 但 mutateHand 被 useCallback(..., []) 固定、且被 combat.ts 长期持有，
   // 所以副作用走 ref 中转，避免把过期的闭包写死进去。
   const handEmptiedRef = useRef<((id: number, lost: Card[]) => void) | null>(null);
+  /** mutateHand 检测到「新增手牌」时回调（afterCardGain 的唯一来源） */
+  const handGainedRef = useRef<((id: number, gained: Card[]) => void) | null>(null);
 
   // 以最新 state 为准的手牌修改器，避免闭包旧 hand 导致的“卡牌复活”bug
   const mutateHand = useCallback((id: number, fn: (hand: Card[]) => Card[]) => {
@@ -1012,6 +1014,11 @@ const App: React.FC = () => {
     const projected = beforePlayer ? fn(beforePlayer.hand) : [];
     const lostAll = !!beforePlayer && !beforePlayer.isDead
       && beforePlayer.hand.length > 0 && projected.length === 0;
+    // 「获得牌」检测与 lostAll 同理，放在 state updater 之外（StrictMode 会跑两次 updater）。
+    // 只上报真正新增的牌：mutateHand 也用于「弃置/交给别人」这类减少手牌的调用，
+    // 那些不该触发 afterCardGain。
+    const beforeIds = new Set((beforePlayer?.hand ?? []).map(c => c.id));
+    const gained = beforePlayer ? projected.filter(c => !beforeIds.has(c.id)) : [];
     setPlayers(prev => {
       const target = prev.find(p => p.id === id);
       const rawHand = target ? fn(target.hand) : [];
@@ -1025,12 +1032,25 @@ const App: React.FC = () => {
     // 陆逊「连营」已迁移到 src/game/skills/migrated_phase.ts（afterCardLost）：
     // 这里只如实上报「手牌清零」这一次失去，判定与结算都由注册表完成。
     if (lostAll) handEmptiedRef.current?.(id, beforePlayer?.hand ?? []);
+    if (gained.length > 0) handGainedRef.current?.(id, gained);
   }, []);
 
   // 立刻同步最新闭包：每次渲染刷新一次，避免 mutateHand 持有过期的 notifyCardLost
   handEmptiedRef.current = (id, lost) => {
     // 推迟到本次 state 提交之后，让「连营」摸到的牌接在清零之后
     setTimeout(() => { void notifyCardLost(id, lost, 'other', false, 0); }, 0);
+  };
+
+  handGainedRef.current = (id, gained) => {
+    // 推迟到本次 state 提交之后，与 handEmptiedRef 同一理由。
+    // 用 queueMicrotask 而不是 setTimeout(0)：这里只需要「让出当前同步栈」，
+    // 不需要宏任务；少一个定时器也就少一处需要在卸载时清理的东西
+    // （structure.test.ts 会统计 setTimeout 调用点，多一个就得同步改基线）。
+    queueMicrotask(() => {
+      const me = playersRef.current.find(p => p.id === id);
+      if (!me || me.isDead) return;
+      void dispatchCardGain(buildSkillDeps(), { owner: me, cards: gained, from: undefined });
+    });
   };
 
   const updatePlayer = (id: number, updates: Partial<Player>) => {

@@ -155,6 +155,13 @@ export interface SkillHooks {
   /** 角色不因使用/打出而失去牌后：弃置 / 被获得 / 移出装备区（枭姬 / 连营） */
   afterCardLost?: (ctx: SkillContext, ev: CardLostEvent) => Promise<void> | void;
   /**
+   * 角色**获得**牌后（俐影 / 承宠 的第二段）。
+   *
+   * 与 afterCardLost 严格互补：那个是「失去牌者」视角，这个是被给牌的一方。
+   * 两者都挂在 mutateHand / gainCard 上，但只有接收方能收到 afterCardGain。
+   */
+  afterCardGain?: (ctx: SkillContext, ev: CardGainEvent) => Promise<void> | void;
+  /**
    * 有角色阵亡后（追德 / 善身）。
    *
    * 传的是**阵亡者**：技能拥有者自己的阵亡要用 self === ev.dead 判断。
@@ -206,6 +213,16 @@ export interface CardTargetsResult {
   targets: Player[];
   /** 战报说明 */
   note?: string;
+}
+
+/** 角色获得牌的事件 */
+export interface CardGainEvent {
+  /** 获得牌的人 */
+  owner: Player;
+  /** 获得的牌 */
+  cards: Card[];
+  /** 牌从谁那里来（从牌堆/弃牌堆获得时为 undefined） */
+  from: Player | undefined;
 }
 
 /** 角色阵亡事件 */

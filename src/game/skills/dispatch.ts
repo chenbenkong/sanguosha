@@ -1,7 +1,7 @@
 import type {
   SkillContext, DamageEvent, CardUsedEvent, JudgeEvent,
   DrawPhaseEvent, DrawPhaseResult, DiscardPhaseEvent, DiscardPhaseResult, CardLostEvent,
-  DeathEvent, DyingEvent, DyingResult, CardTargetsEvent,
+  DeathEvent, DyingEvent, DyingResult, CardTargetsEvent, CardGainEvent,
 } from './registry';
 import { skillHook, mergeDrawPhase } from './registry';
 import { mergeJudgeBefore, mergeDamageBefore } from './engineAbilities.ts';
@@ -401,4 +401,16 @@ export const dispatchTargets = async (
     }
   });
   return current;
+};
+
+/** 角色获得牌后（俐影 / 承宠 第二段） */
+export const dispatchCardGain = async (deps: DispatchDeps, ev: CardGainEvent): Promise<void> => {
+  // key 带上牌数：同一次批量获得只触发一遍，避免逐张派发时重复结算
+  await withGuard(`gain-${ev.owner.id}-${ev.cards.map(c => c.id).join(',')}`, async () => {
+    for (const { def, fn } of skillHook('afterCardGain')) {
+      for (const self of ownersOf(deps, def.hero)) {
+        await fn(ctxFor(deps, self, def.hero, def.skill), ev);
+      }
+    }
+  });
 };
