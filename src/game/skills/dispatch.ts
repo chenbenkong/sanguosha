@@ -2,7 +2,7 @@ import type {
   SkillContext, DamageEvent, CardUsedEvent, JudgeEvent,
   DrawPhaseEvent, DrawPhaseResult, DiscardPhaseEvent, DiscardPhaseResult, CardLostEvent,
   DeathEvent, DyingEvent, DyingResult, CardTargetsEvent, CardGainEvent, UseCardAsOptions, PlayPhaseEvent,
-  DyingResolvedEvent,
+  DyingResolvedEvent, HealEvent,
 } from './registry';
 import { skillHook, mergeDrawPhase } from './registry';
 import { mergeJudgeBefore, mergeDamageBefore } from './engineAbilities.ts';
@@ -308,6 +308,17 @@ export const dispatchPlayPhaseEnd = async (deps: DispatchDeps, owner: Player): P
       await fn(ctxFor(deps, self, def.hero, def.skill), ev);
     }
   }
+};
+
+/** 有角色回复体力之后 */
+export const dispatchAfterHeal = async (deps: DispatchDeps, ev: HealEvent): Promise<void> => {
+  await withGuard('heal-' + ev.player.id + '-' + ev.player.hp, async () => {
+    for (const { def, fn } of skillHook('afterHeal')) {
+      for (const self of ownersOf(deps, def.hero)) {
+        await fn(ctxFor(deps, self, def.hero, def.skill), ev);
+      }
+    }
+  });
 };
 
 /** 脱离濒死（被救回）之后 */

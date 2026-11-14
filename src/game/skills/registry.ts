@@ -213,6 +213,14 @@ export interface SkillContext {
   setChained: (playerId: number, chained: boolean) => void;
 }
 
+/** 一次回复体力事件（董絮「酖毒」、清河公主「谮构」） */
+export interface HealEvent {
+  /** 回复体力的角色 */
+  player: Player;
+  /** **实际**回复量（已被体力上限截断后的值）；满血时不会派发 */
+  amount: number;
+}
+
 /** 脱离濒死（被救回）事件 */
 export interface DyingResolvedEvent {
   /** 从濒死中恢复的角色 */
@@ -329,6 +337,14 @@ export interface SkillHooks {
    * 只有真的从 hp<=0 回到 hp>0 才派发 —— 已经活着时的重复调用不算。
    */
   afterDying?: (ctx: SkillContext, ev: DyingResolvedEvent) => Promise<void> | void;
+  /**
+   * 有角色回复体力**之后**（董絮「酖毒」、清河公主「谮构」）。
+   *
+   * 派发点在 App.tsx 的 recoverHp —— 那是全仓唯一的回血函数（combat.ts 的 8 个
+   * 调用点注入的也是它）。所以这个钩子覆盖桃 / 酒 / 急救 / 技能回血全部来源，
+   * 不会像「只挂 ctx.heal」那样漏掉一大半。
+   */
+  afterHeal?: (ctx: SkillContext, ev: HealEvent) => Promise<void> | void;
 }
 
 /**

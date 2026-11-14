@@ -27,7 +27,7 @@ import { FX_LABEL, FX_ORDER, FX_TAG } from './src/game/fx';
 import type { FxLevel } from './src/game/fx';
 import { createCombatEngine } from './src/game/combat';
 import './src/game/skills';
-import { dispatchTurnEnd, dispatchTurnStart, dispatchJudge, dispatchDrawBonus, dispatchHandLimitBonus, dispatchExemptHandCards, dispatchJudgeBefore, dispatchDrawPhaseBegin, dispatchDiscardPhaseSkip, dispatchCardLost, dispatchDeath, dispatchCardGain, dispatchRoundStart, dispatchPlayPhaseBegin, dispatchPlayPhaseEnd } from './src/game/skills/dispatch';
+import { dispatchTurnEnd, dispatchTurnStart, dispatchJudge, dispatchDrawBonus, dispatchHandLimitBonus, dispatchExemptHandCards, dispatchJudgeBefore, dispatchDrawPhaseBegin, dispatchDiscardPhaseSkip, dispatchCardLost, dispatchDeath, dispatchCardGain, dispatchRoundStart, dispatchPlayPhaseBegin, dispatchPlayPhaseEnd, dispatchAfterHeal } from './src/game/skills/dispatch';
 import type { DispatchDeps } from './src/game/skills/dispatch';
 import type { SkillChoiceReq } from './src/game/skills/dispatch';
 import type { CombatDeps, CombatEngine } from './src/game/combat';
@@ -1687,6 +1687,9 @@ const App: React.FC = () => {
       return updated;
     });
     const healed = getPlayer(playerId);
+    // 「回复体力之后」时机（酖毒 / 谮构）。这里是全仓唯一的回血出口，
+    // combat.ts 的 8 个调用点也走它 —— 所以钩子不会被漏派发。
+    if (healed) void dispatchAfterHeal(buildSkillDeps(), { player: healed, amount: gained });
     if (healed && healed.hero.name === '甘夫人' && skillsOn(healed.id)) {
       // 官方：每回复 1 点体力，可令一名「其他角色」（不限友方）摸一张牌
       const othersBase = playersRef.current.filter(a => !a.isDead && a.id !== playerId);
@@ -3358,9 +3361,10 @@ const App: React.FC = () => {
             mutateHand(target.id, h => [...h, slash]);
             const red = slash.suit === Suit.HEART || slash.suit === Suit.DIAMOND;
             const elemental = !!slash.attribute;
+            // 走统一的 recoverHp（全仓唯一的回血出口），否则「回复体力后」类技能看不到这次回血
             const healed = Math.min(p.maxHp, p.hp + 1);
-            updatePlayer(p.id, { hp: healed });
-            if (red) updatePlayer(target.id, { hp: Math.min(target.maxHp, target.hp + 1) });
+            recoverHp(p.id, 1);
+            if (red) recoverHp(target.id, 1);
             drawCards(target.id, 1 + (elemental ? 1 : 0));
             addLog(`【武缘】胡金定将【${slash.name}】交给 ${target.hero.name}，自己回复1点体力（${healed}/${p.maxHp}）${red ? '，其额外回复1点体力' : ''}${elemental ? '，其额外摸一张牌' : ''}`, 'skill');
             showSkillBanner('胡金定', '武缘');
