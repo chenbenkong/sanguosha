@@ -126,20 +126,32 @@ describe('芮姬「妄缘」', () => {
   });
 });
 
-describe('本批 5 个 hand_back 的技能不应注册（避免「有实现但永不触发」的死代码）', () => {
-  it('卢弈「邀弈」/ 张怀「劳燕」：onTargetsChosen 没有派发器', () => {
-    // dispatch.ts 里没有 skillHook('onTargetsChosen')，
-    // DispatchDeps.applyTargets 也从未被 App.tsx / combat.ts 提供或调用。
-    expect(skillsOf('卢弈').map(d => d.skill)).not.toContain('邀弈');
-    expect(skillsOf('张怀').map(d => d.skill)).not.toContain('劳燕');
+describe('本批技能在能力补齐后的注册状态', () => {
+  /*
+   * 这组断言原本全是反向的——「因为缺 X 能力，所以不注册」。
+   * 后来逐项补齐了能力（见 registry.ts 的钩子与 ctx 能力）：
+   *   onTargetsChosen 派发器 + combat.ts 接入 → 邀弈 / 劳燕
+   *   afterDeath 的 includeDead + takeFromDeck  → 追德
+   *   afterCardGain 钩子                       → 俐影
+   * 于是它们翻转成正向。
+   *
+   * 花火**保留反向**：它需要「使用一张牌」的入口，这个能力仍未提供。
+   * 这条是真实的能力缺口记录，删掉就等于假装它能用。
+   */
+  it('卢弈「邀弈」/ 张怀「劳燕」：onTargetsChosen 已接通，故已注册', () => {
+    expect(skillsOf('卢弈').map(d => d.skill)).toContain('邀弈');
+    expect(skillsOf('张怀').map(d => d.skill)).toContain('劳燕');
   });
 
-  it('王荣「追德」：afterDeath 派发不到死者本人，且无法按牌名取牌', () => {
-    expect(skillsOf('王荣').map(d => d.skill)).not.toContain('追德');
+  it('王荣「追德」：afterDeath 能派发到死者 + takeFromDeck 可精确取牌，故已注册', () => {
+    expect(skillsOf('王荣').map(d => d.skill)).toContain('追德');
   });
 
-  it('马伶俐「花火」/ 芮姬「俐影」：缺「使用一张牌」与「获得牌后」入口', () => {
+  it('芮姬「俐影」：afterCardGain 钩子已加入，故已注册', () => {
+    expect(skillsOf('芮姬').map(d => d.skill)).toContain('俐影');
+  });
+
+  it('马伶俐「花火」：仍缺「使用一张牌」入口，故不注册（真实能力缺口）', () => {
     expect(skillsOf('马伶俐').map(d => d.skill)).not.toContain('花火');
-    expect(skillsOf('芮姬').map(d => d.skill)).not.toContain('俐影');
   });
 });

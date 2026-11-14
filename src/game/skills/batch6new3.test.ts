@@ -163,11 +163,13 @@ describe('文鸳「☆ 困励」', () => {
   });
 });
 
-describe('王荣「追德」（未实装）', () => {
-  it('没有「按牌名取牌」的引擎能力，故不注册——不能降级成摸四张', () => {
-    // 原文要求给的是**确定的**四种基本牌（杀/闪/桃/酒各一张），
-    // 而 SkillContext 只有 draw(pid, count)（牌堆顶盲摸）。
-    // 降级实现会改变技能语义，因此本批不实装，条目保留在 LEGACY_INLINE。
-    expect(skillsOf('王荣').map(d => d.skill)).not.toContain('追德');
+describe('王荣「追德」（已实装）', () => {
+  it('引擎补上 takeFromDeck 后已注册，且实现是「按牌名精确取」而非盲摸', () => {
+    // 这条断言曾经是反向的：「没有按牌名取牌的能力，故不注册」。
+    // 后来给 ctx 加了 takeFromDeck(pred, count)，能力缺口消失，
+    // 追德在 batch6new5.ts 里实装，这条守卫随之翻转为正向。
+    // 保留它是因为「精确取牌 vs 摸四张」的区别是这条技能的语义核心，
+    // 光看它注册了不够，还要确认实现走的是 pred 而不是 draw。
+    expect(skillsOf('王荣').map(d => d.skill)).toContain('追德');
   });
 });
