@@ -292,6 +292,31 @@ const skillDeps = (): DispatchDeps => ({
     setDeck(rest);
     return taken;
   },
+  takeFromDiscard: (pred: (c: Card) => boolean, count: number) => {
+    const taken: Card[] = [];
+    const rest: Card[] = [];
+    // 弃牌堆的顺序是「后进的在上」，与牌堆无效；这里按存储顺序扫描即可
+    for (const c of discardPileRef.current) {
+      if (taken.length < count && pred(c)) taken.push(c);
+      else rest.push(c);
+    }
+    if (taken.length === 0) return [];
+    discardPileRef.current = rest;
+    setDiscardPile(rest);
+    return taken;
+  },
+  loseHp: async (pid: number, amount: number) => {
+    const p = getPlayer(pid);
+    if (!p || p.isDead) return;
+    const next = Math.max(0, p.hp - amount);
+    updatePlayer(pid, { hp: next });
+    addLog(`${p.hero.name} 失去 ${amount} 点体力`, 'warning');
+    // 流失到 0 同样要进濒死：与受到伤害的差别只在「不派发伤害事件」，
+    // 濒死求桃这一步是一样的。
+    if (next <= 0) {
+      await askForPeaches(pid);
+    }
+  },
   changeMaxHp: (pid: number, delta: number) => {
     const p = playersRef.current.find(x => x.id === pid);
     if (!p) return;

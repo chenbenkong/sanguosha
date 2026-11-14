@@ -74,6 +74,21 @@ export interface SkillContext {
    */
   changeMaxHp: (playerId: number, delta: number) => void;
   /**
+   * 从**弃牌堆**按条件取牌（董贵人「☆ 受责」、全惠解「慧淑」）。
+   *
+   * 与 takeFromDeck 的区别是数据源：牌堆是 deckRef，弃牌堆是 discardPileRef。
+   * 这两者在引擎里是两份独立状态，只有一个原语会让技能取错地方；
+   * 而且从 store 侧删牌不会同步 ref，牌堆耗尽洗牌时会把同一张牌算两次。
+   */
+  takeFromDiscard: (pred: (c: Card) => boolean, count: number) => Card[];
+  /**
+   * 体力**流失**（失去体力，非受到伤害）。
+   *
+   * 与 ctx.damage 的区别是语义：流失不派发伤害事件（藤甲/仁王盾/绝情等
+   * 减伤增伤都不该介入），但降到 0 仍要进入濒死求桃。
+   */
+  loseHp: (playerId: number, amount: number) => Promise<void>;
+  /**
    * 按条件从牌堆里找牌（追德：杀/闪/桃/酒各一张）。
    *
    * 与 deckTo 的区别：deckTo 只能从**顶部**取 count 张，

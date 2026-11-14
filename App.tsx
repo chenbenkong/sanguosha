@@ -945,6 +945,27 @@ const App: React.FC = () => {
       }
       return taken;
     },
+    takeFromDiscard: (pred: (c: Card) => boolean, count: number) => {
+      const taken: Card[] = [];
+      const rest: Card[] = [];
+      for (const c of discardPileRef.current) {
+        if (taken.length < count && pred(c)) taken.push(c);
+        else rest.push(c);
+      }
+      if (taken.length === 0) return [];
+      discardPileRef.current = rest;
+      setDiscardPile(rest);
+      return taken;
+    },
+    loseHp: async (pid: number, amount: number) => {
+      const p = playersRef.current.find(x => x.id === pid);
+      if (!p || p.isDead) return;
+      const next = Math.max(0, p.hp - amount);
+      updatePlayer(pid, { hp: next });
+      addLog(`${p.hero.name} 失去 ${amount} 点体力`, 'warning');
+      // 濒死结算由 combatEngine 负责（App 侧没有 askForPeaches）
+      if (next <= 0 && combatEngine) await combatEngine.askForPeaches(pid);
+    },
     changeMaxHp: (playerId: number, delta: number) => {
       const p = playersRef.current.find(x => x.id === playerId);
       if (!p) return;

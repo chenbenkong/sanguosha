@@ -55,6 +55,8 @@ export interface DispatchDeps {
   changeMaxHp?: (playerId: number, delta: number) => void;
   /** 按条件从牌堆里找牌（追德：杀/闪/桃/酒各一张）。返回找到的牌并从牌堆移除。 */
   takeFromDeck?: (pred: (c: Card) => boolean, count: number) => Card[];
+  takeFromDiscard?: (pred: (c: Card) => boolean, count: number) => Card[];
+  loseHp?: (playerId: number, amount: number) => Promise<void>;
   /**
    * 一张牌的目标确定后、结算前的拦截（可选能力）。
    * 未提供时 onTargetsChosen 不会被派发。
@@ -124,6 +126,22 @@ const withGuard = async <T>(
 };
 
 /** 对某个武将构造上下文 */
+/**
+ * 取某个角色的 heroMemory：不传 id 时是技能拥有者本人，传了就取对方。
+ *
+ * 跨角色标记（张楚「集众」给他人贴「信众」）必须写**对方**的 heroMemory，
+ * 否则「谁身上有几个标记」在引擎里无从查询——「光噬」正需要查别人。
+ */
+const memFor = (
+  players: Player[],
+  hero: string,
+  ofPlayerId: number | undefined,
+): Record<string, unknown> => {
+  if (ofPlayerId === undefined) return heroMemOf(hero);
+  const target = players.find(p => p.id === ofPlayerId);
+  return target ? heroMemOf(target.hero.name) : {};
+};
+
 const ctxFor = (deps: DispatchDeps, self: Player, hero: string, skill: string): SkillContext => ({
   self,
   players: deps.players,
@@ -140,26 +158,28 @@ const ctxFor = (deps: DispatchDeps, self: Player, hero: string, skill: string): 
   deckTo: deps.deckTo ?? (() => []),
   changeMaxHp: deps.changeMaxHp ?? (() => {}),
   takeFromDeck: deps.takeFromDeck ?? (() => []),
+  takeFromDiscard: deps.takeFromDiscard ?? (() => []),
+  loseHp: deps.loseHp ?? (async () => {}),
   // 通用标记：落在 heroMemOf(hero) 里（与 ctx.heroMemory 是同一份对象），
   // 不碰 Player 结构，因此既不影响既有的四套 Player.*Marks 字段，也不用改存档格式。
   // 用 'marks:' 前缀隔离，避免与技能自己的 heroMemory 键冲突。
-  addMark: (name: string, count = 1) => {
-    const m = heroMemOf(hero);
+  addMark: (name: string, count = 1, toPlayerId?: number) => {
+    const m = memFor(deps.players, hero, toPlayerId);
     const key = 'marks:' + name;
     m[key] = Number(m[key] ?? 0) + count;
   },
-  removeMark: (name: string, count = 1) => {
-    const m = heroMemOf(hero);
+  removeMark: (name: string, count = 1, fromPlayerId?: number) => {
+    const m = memFor(deps.players, hero, fromPlayerId);
     const key = 'marks:' + name;
     const cur = Number(m[key] ?? 0);
     const next = Math.max(0, cur - count);
     m[key] = next;
     return cur - next;
   },
-  markCount: (name: string) => Number(heroMemOf(hero)['marks:' + name] ?? 0),
-  marks: () => {
+  markCount: (name: string, ofPlayerId?: number) => Number(memFor(deps.players, hero, ofPlayerId)['marks:' + name] ?? 0),
+  marks: (ofPlayerId?: number) => {
     const out: Record<string, number> = {};
-    for (const [k, v] of Object.entries(heroMemOf(hero))) {
+    for (const [k, v] of Object.entries(memFor(deps.players, hero, ofPlayerId))) {
       if (k.startsWith('marks:')) out[k.slice(6)] = Number(v);
     }
     return out;
