@@ -54,6 +54,14 @@ export interface DamageBeforeResult {
   prevent?: boolean;
   /** 把伤害转移给另一名角色（如小乔天香） */
   transferTo?: number;
+  /**
+   * 改写此次伤害的属性（马伶俐「硝引」②：把非火焰伤害改为火焰）。
+   *
+   * 原先 DamageBeforeResult 只能改数值 / 防止 / 转移，没有属性这一维，
+   * 「将此伤害改为火焰伤害」在技能侧根本写不出来；铁索传导、藤甲这些
+   * 依赖 nature 的分支也就全部走不到。
+   */
+  nature?: 'normal' | 'fire' | 'thunder';
   /** 附加日志说明，便于战报追溯 */
   note?: string;
 }
@@ -80,6 +88,7 @@ export function mergeDamageBefore(results: Array<DamageBeforeResult | null | voi
     if (!r) continue;
     if (r.prevent) { out.prevent = true; break; }
     if (typeof r.amount === 'number') out.amount = r.amount;
+    if (r.nature) out.nature = r.nature;
     if (r.transferTo != null && out.transferTo == null) out.transferTo = r.transferTo;
     if (r.note) out.note = out.note ? out.note + '；' + r.note : r.note;
   }

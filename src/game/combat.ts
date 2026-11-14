@@ -2604,8 +2604,9 @@ const skillDeps = (): DispatchDeps => ({
   let ownsChainWave = false;
   try {
     // 伤害属性：显式传入优先，其次看伤害牌（火杀 / 雷杀）
-    const dmgNature: 'normal' | 'fire' | 'thunder' = nature ?? damageCard?.attribute ?? 'normal';
-    const natureLabel = dmgNature === 'fire' ? '火焰' : dmgNature === 'thunder' ? '雷电' : '';
+    // 不是 const：damageBefore 可以把属性也改掉（硝引②），改完后续分支要用新值
+    let dmgNature: 'normal' | 'fire' | 'thunder' = nature ?? damageCard?.attribute ?? 'normal';
+    let natureLabel = dmgNature === 'fire' ? '火焰' : dmgNature === 'thunder' ? '雷电' : '';
     const source = getPlayer(sourceId);
 
     // 孙茹「释衅」已迁移到 src/game/skills/migrated_abilities.ts（damageBefore）
@@ -2738,6 +2739,11 @@ const skillDeps = (): DispatchDeps => ({
           card: damageCard,
         });
         if (pre.note) addLog(pre.note, 'skill');
+        if (pre.nature && pre.nature !== dmgNature) {
+          dmgNature = pre.nature;
+          natureLabel = dmgNature === 'fire' ? '火焰' : dmgNature === 'thunder' ? '雷电' : '';
+          addLog(victimPre.hero.name + ' 受到的伤害属性改为' + (natureLabel || '普通'), 'skill');
+        }
         // 本块位于 takeDamage 的 try 内，返回时 finally 会释放处理锁，
         // 与其余提前返回（如「绝情」）一致——这里**不能**再手动减一次，
         // 否则嵌套结算（外层已持有一次锁）会被提前释放，AI 主循环重复推进同一阶段。
