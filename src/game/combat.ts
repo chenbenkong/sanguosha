@@ -1,7 +1,7 @@
 import React from 'react';
 import type { Card, EquipmentSlot, Player } from '../../types';
 import { canHuguan, tianzeCanStrike, cilvDrawCount, fangduEffect, yuanditriggers } from './skills-batch6';
-import { dispatchAfterDamage, dispatchAfterDealDamage, dispatchCardUsed, dispatchDamageBefore, dispatchDying, dispatchTargets } from './skills/dispatch';
+import { dispatchAfterDamage, dispatchAfterDealDamage, dispatchAfterDying, dispatchCardUsed, dispatchDamageBefore, dispatchDying, dispatchTargets } from './skills/dispatch';
 import type { DispatchDeps } from './skills/dispatch';
 import type { UseCardAsOptions } from './skills/registry';
 import { CardName, CardType, GamePhase, Identity, Suit } from '../../types';
@@ -68,6 +68,12 @@ export interface CombatDeps {
   revokeSkillById: (id: number, skillName: string, reason: string) => boolean;
   /** 当前轮数（从 1 开始）；「每轮首次」类技能用它去重 */
   roundCountRef: React.RefObject<number>;
+  /** 攻击范围修正表（角色 id → 累计修正） */
+  attackRangeBonusRef: React.RefObject<Record<number, number>>;
+  /** 牌堆累计洗切次数（滕公主「流年」） */
+  shuffleCountRef: React.RefObject<number>;
+  /** 攻击范围数值（万年公主「兴汉」按它算摸牌数） */
+  getAttackRangeById: (id: number) => number;
   hasWeimu: (p: Player) => boolean;
   hasZhangMark: (p: Player, mark: string) => boolean;
   humanReactionResolver: React.RefObject<((result: { played: boolean; isWuxie: boolean; }) => void) | null>;
@@ -192,6 +198,9 @@ export const createCombatEngine = (deps: CombatDeps): CombatEngine => {
     grantSkillById,
     revokeSkillById,
     roundCountRef,
+    attackRangeBonusRef,
+    shuffleCountRef,
+    getAttackRangeById,
     hasWeimu,
     hasZhangMark,
     humanReactionResolver,
@@ -442,6 +451,35 @@ const skillDeps = (): DispatchDeps => ({
     return !!a && !!b && canReach(a, b);
   },
   peekDiscard: () => [...discardPileRef.current],
+  changeAttackRange: (pid: number, delta: number) => {
+    const cur = attackRangeBonusRef.current[pid] ?? 0;
+    // 原文「每名角色至多 +5」：修正本身可以再叠加，但总量夹在 [-5, 5]
+    const next = Math.max(-5, Math.min(5, cur + delta));
+    attackRangeBonusRef.current = { ...attackRangeBonusRef.current, [pid]: next };
+    const p = playersRef.current.find(x => x.id === pid);
+    if (p) addLog(`【枕戈】${p.hero.name} 的攻击范围修正变为 ${next >= 0 ? '+' : ''}${next}`, 'skill');
+  },
+  flip: (pid: number, flipped: boolean) => {
+    const p = playersRef.current.find(x => x.id === pid);
+    if (!p) return;
+    updatePlayer(pid, { flipped });
+    addLog(flipped ? `【翻面】${p.hero.name} 被翻面` : `【翻面】${p.hero.name} 翻回正面`, 'skill');
+  },
+  restoreGeneral: (pid: number) => {
+    const p = playersRef.current.find(x => x.id === pid);
+    if (!p) return;
+    const changed = !!p.flipped || !!p.isChained;
+    updatePlayer(pid, { flipped: false, isChained: false });
+    if (changed) addLog(`【复原武将牌】${p.hero.name} 解除翻面与横置`, 'skill');
+  },
+  deckShuffleCount: shuffleCountRef.current,
+  attackRange: (pid: number) => deps.getAttackRangeById(pid),
+  setChained: (pid: number, chained: boolean) => {
+    const p = playersRef.current.find(x => x.id === pid);
+    if (!p) return;
+    updatePlayer(pid, { isChained: chained });
+    addLog(chained ? '【横置】' + p.hero.name + ' 被横置' : '【横置】' + p.hero.name + ' 解除横置', 'skill');
+  },
 });
   // ── resolveCardEffect（App.tsx 原 L6301-7526）──
   const resolveCardEffect = async (source: Player, targets: Player[], card: Card) => {
@@ -1577,6 +1615,7 @@ const skillDeps = (): DispatchDeps => ({
         currentDeck = shuffle([...discardPileRef.current, ...currentDeck]);
         setDiscardPile([]);
         discardPileRef.current = [];
+        shuffleCountRef.current += 1;
         addLog('牌堆已洗切', 'info');
       }
       const drawCount = Math.min(cardCount, currentDeck.length);
@@ -1828,7 +1867,9 @@ const skillDeps = (): DispatchDeps => ({
     
     // 检查是否为吕布的无双技能
     // 官方「无双」：仅【杀】需两张【闪】、仅【决斗】需两张【杀】；【南蛮入侵】【万箭齐发】不双牌
-    const isLubuWushuang = source.hero.name === '吕布';
+    // 吕布本人的「无双」，以及被技能授予「无双」/「☆ 无双」的角色（吕玲绮「妆戎」）
+    const isLubuWushuang = source.hero.name === '吕布'
+      || hasGrantedSkill(source, '无双') || hasGrantedSkill(source, '☆ 无双');
     const needTwoCards = isLubuWushuang && !isSecondReaction
       && ((triggerCard.name === CardName.SHA && neededCard === CardName.SHAN)
         || (triggerCard.name === CardName.JUEDOU && neededCard === CardName.SHA));
@@ -2218,7 +2259,24 @@ const skillDeps = (): DispatchDeps => ({
 }
 
   // ── askForPeaches（App.tsx 原 L8056-8310）──
+  /**
+   * 求桃成功后的统一出口：只有真的从濒死被救回，才派发「脱离濒死」时机（纫霜②）。
+   *
+   * 为什么包一层而不是在每个 return true 上补派发：求桃有 7 条成功路径
+   * （技能救人 / 人出桃 / AI 出桃 / 酒 / 急救 …），逐个加必然漏；
+   * 这里用 hp 的前后对比判定，重复调用（内部有 already-saved 兜底）自然不算。
+   */
   const askForPeaches = async (victimId: number): Promise<boolean> => {
+    const hpBefore = getPlayer(victimId)?.hp ?? 1;
+    const ok = await askForPeachesCore(victimId);
+    if (ok && hpBefore <= 0) {
+      const v = getPlayer(victimId);
+      if (v && v.hp > 0) await dispatchAfterDying({ ...skillDeps() }, { victim: v });
+    }
+    return ok;
+  };
+
+  const askForPeachesCore = async (victimId: number): Promise<boolean> => {
   const victim = getPlayer(victimId)!;
   const savedAt = recentlySavedRef.current[victimId];
   if (victim.hp > 0 || (savedAt && Date.now() - savedAt < 3000)) {

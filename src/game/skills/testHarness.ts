@@ -102,6 +102,12 @@ export const noopDeps = (players: Player[]): DispatchDeps => ({
   distance: () => Infinity,
   canReach: () => false,
   peekDiscard: () => [],
+  changeAttackRange: () => {},
+  flip: () => {},
+  restoreGeneral: () => {},
+  deckShuffleCount: 0,
+  attackRange: () => 1,
+  setChained: () => {},
 });
 
 /** 夹具里 grantSkill / hasGrantedSkill 的真实（进程内）语义 */

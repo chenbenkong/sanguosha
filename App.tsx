@@ -476,6 +476,10 @@ const App: React.FC = () => {
   // 出牌阶段的出口有多条（自然结束 / 托管 / 中途阵亡），用「进入下一个阶段」这一处
   // 统一派发 onPlayPhaseEnd，比在每个出口各写一遍可靠。
   const playPhaseOpenRef = useRef<number | null>(null);
+  // 攻击范围修正（万年公主「枕戈」，每人累计至多 ±5）；getAttackRange 会加上它
+  const attackRangeBonusRef = useRef<Record<number, number>>({});
+  // 牌堆累计洗切次数（滕公主「流年」要判断「本回合第几次洗牌」，回合开始时快照即可）
+  const shuffleCountRef = useRef<number>(0);
   // 郭皇后「矫诏」/「殚心」
   const [hasUsedJiaozhao, setHasUsedJiaozhao] = useState<boolean>(false);
   const [guohuanghouLevel, setGuohuanghouLevel] = useState<number>(1);
@@ -1031,6 +1035,35 @@ const App: React.FC = () => {
       return !!a && !!b && canReach(a, b);
     },
     peekDiscard: () => [...discardPileRef.current],
+    changeAttackRange: (pid, delta) => {
+      const cur = attackRangeBonusRef.current[pid] ?? 0;
+      const next = Math.max(-5, Math.min(5, cur + delta));
+      attackRangeBonusRef.current = { ...attackRangeBonusRef.current, [pid]: next };
+    },
+    flip: (pid, flipped) => {
+      const p = playersRef.current.find(x => x.id === pid);
+      if (!p) return;
+      updatePlayer(pid, { flipped });
+      addLog(flipped ? '【翻面】' + p.hero.name + ' 被翻面' : '【翻面】' + p.hero.name + ' 翻回正面', 'skill');
+    },
+    restoreGeneral: (pid) => {
+      const p = playersRef.current.find(x => x.id === pid);
+      if (!p) return;
+      const changed = !!p.flipped || !!p.isChained;
+      updatePlayer(pid, { flipped: false, isChained: false });
+      if (changed) addLog('【复原武将牌】' + p.hero.name + ' 解除翻面与横置', 'skill');
+    },
+    deckShuffleCount: shuffleCountRef.current,
+    attackRange: (pid) => {
+      const p = playersRef.current.find(x => x.id === pid);
+      return p ? getAttackRange(p) : 1;
+    },
+    setChained: (pid, chained) => {
+      const p = playersRef.current.find(x => x.id === pid);
+      if (!p) return;
+      updatePlayer(pid, { isChained: chained });
+      addLog(chained ? '【横置】' + p.hero.name + ' 被横置' : '【横置】' + p.hero.name + ' 解除横置', 'skill');
+    },
   });
 
   const excessCards = (p: Player) => {
@@ -1536,6 +1569,7 @@ const App: React.FC = () => {
         if (currentDiscard.length === 0) break;
         currentDeck = shuffle(currentDiscard);
         currentDiscard = [];
+        shuffleCountRef.current += 1;
         addLog('牌堆已洗切', 'info');
       }
       drawn.push(currentDeck.pop()!);
@@ -1670,7 +1704,9 @@ const App: React.FC = () => {
   const getAttackRange = useCallback((p: Player) => {
     const weapon = p.equipment?.weapon;
     const bonus = weapon ? (EQUIP_META[weapon.name]?.range ?? 1) : 0;
-    return 1 + bonus;
+    // 技能修正（「枕戈」）：夹在 ±5 内，且攻击范围最低仍是 1
+    const skill = attackRangeBonusRef.current[p.id] ?? 0;
+    return Math.max(1, 1 + bonus + Math.max(-5, Math.min(5, skill)));
   }, []);
 
   const canReach = useCallback((from: Player, to: Player) => getDistance(from.id, to.id) <= getAttackRange(from), [getDistance, getAttackRange]);
@@ -2612,6 +2648,13 @@ const App: React.FC = () => {
 
     const currentPlayer = getPlayer(turnIndex);
     if (!currentPlayer || currentPlayer.isDead) {
+      setTurnIndex((turnIndex + 1) % players.length);
+      return;
+    }
+    // 翻面（李婉「别君」② / 曹华「彩翼」）：被翻面的角色在本回合开始时翻回正面并跳过该回合
+    if (currentPlayer.flipped) {
+      updatePlayer(currentPlayer.id, { flipped: false });
+      addLog('【翻面】' + currentPlayer.hero.name + ' 翻回正面，跳过本回合', 'warning');
       setTurnIndex((turnIndex + 1) % players.length);
       return;
     }
@@ -6346,6 +6389,7 @@ const App: React.FC = () => {
       currentDeck = shuffle([...discardPileRef.current]);
       setDiscardPile([]);
       discardPileRef.current = [];
+      shuffleCountRef.current += 1;
       addLog('牌堆已洗切', 'info');
     }
     const judgmentCard = currentDeck.pop()!;
@@ -6581,6 +6625,12 @@ const App: React.FC = () => {
     handleDeath,
     hasGrantedSkill,
     grantSkillById: grantSkill,
+    attackRangeBonusRef,
+    getAttackRangeById: (id: number) => {
+      const p = playersRef.current.find(x => x.id === id);
+      return p ? getAttackRange(p) : 1;
+    },
+    shuffleCountRef,
     revokeSkillById: (id: number, skillName: string, reason: string) => revokeSkill(id, skillName, reason),
     roundCountRef,
     hasWeimu,
@@ -6673,6 +6723,7 @@ const App: React.FC = () => {
         pool = shuffle([...discardPileRef.current]);
         discardPileRef.current = [];
         setDiscardPile([]);
+        shuffleCountRef.current += 1;
         addLog('牌堆已洗切', 'info');
       }
       if (pool.length === 0) break;

@@ -2,6 +2,7 @@ import type {
   SkillContext, DamageEvent, CardUsedEvent, JudgeEvent,
   DrawPhaseEvent, DrawPhaseResult, DiscardPhaseEvent, DiscardPhaseResult, CardLostEvent,
   DeathEvent, DyingEvent, DyingResult, CardTargetsEvent, CardGainEvent, UseCardAsOptions, PlayPhaseEvent,
+  DyingResolvedEvent,
 } from './registry';
 import { skillHook, mergeDrawPhase } from './registry';
 import { mergeJudgeBefore, mergeDamageBefore } from './engineAbilities.ts';
@@ -90,6 +91,13 @@ export interface DispatchDeps {
   canReach: (fromId: number, toId: number) => boolean;
   /** 弃牌堆的只读快照（尾部是最近弃置的牌） */
   peekDiscard: () => Card[];
+  /** 攻击范围修正 / 翻面 / 复原武将牌 / 累计洗牌次数 */
+  changeAttackRange: (playerId: number, delta: number) => void;
+  flip: (playerId: number, flipped: boolean) => void;
+  restoreGeneral: (playerId: number) => void;
+  deckShuffleCount: number;
+  attackRange: (playerId: number) => number;
+  setChained: (playerId: number, chained: boolean) => void;
 }
 
 /** 每个技能一份的跨回合存储（key = hero + skill） */
@@ -226,6 +234,12 @@ const ctxFor = (deps: DispatchDeps, self: Player, hero: string, skill: string): 
   distance: deps.distance,
   canReach: deps.canReach,
   peekDiscard: deps.peekDiscard,
+  changeAttackRange: deps.changeAttackRange,
+  flip: deps.flip,
+  restoreGeneral: deps.restoreGeneral,
+  deckShuffleCount: deps.deckShuffleCount,
+  attackRange: deps.attackRange,
+  setChained: deps.setChained,
 });
 
 /** 找出场上的技能拥有者（跳过已死亡 / 技能被封印的） */
@@ -288,6 +302,17 @@ export const dispatchPlayPhaseEnd = async (deps: DispatchDeps, owner: Player): P
       await fn(ctxFor(deps, self, def.hero, def.skill), ev);
     }
   }
+};
+
+/** 脱离濒死（被救回）之后 */
+export const dispatchAfterDying = async (deps: DispatchDeps, ev: DyingResolvedEvent): Promise<void> => {
+  await withGuard(`dyingres-\${ev.victim.id}-\${ev.victim.hp}`, async () => {
+    for (const { def, fn } of skillHook('afterDying')) {
+      for (const self of ownersOf(deps, def.hero)) {
+        await fn(ctxFor(deps, self, def.hero, def.skill), ev);
+      }
+    }
+  });
 };
 
 /** 判定牌生效后 */

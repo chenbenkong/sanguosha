@@ -107,6 +107,7 @@ export interface Player {
   isSelected: boolean; // For target selection
   // 状态标志
   isChained?: boolean; // 铁索连环状态
+  flipped?: boolean; // 翻面状态（被翻面者在下个回合开始时翻回正面并跳过该回合）
   isLeBuSiShu?: boolean; // 乐不思蜀状态
   isBingLiangCunDuan?: boolean; // 兵粮寸断状态
   isShandian?: boolean; // 闪电挂置状态（判定区）

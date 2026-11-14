@@ -178,6 +178,34 @@ export interface SkillContext {
    * 只能在回合开始时快照一次 —— 既有的 takeFromDiscard 是破坏性的，读不了。
    */
   peekDiscard: () => Card[];
+  /** 攻击范围修正（万年公主「枕戈」，同一角色累计至多 +5）。delta 可正可负。 */
+  changeAttackRange: (playerId: number, delta: number) => void;
+  /**
+   * 翻面 / 翻回正面（李婉「别君」②、曹华「彩翼」）。
+   *
+   * 被翻面的角色在**下一个回合开始时翻回正面并跳过该回合** —— 跳过逻辑写在
+   * App.tsx 主循环里，所以这个能力不是"记个标记"而已。
+   */
+  flip: (playerId: number, flipped: boolean) => void;
+  /** 复原武将牌：解除翻面与横置（任婉「纫霜」②、宣公主「齐眉」）。 */
+  restoreGeneral: (playerId: number) => void;
+  /**
+   * 牌堆累计洗切次数（滕公主「流年」）。
+   *
+   * 回合开始时快照一次就是「本回合第几次洗牌」。原先洗牌只写了一条战报，
+   * 没有任何可读的信号，所以「本回合进行过第一次洗牌」这类条件写不出来。
+   */
+  deckShuffleCount: number;
+  /** 某角色当前的攻击范围数值（万年公主「兴汉」按它算摸牌数；不是布尔判定）。 */
+  attackRange: (playerId: number) => number;
+  /** 横置 / 解除横置（曹华「彩翼」阴形态「翻面并横置」）。铁索连环状态由引擎的传导逻辑消费。 */
+  setChained: (playerId: number, chained: boolean) => void;
+}
+
+/** 脱离濒死（被救回）事件 */
+export interface DyingResolvedEvent {
+  /** 从濒死中恢复的角色 */
+  victim: Player;
 }
 
 /** 一次伤害事件的描述 */
@@ -283,6 +311,13 @@ export interface SkillHooks {
   onPlayPhaseBegin?: (ctx: SkillContext, ev: PlayPhaseEvent) => Promise<void> | void;
   /** 出牌阶段结束时（酖毒）。每回合至多派发一次。 */
   onPlayPhaseEnd?: (ctx: SkillContext, ev: PlayPhaseEvent) => Promise<void> | void;
+  /**
+   * 从濒死中被救回、体力回到 0 以上之后（任婉「纫霜」②）。
+   *
+   * 与 onDying 的区别：onDying 是求桃**之前**的最后机会，这个是求桃**成功**之后。
+   * 只有真的从 hp<=0 回到 hp>0 才派发 —— 已经活着时的重复调用不算。
+   */
+  afterDying?: (ctx: SkillContext, ev: DyingResolvedEvent) => Promise<void> | void;
 }
 
 /**
