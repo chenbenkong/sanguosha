@@ -31,18 +31,30 @@ describe('通用标记', () => {
     expect(n).toBe(3);
   });
 
-  it('传 playerId 时可作用于其他角色，且能被第三方查到', async () => {
-    let seen: Record<string, number> = {};
+  it('传 playerId 时标记落在对方身上，本人身上必须为 0', async () => {
+    /*
+     * 这条断言的第一版是**假阳性**：写入与读取都忽略 playerId 时，
+     * 标记会落在自己身上、又被自己读回来，同样得到 2，测试照过。
+     * 当时那句「自己身上不该有」写成了 expect(a.hero.name).toBe('贴标记将') ——
+     * 对夹具的恒真断言，什么都没验证。
+     *
+     * 现在改成真正能失败的口径：贴完之后
+     *   1) 不带 id 读本人 → 必须是 0（旧实现会读到 2）；
+     *   2) 本人 marks() 里不含该标记名；
+     *   3) 对方 marks(id) 里必须是 2。
+     */
+    let selfCount = -1;
+    let selfMarks: Record<string, number> = {};
+    let targetCount = -1;
     registerSkill({
       hero: '贴标记将',
       skill: '贴标记技',
       hooks: {
         onTurnEnd: (ctx) => {
-          // 给 id=1 贴两个「信众」
           ctx.addMark('信众', 2, 1);
-          // 再从自己这边查对方身上的标记（跨角色读取）
-          seen = ctx.marks(1);
-          expect(ctx.markCount('信众', 1)).toBe(2);
+          selfCount = ctx.markCount('信众');        // 不带 id = 本人
+          selfMarks = ctx.marks();                  // 本人全部标记
+          targetCount = ctx.markCount('信众', 1);   // 指定对方
         },
       },
     });
@@ -50,9 +62,9 @@ describe('通用标记', () => {
     const b = mkPlayer({ id: 1, name: '被贴者' });
     const { deps } = makeHarness([a, b]);
     await dispatchTurnEnd(deps, b);
-    expect(seen['信众']).toBe(2);
-    // 自己身上不该有
-    expect(a.hero.name).toBe('贴标记将');
+    expect(selfCount).toBe(0);
+    expect(selfMarks['信众']).toBeUndefined();
+    expect(targetCount).toBe(2);
   });
 
   it('removeMark 不会减到负数，并返回实际移去数量', async () => {
