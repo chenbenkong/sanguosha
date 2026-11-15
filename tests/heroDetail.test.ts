@@ -171,25 +171,38 @@ describe('getHeroDetail', () => {
     expect(HEROES.length).toBeGreaterThanOrEqual(129);
   });
 
-  test('已解除 pending 的第六批女将能开局，且档案不是「技能实装中」', () => {
-    for (const name of ['王荣', '赵嫣', '曹华', '卢弈', '董贵人']) {
+  test('已解除 pending 的第六批女将能开局，且档案带真实扩展包归属', () => {
+    // pack 取自 cardsrepo/manifest.csv 的 pack 列（上一轮误判为「数据源没有包字段」，
+    // 实际是我在工作区里只翻了 repo 内部）。这里钉几个真值，防止回退成占位「新将」。
+    const expectPack: Record<string, string> = {
+      王荣: '荟萃-诸侯伐董', 赵嫣: '荟萃-才子佳人', 曹华: '荟萃-锦瑟良缘',
+      卢弈: '限定-隐山之玉', 董贵人: '荟萃-钟灵毓秀',
+    };
+    for (const [name, pack] of Object.entries(expectPack)) {
       const h = HEROES.find(x => x.name === name);
       expect(h, name + ' 应当还在 HEROES 里').toBeTruthy();
       expect(h!.pending, name + ' 技能已实装，不应再挂 pending').toBeFalsy();
       const d = getHeroDetail(h!);
-      expect(d.profile.pack).not.toBe('新将·技能实装中');
+      expect(d.profile.pack, name + ' 的 pack 应为 manifest 真值').toBe(pack);
       expect(d.skills.length).toBeGreaterThan(0);
       // 定位标签来自技能本身，不是写死的「均衡」
       expect(d.profile.roles.length).toBeGreaterThan(0);
     }
   });
 
-  test('仍在 pending 的武将保持「不可开局」语义', () => {
-    // 最后两名（吕玲绮「帼武」、宣公主「追姬」）也已实装并解除 pending
-    for (const name of ['吕玲绮', '宣公主']) {
+  test('manifest 查不到的魏娆回落「新将」，不编造包名', () => {
+    const h = HEROES.find(x => x.name === '魏娆')!;
+    expect(h).toBeTruthy();
+    // manifest 730 行里没有魏娆（连技能 拾芳/簪金 都查无），所以留占位而非猜一个
+    expect(getHeroDetail(h).profile.pack).toBe('新将');
+  });
+
+  test('最后两名（吕玲绮、宣公主）已实装、解除 pending，且带真实 pack', () => {
+    const expectPack: Record<string, string> = { 吕玲绮: '荟萃-芝兰玉树', 宣公主: '一将成名-2023' };
+    for (const [name, pack] of Object.entries(expectPack)) {
       const h = HEROES.find(x => x.name === name)!;
       expect(h.pending, name + ' 技能已实装，不应再挂 pending').toBeFalsy();
-      expect(getHeroDetail(h).profile.pack).toBe('新将');
+      expect(getHeroDetail(h).profile.pack).toBe(pack);
     }
   });
 
