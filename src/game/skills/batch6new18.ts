@@ -20,11 +20,17 @@ import type { Card, Player } from '../../../types';
  *
  * 已知缺口（写在文件头，不在代码里含糊）：
  * · 「妄」区在 batch6new4.ts，本轮已从 per-skill memory 改成 heroMemory（铃音要读同一份）。
- * · 铃音「可以将武器牌或防具牌当【决斗】使用」**未实装**：这张牌要离开装备区，
- *   而 ctx 只有手牌的弃置入口（discard 只动 hand）。缺「按区域弃牌」原语。
+ * · 铃音「可以将武器牌或防具牌当【决斗】使用」**仍未实装**。
+ *   原语其实已经有了（readArea / discardFromArea / useCardAs 都在），
+ *   真正缺的是「转化牌」这条通路本身：装备牌当【决斗】要进的是人类的出牌
+ *   交互（ActionBar 的转化候选）与 convertRules.ts 的判定表，不是技能钩子。
+ *   上一轮我把这条记成「缺按区域弃牌原语」是判错了——补完原语后它依然不通，
+ *   因为不通的地方在 UI/转化层。留作待办，不在这里硬凑一个只在 AI 侧生效的版本。
  * · 日彗「获得其区域内的一张牌」只覆盖手牌：装备区 / 判定区读不到也拿不到。
- * · 花火「改为指定所有拥有『硝引』牌的角色」依赖「硝引」牌系统，本文件不含，
- *   基础形态（红手牌当火【杀】）完整可用。
+ * · 花火「改为指定所有拥有『硝引』牌的角色」**已补**：硝引（batch6new22）落地后，
+ *   其牌区写在同武将共享的 heroMemory.niaoyin，花火直接读它筛出持有者。
+ *   仍缺的是「无次数限制」那一半——【杀】次数在 App.tsx 的 slashUsageRef，ctx 无入口
+ *   （与「☆ 狩星」「锦绘」同一处缺口）。
  * · 齐眉分支 1「你依次使用这些牌」：用 ctx.useCardAs 逐张结算，目标走技能提问；
  *   「依次」的牌与牌之间的顺序按展示顺序。
  */
@@ -258,11 +264,35 @@ registerSkill({
         targetId = [...others].sort((a, b) => a.hp - b.hp || a.id - b.id)[0].id;
       }
       if (!card || targetId === undefined) return;
+
+      // 「若目标角色有『硝引』牌，你可以改为指定所有拥有『硝引』牌的角色为目标」
+      // —— 硝引牌区由同武将的「硝引」（batch6new22）写在 ctx.heroMemory.niaoyin，
+      //    形状是 Record<pid, Card[]>；heroMemory 按武将名共享，所以这里读得到。
+      const niaoyinZone = (ctx.heroMemory.niaoyin as Record<string, Card[]> | undefined) ?? {};
+      const holders = ctx.players.filter(
+        q => !q.isDead && q.id !== ctx.self.id && (niaoyinZone[String(q.id)]?.length ?? 0) > 0,
+      );
+      let targetIds = [targetId];
+      if (holders.some(q => q.id === targetId)) {
+        let redirect = true;
+        if (ctx.self.isHuman) {
+          const rr = await ctx.requestChoice({
+            title: '花火：目标有「硝引」牌，是否改为指定所有拥有「硝引」牌的角色',
+            hint: holders.map(q => q.hero.name).join('、'),
+            mode: 'choose',
+            choices: [{ id: 'yes', label: '改为全体' }, { id: 'no', label: '仍只指定原目标' }],
+            min: 1, max: 1, cancelLabel: '仍只指定原目标',
+          });
+          redirect = !!rr && rr.kind === 'choose' && rr.id === 'yes';
+        }
+        if (redirect) targetIds = holders.map(q => q.id);
+      }
+
       ctx.memory.usedThisTurn = true;
       ctx.banner();
       ctx.discard(ctx.self.id, [card]);
-      ctx.log(`【花火】${ctx.self.hero.name} 将 ${card.suit}${card.rank} 当火【杀】对目标使用`);
-      await ctx.useCardAs(card, [targetId], { attribute: 'fire', ignoreDistance: false, reason: '花火' });
+      ctx.log(`【花火】${ctx.self.hero.name} 将 ${card.suit}${card.rank} 当火【杀】对 ${targetIds.length} 名角色使用`);
+      await ctx.useCardAs(card, targetIds, { attribute: 'fire', ignoreDistance: false, reason: '花火' });
     },
   },
 });

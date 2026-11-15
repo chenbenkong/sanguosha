@@ -34,6 +34,18 @@ const seedWish = async (deps: Parameters<typeof dispatchPlayPhaseBegin>[0], owne
   await dispatchTurnStart(deps, owner);
 };
 
+/** 辅助：把「硝引」牌区写进同武将共享的 heroMemory.niaoyin（形状与 batch6new22 一致） */
+const seedNiaoyin = async (deps: Parameters<typeof dispatchPlayPhaseBegin>[0], owner: ReturnType<typeof mkPlayer>, zone: Record<string, Card[]>) => {
+  seedSeq += 1;
+  const { dispatchTurnStart } = await import('./dispatch');
+  registerSkill({
+    hero: owner.hero.name,
+    skill: '__seedniaoyin_' + seedSeq,
+    hooks: { onTurnStart: (ctx) => { ctx.heroMemory.niaoyin = zone; } },
+  });
+  await dispatchTurnStart(deps, owner);
+};
+
 describe('宣公主「齐眉」', () => {
   it('正例：展示牌有 4 种花色 → 双方各摸一张牌', async () => {
     const xg = P(0, '宣公主');
@@ -203,6 +215,33 @@ describe('马伶俐「花火」', () => {
     expect(fx.usedCards[0].opts?.attribute).toBe('fire');
     expect(fx.usedCards[0].targetIds).toEqual([1]);
     expect(fx.discarded).toEqual([{ playerId: 0, count: 1 }]);
+  });
+
+  it('正例：目标身上有「硝引」牌 → 改为指定所有拥有「硝引」牌的角色', async () => {
+    const mll = P(0, '马伶俐');
+    mll.hand = [mkCard({ name: CardName.TAO, suit: Suit.HEART })];
+    const a = P(1, '甲');
+    const b = P(2, '乙');
+    const c = P(3, '丙');
+    const { deps, fx } = makeHarness([mll, a, b, c]);
+    // 甲、丙有硝引牌，乙没有
+    await seedNiaoyin(deps, mll, { 1: [sc(Suit.SPADE)], 3: [sc(Suit.CLUB)] });
+    await dispatchPlayPhaseBegin(deps, mll);
+    expect(fx.usedCards).toHaveLength(1);
+    // 目标从「AI 选的那一个」扩成全体持有者（甲、丙）
+    expect([...fx.usedCards[0].targetIds].sort()).toEqual([1, 3]);
+    expect(fx.logs.some(l => l.includes('当火【杀】对 2 名角色使用'))).toBe(true);
+  });
+
+  it('正例：目标没有「硝引」牌 → 仍只指定一个目标（不扩大）', async () => {
+    const mll = P(0, '马伶俐');
+    mll.hand = [mkCard({ name: CardName.TAO, suit: Suit.HEART })];
+    const a = P(1, '甲');
+    const { deps, fx } = makeHarness([mll, a]);
+    // 硝引牌区挂在「乙」身上，而乙不在场 / 或干脆空区
+    await seedNiaoyin(deps, mll, {});
+    await dispatchPlayPhaseBegin(deps, mll);
+    expect(fx.usedCards[0].targetIds).toEqual([1]);
   });
 
   it('反例：手里没有红色牌 —— 不发动', async () => {
