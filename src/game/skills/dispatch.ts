@@ -103,6 +103,7 @@ export interface DispatchDeps {
   setChained: (playerId: number, chained: boolean) => void;
   setPhaseNoDistance: (playerId: number, on: boolean) => void;
   setExtraTargets: (playerId: number, count: number) => void;
+  equipCardToZone: (playerId: number, card: Card) => boolean;
   requestExtraTurn: (playerId: number) => void;
 }
 
@@ -251,6 +252,7 @@ const ctxFor = (deps: DispatchDeps, self: Player, hero: string, skill: string): 
   setChained: deps.setChained,
   setPhaseNoDistance: deps.setPhaseNoDistance,
   setExtraTargets: deps.setExtraTargets,
+  equipCardToZone: deps.equipCardToZone,
   requestExtraTurn: deps.requestExtraTurn,
 });
 

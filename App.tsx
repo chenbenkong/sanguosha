@@ -1120,7 +1120,27 @@ const App: React.FC = () => {
     setExtraTargets: (pid, count) => {
       updatePlayer(pid, { extraTargetCount: count });
     },
+    // 宣公主「追姬」：把一张装备牌直接置入某角色的装备区。
+    // 必须**同步**改 playersRef —— 追姬是「直到无法使用」的循环，
+    // 下一轮判定要在同一次调用里就看到刚装上的装备，走 setState 读不到。
+    equipCardToZone: (pid, card) => {
+      const slot = EQUIP_META[card.name]?.slot;
+      if (!slot) return false;
+      const p = playersRef.current.find(x => x.id === pid);
+      if (!p || p.isDead) return false;
+      if (p.sealedSlots?.includes(slot)) return false;   // 栏位已废除
+      if (p.equipment?.[slot]) return false;             // 该栏已有装备
+      p.equipment = { ...(p.equipment ?? {}), [slot]: card };
+      p.zhuijiCardIds = [...(p.zhuijiCardIds ?? []), card.id];
+      setPlayers(playersRef.current.map(x => x.id === pid ? { ...x } : x));
+      return true;
+    },
   });
+
+  /** 装备栏中文名（废除栏位的提示与日志用） */
+  const SLOT_CN: Record<EquipmentSlot, string> = {
+    weapon: '武器', armor: '防具', horsePlus: '＋1 马', horseMinus: '－1 马',
+  };
 
   const excessCards = (p: Player) => {
     // 基础豁免（硬编码技能）+ 注册表技能提供的手牌上限加成 / 花色豁免
@@ -1680,6 +1700,19 @@ const App: React.FC = () => {
   // 轻量入口，只为让 combat.ts 里「装备被顺走/拆掉/顶替」的既有调用点不必逐处改造：
   // 判定与结算都交给注册表，这里只负责如实上报一次「失去了装备区的牌」。
   const triggerXiaoji = useCallback((playerId: number, card: Card) => {
+    // 宣公主「追姬」：以此法使用的装备牌一旦离开装备区，废除其对应栏位。
+    // 这里是两个引擎唯一的「失去装备区的牌」上报口（combat.ts 的顺走/拆掉/顶替
+    // 也都调它），所以只守这一处即可覆盖全部失去途径。
+    const p = playersRef.current.find(x => x.id === playerId);
+    if (p?.zhuijiCardIds?.includes(card.id)) {
+      const slot = EQUIP_META[card.name]?.slot;
+      if (slot && !(p.sealedSlots ?? []).includes(slot)) {
+        p.zhuijiCardIds = (p.zhuijiCardIds ?? []).filter(id => id !== card.id);
+        p.sealedSlots = [...(p.sealedSlots ?? []), slot];
+        setPlayers(playersRef.current.map(x => x.id === playerId ? { ...x } : x));
+        addLog(`【追姬】${p.hero.name} 失去【${card.name}】，其${SLOT_CN[slot]}栏被废除`, 'skill');
+      }
+    }
     void notifyCardLost(playerId, [card], 'equip', true);
   }, []);
 
@@ -1822,6 +1855,11 @@ const App: React.FC = () => {
       return false;
     }
     const slot = meta.slot;
+    // 宣公主「追姬」：被废除的装备栏不能再放装备
+    if (player.sealedSlots?.includes(slot)) {
+      addLog(`【追姬】${player.hero.name} 的${SLOT_CN[slot]}栏已废除，不能使用【${card.name}】`, 'warning');
+      return false;
+    }
     const prev = getPlayer(playerId)?.equipment?.[slot];
 
     mutateHand(playerId, hand => hand.filter(c => c.id !== card.id));
@@ -6737,6 +6775,7 @@ const App: React.FC = () => {
     reactionTickRef,
     recentlySavedRef,
     recoverHp,
+    equipCardToZone: (pid, card) => buildSkillDeps().equipCardToZone(pid, card),
     requestSkillChoice,
     setDamageAnimTarget,
     setDyingLeft,
@@ -6974,6 +7013,10 @@ const App: React.FC = () => {
         return { equipment: nextEquip };
       });
       onEquipLost(victim.id, entry.card.name);
+      // 其余「失去装备区的牌」路径都成对调用这两个（1836/1837、1090/1091…），
+      // 这里漏了 triggerXiaoji：孙尚香「枭姬」收不到这次失去，宣公主「追姬」的
+      // 装备栏废除同样会漏。补上，让「失去装备」的上报口径在全仓一致。
+      triggerXiaoji(victim.id, entry.card);
     } else {
       updatePlayerWith(victim.id, p => {
         const zone = (p.judgeZone ?? []).filter(c => c.id !== entry.card.id);

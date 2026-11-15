@@ -1,5 +1,13 @@
 import { CardName, CardType, Identity, Suit } from '../../../types';
-import type { Card, Player } from '../../../types';
+import type { Card, EquipmentSlot, Player } from '../../../types';
+
+/** 夹具用的最小「装备牌 → 栏位」表（只覆盖单测里出现的牌） */
+const EQUIP_SLOT: Record<string, EquipmentSlot> = {
+  青釭剑: 'weapon', 丈八蛇矛: 'weapon', 方天画戟: 'weapon', 诸葛连弩: 'weapon', 雌雄双股剑: 'weapon',
+  仁王盾: 'armor', 八卦阵: 'armor', 白银狮子: 'armor', 藤甲: 'armor',
+  的卢: 'horsePlus', 绝影: 'horsePlus', 爪黄飞电: 'horsePlus', 紫骍: 'horsePlus',
+  赤兔: 'horseMinus', 大宛: 'horseMinus', 张辽: 'horseMinus',
+};
 import type { DispatchDeps } from './dispatch';
 import type { UseCardAsOptions } from './registry';
 import { __clearSkillMemory } from './dispatch';
@@ -72,12 +80,14 @@ export interface Effects {
   /** setPhaseNoDistance / setExtraTargets 的调用记录 */
   noDistance: Array<{ playerId: number; on: boolean }>;
   extraTargets: Array<{ playerId: number; count: number }>;
+  /** equipCardToZone 的调用记录 */
+  equipped: Array<{ playerId: number; card: Card }>;
 }
 
 export const emptyEffects = (): Effects => ({
   drawn: [], discarded: [], healed: [], damaged: [], logs: [], banners: [],
   usedCards: [], granted: [], revoked: [], extraTurns: [],
-  noDistance: [], extraTargets: [],
+  noDistance: [], extraTargets: [], equipped: [],
 });
 
 /**
@@ -119,6 +129,7 @@ export const noopDeps = (players: Player[]): DispatchDeps => ({
   setChained: () => {},
   setPhaseNoDistance: () => {},
   setExtraTargets: () => {},
+  equipCardToZone: () => false,
   requestExtraTurn: () => {},
 });
 
@@ -200,6 +211,19 @@ export const makeHarness = (players: Player[], opts: HarnessOptions = {}): Harne
       fx.extraTargets.push({ playerId, count });
       const p = players.find(x => x.id === playerId);
       if (p) p.extraTargetCount = count;
+    },
+    // 夹具里真的装进装备区，好让「已有装备 / 已废除」这两条拒绝分支可测
+    equipCardToZone: (playerId, card) => {
+      fx.equipped.push({ playerId, card });
+      const p = players.find(x => x.id === playerId);
+      if (!p) return false;
+      const slot = (EQUIP_SLOT[card.name] ?? 'weapon') as EquipmentSlot;
+      if (p.sealedSlots?.includes(slot)) return false;
+      if (p.equipment?.[slot]) return false;
+      p.equipment = { ...(p.equipment ?? {}), [slot]: card };
+      // 与 App.tsx 的实现保持一致：登记来源，失去时据此废除栏位
+      p.zhuijiCardIds = [...(p.zhuijiCardIds ?? []), card.id];
+      return true;
     },
   };
   return { deps, fx };

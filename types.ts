@@ -194,6 +194,18 @@ export interface Player {
    */
   phaseNoDistance?: boolean;
   /**
+   * 被废除的装备栏（宣公主「追姬」）。栏位被废除后：该栏视为空且不能再放装备。
+   * 读取侧无需改动 —— 废除的栏本来就是空的，只有「往里放」这条路径要拦，
+   * 而那条路径的入口是 equipCard / equipCardToZone 两处。
+   */
+  sealedSlots?: EquipmentSlot[];
+  /**
+   * 「追姬」置入其装备区的牌 id（宣公主「追姬」）。
+   * 这些牌一旦离开装备区，对应栏位即被废除 —— 标记存在这里，
+   * 由引擎的统一「失去装备区牌」上报口（triggerXiaoji）消费。
+   */
+  zhuijiCardIds?: string[];
+  /**
    * 使用【杀】或普通锦囊时可额外指定的目标数（吕玲绮「帼武」③）。
    * 与「福绵」的 fumianValue2 同一口径：由 combat.ts 在目标确定后自动追加
    * （方天画戟 / 蚕食 / 福绵 也都是自动追加，不额外弹窗）。

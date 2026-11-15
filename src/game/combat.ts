@@ -99,6 +99,8 @@ export interface CombatDeps {
   reactionTickRef: React.RefObject<number | null>;
   recentlySavedRef: React.RefObject<Record<number, number>>;
   recoverHp: (playerId: number, amount: number) => number;
+  /** 把一张装备牌直接置入装备区（宣公主「追姬」）。实现只在 App.tsx 一处。 */
+  equipCardToZone: (playerId: number, card: Card) => boolean;
   requestSkillChoice: (req: SkillChoiceRequest, allowPrompt?: boolean) => Promise<SkillChoiceResult | null>;
   setDamageAnimTarget: (value: React.SetStateAction<number | null>) => void;
   setDyingLeft: (value: React.SetStateAction<number | null>) => void;
@@ -226,6 +228,7 @@ export const createCombatEngine = (deps: CombatDeps): CombatEngine => {
     reactionTickRef,
     recentlySavedRef,
     recoverHp,
+    equipCardToZone,
     requestSkillChoice,
     setDamageAnimTarget,
     setDyingLeft,
@@ -530,6 +533,7 @@ const skillDeps = (): DispatchDeps => ({
   setExtraTargets: (pid: number, count: number) => {
     updatePlayer(pid, { extraTargetCount: count });
   },
+  equipCardToZone: (pid: number, card: Card) => equipCardToZone(pid, card),
   // 额外回合只能在**回合结束时机**申请，而 onTurnEnd 只由 App.tsx 主循环派发；
   // combat.ts 的 skillDeps 触不到回合循环，所以这里是有意空实现 ——
   // 若有技能在伤害/响应链里调用它，静默忽略比半生效安全（归离不会在这种时机触发）。

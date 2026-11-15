@@ -212,6 +212,13 @@ export interface SkillContext {
   /** 横置 / 解除横置（曹华「彩翼」阴形态「翻面并横置」）。铁索连环状态由引擎的传导逻辑消费。 */
   setChained: (playerId: number, chained: boolean) => void;
   /**
+   * 把一张**不在手牌里**的装备牌直接置入某角色的装备区（宣公主「追姬」）。
+   *
+   * 返回 false 表示放不进去：该栏已有装备、或该栏已被废除。调用方（追姬）据此
+   * 判断「直到无法使用」的终止条件。牌本身要由调用方先从牌堆/弃牌堆取出。
+   */
+  equipCardToZone: (playerId: number, card: Card) => boolean;
+  /**
    * 设定「该角色本阶段使用牌无距离限制」（吕玲绮「帼武」②）。
    *
    * 必须自己配对清除（onPlayPhaseEnd）；距离判定的唯一入口是 App.tsx 的 canReach，

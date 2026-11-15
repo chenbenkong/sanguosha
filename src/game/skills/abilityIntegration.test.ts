@@ -160,6 +160,7 @@ const buildTrial = (roster: Roster): Trial => {
       updatePlayer(id, { hp: Math.min(cur.maxHp, cur.hp + amount) });
       return amount;
     },
+    equipCardToZone: () => false,
     requestSkillChoice: async () => null,
     setDamageAnimTarget: noop,
     setDyingLeft: noop,
