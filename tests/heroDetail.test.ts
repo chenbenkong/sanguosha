@@ -190,11 +190,15 @@ describe('getHeroDetail', () => {
     }
   });
 
-  test('manifest 查不到的魏娆回落「新将」，不编造包名', () => {
+  test('魏娆：资料按官方规格，扩展包无记载 —— 如实标「扩展包待考」', () => {
     const h = HEROES.find(x => x.name === '魏娆')!;
     expect(h).toBeTruthy();
-    // manifest 730 行里没有魏娆（连技能 拾芳/簪金 都查无），所以留占位而非猜一个
-    expect(getHeroDetail(h).profile.pack).toBe('新将');
+    // 取证：上游 cards/魏娆.webp = 200/339KB（赵嫣、曹华 同量级；蔡贞姬 404），
+    // 且本地 lore/story/voice/立绘齐全 —— 没有证据支持「本作原创」；
+    // 但两份 manifest 都没有她这一行，pack 无从取得。所以标「待考」而不是猜。
+    expect(getHeroDetail(h).profile.pack).toBe('扩展包待考');
+    // 其余 29 人仍取 manifest 真值，不被这条带偏成占位
+    expect(getHeroDetail(HEROES.find(x => x.name === '赵嫣')!).profile.pack).toBe('荟萃-才子佳人');
   });
 
   test('最后两名（吕玲绮、宣公主）已实装、解除 pending，且带真实 pack', () => {
