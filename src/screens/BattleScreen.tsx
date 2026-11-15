@@ -41,6 +41,8 @@ import type { UiRegion, BgmPref } from '../components/game/GameTopBar';
  */
 export interface BattleScreenProps {
   battleIntro: { id: number; names: string[]; meIndex: number } | null;
+  /** 操作被规则拦下时的醒目提示（战况侧栏常被收起，只写日志等于没反馈） */
+  blockedHint: { text: string; id: number } | null;
   onIntroDone: () => void;
   DECISION_SECONDS: 20;
   SKILL_CHOICE_SECONDS: 30;
@@ -284,6 +286,14 @@ export const BattleScreen: React.FC<BattleScreenProps> = (props) => {
         <div key={`phase-${props.phaseBanner.id}`} className="phase-banner" aria-live="polite">
           <span className="phase-banner-text">{props.phaseBanner.text}</span>
           <span className="phase-banner-sub">{props.phaseBanner.sub}</span>
+        </div>
+      )}
+      {/* 操作被拦：贴在玩家正在操作的下半屏，侧栏收起时也能看见。
+          pointer-events-none —— 它是解释，不是新的一次拦截，不能挡住点击。 */}
+      {props.blockedHint && (
+        <div key={props.blockedHint.id} className="blocked-hint" role="alert">
+          <span className="blocked-hint-mark" aria-hidden="true">✕</span>
+          <span className="blocked-hint-text">{props.blockedHint.text}</span>
         </div>
       )}
       {props.damageNumber && (

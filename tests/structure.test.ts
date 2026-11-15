@@ -108,10 +108,13 @@ describe('.tsx 文件行数体检', () => {
 });
 
 describe('定时器与 effect 清理体检（只报告）', () => {
-  test('setTimeout / setInterval 调用点统计为真实数字（架构重构后实测 89 / 6）', () => {
-    expect(timers.setTimeout).toBe(90);
+  // 定时器调用点快照。数字随功能增减是正常的，改动时同步这里即可；
+  // 标题不再写死数字（此前写「实测 89」而断言是 90，两处早就对不上）。
+  test('setTimeout / setInterval 调用点统计为真实数字', () => {
+    // blocked-hint 自动隐藏 +1 setTimeout、+2 clearTimeout（提问处与卸载各一次）
+    expect(timers.setTimeout).toBe(91);
     expect(timers.setInterval).toBe(6);
-    expect(timers.clearTimeout).toBe(12);
+    expect(timers.clearTimeout).toBe(14);
     expect(timers.clearInterval).toBe(7);
   });
 

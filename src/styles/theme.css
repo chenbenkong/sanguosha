@@ -3213,6 +3213,67 @@ a:focus-visible {
   animation: phaseBannerIn 0.76s ease-out both;
   white-space: nowrap;
 }
+/* 操作被拦的醒目提示：暖红描边 + 轻微横向抖动，落在下半屏（玩家正在点的位置）。
+   战况侧栏常被收起，只写日志等于没告诉玩家「为什么点不动」，所以这里独立成一层。 */
+.blocked-hint {
+  position: fixed;
+  left: 50%;
+  bottom: clamp(180px, 26vh, 300px);
+  transform: translateX(-50%);
+  z-index: 90;
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: min(560px, 86vw);
+  padding: 8px 16px;
+  border-radius: 10px;
+  background: linear-gradient(180deg, rgba(38, 16, 12, 0.94) 0%, rgba(24, 11, 9, 0.92) 100%);
+  border: 1px solid rgba(214, 106, 84, 0.62);
+  box-shadow: 0 8px 26px rgba(0, 0, 0, 0.5), inset 0 0 18px rgba(214, 106, 84, 0.1);
+  animation: blockedHintIn 0.34s cubic-bezier(0.22, 0.9, 0.3, 1) both;
+}
+.theme-light .blocked-hint {
+  background: linear-gradient(180deg, rgba(250, 236, 230, 0.97) 0%, rgba(244, 226, 218, 0.97) 100%);
+  border-color: rgba(158, 43, 37, 0.55);
+  box-shadow: 0 6px 20px rgba(120, 60, 40, 0.22);
+}
+.blocked-hint-mark {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 800;
+  color: #ffd9c9;
+  background: rgba(158, 43, 37, 0.85);
+}
+.theme-light .blocked-hint-mark { color: #fff2ec; }
+.blocked-hint-text {
+  font-size: 14px;
+  line-height: 1.5;
+  letter-spacing: 0.04em;
+  color: #f6dccd;
+}
+.theme-light .blocked-hint-text { color: #7a2f26; }
+@keyframes blockedHintIn {
+  0% { opacity: 0; transform: translateX(-50%) translateY(10px) scale(0.96); }
+  55% { opacity: 1; transform: translateX(-50%) translateY(-3px) scale(1.015); }
+  75% { transform: translateX(-52%) translateY(0) scale(1); }
+  100% { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); }
+}
+/* 减弱动效：只淡入淡出，不做抖动位移 */
+[data-motion="off"] .blocked-hint { animation: none; }
+@media (prefers-reduced-motion: reduce) {
+  .blocked-hint { animation: none; }
+}
+@media (max-width: 640px) {
+  .blocked-hint { bottom: clamp(150px, 22vh, 240px); font-size: 13px; }
+}
+
 .phase-banner-text {
   font-family: 'Ma Shan Zheng', 'STKaiti', 'KaiTi', serif;
   font-size: 19px;

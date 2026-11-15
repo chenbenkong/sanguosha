@@ -642,6 +642,11 @@ const App: React.FC = () => {
   const [aiThinkingId, setAiThinkingId] = useState<number | null>(null);
   // 回合过场：上一位回合结束 → 轮到下一位（换手节奏）
   const [turnPass, setTurnPass] = useState<{ from: string, to: string, id: number } | null>(null);
+  // 操作被拦的醒目提示：战况记录侧栏常被收起，只写日志等于没告诉玩家为什么点不动
+  const [blockedHint, setBlockedHint] = useState<{ text: string, id: number } | null>(null);
+  const blockedHintTimerRef = useRef<number | null>(null);
+  // 自增序号而不是 Date.now()：连点两次可能落在同一毫秒，key 不变就不会重播动画
+  const blockedHintSeqRef = useRef(0);
 
   // 弃牌堆查看器
   const [showDiscardViewer, setShowDiscardViewer] = useState<boolean>(false);
@@ -1136,6 +1141,25 @@ const App: React.FC = () => {
       return true;
     },
   });
+
+  /**
+   * 「玩家的操作被规则拦下了」—— 同时做三件事：
+   *   1) 记一条 warning 日志（留档，展开侧栏能回看）
+   *   2) 弹一个居中的醒目浮层（侧栏收起时也能看到，这才是玩家此刻需要的反馈）
+   *   3) 由调用点自己 return，不改结算流程
+   */
+  const hintBlocked = useCallback((text: string) => {
+    addLog(text, "warning");
+    blockedHintSeqRef.current += 1;
+    setBlockedHint({ text, id: blockedHintSeqRef.current });
+    if (blockedHintTimerRef.current !== null) window.clearTimeout(blockedHintTimerRef.current);
+    blockedHintTimerRef.current = window.setTimeout(() => setBlockedHint(null), 2400);
+  }, [addLog]);
+
+  // 卸载时清掉待触发的隐藏定时器，避免离开对局后还回调 setState
+  useEffect(() => () => {
+    if (blockedHintTimerRef.current !== null) window.clearTimeout(blockedHintTimerRef.current);
+  }, []);
 
   /** 装备栏中文名（废除栏位的提示与日志用） */
   const SLOT_CN: Record<EquipmentSlot, string> = {
@@ -4883,7 +4907,7 @@ const App: React.FC = () => {
     
     // 如果处于濒死求桃状态，禁止通过常规点击出牌（只能通过弹窗操作）
     if (dyingState) {
-      addLog("处于濒死求桃状态，请先处理救援请求", 'warning');
+      hintBlocked("处于濒死求桃状态，请先处理救援请求");
       setTimeout(() => { clickGuard.current = false; }, 200);
       return;
     }
@@ -4915,7 +4939,7 @@ const App: React.FC = () => {
 
       // 董白「黠慧」：体力未减少时，从董白处获得的黑色牌不能打出
       if (card && xiaohuiLocked(me.id, card.id)) {
-        addLog(`「黠慧」：你获得的黑色牌【${card.name}】在体力减少前不能打出`, 'warning');
+        hintBlocked(`「黠慧」：你获得的黑色牌【${card.name}】在体力减少前不能打出`);
         setTimeout(() => { clickGuard.current = false; }, 120);
         return;
       }
@@ -5007,7 +5031,7 @@ const App: React.FC = () => {
         } else if (selectedCardIds.length < 2) {
           setSelectedCardIds(prev => [...prev, card.id]);
         } else {
-          addLog('丈八蛇矛只能选两张手牌', 'warning');
+          hintBlocked('丈八蛇矛只能选两张手牌');
         }
         setTimeout(() => { clickGuard.current = false; }, 150);
         return;
@@ -5151,7 +5175,7 @@ const App: React.FC = () => {
       } else {
         // 无懈可击不能主动使用：仅提示，不进入选择
         if (card.name === CardName.WUXIE) {
-          addLog('【无懈可击】只能在你或队友被锦囊牌指定时打出响应', 'warning');
+          hintBlocked('【无懈可击】只能在你或队友被锦囊牌指定时打出响应');
           setTimeout(() => { clickGuard.current = false; }, 200);
           return;
         }
@@ -5623,7 +5647,7 @@ const App: React.FC = () => {
         return;
       }
       if (!canReach(meZ, target)) {
-        addLog(`【${target.hero.name}】超出攻击范围，无法对其使用【杀】`, 'warning');
+        hintBlocked(`【${target.hero.name}】超出攻击范围，无法对其使用【杀】`);
         setTimeout(() => { clickGuard.current = false; }, 200);
         return;
       }
@@ -5728,7 +5752,7 @@ const App: React.FC = () => {
         return;
       }
       if (target.hp >= target.maxHp) {
-        addLog(`${target.hero.name} 体力已满，无需使用「青囊」`, 'warning');
+        hintBlocked(`${target.hero.name} 体力已满，无需使用「青囊」`);
         setTimeout(() => { clickGuard.current = false; }, 200);
         return;
       }
@@ -5770,7 +5794,7 @@ const App: React.FC = () => {
           }
         }
       } else {
-        addLog('「安恤」最多选择两名角色', 'warning');
+        hintBlocked('「安恤」最多选择两名角色');
       }
       setTimeout(() => { clickGuard.current = false; }, 200);
       return;
@@ -5785,19 +5809,19 @@ const App: React.FC = () => {
         return;
       }
       if (target.id === meL.id) {
-        addLog('「激将」不能对自己使用，请选择其他角色', 'warning');
+        hintBlocked('「激将」不能对自己使用，请选择其他角色');
         setTimeout(() => { clickGuard.current = false; }, 200);
         return;
       }
       const reach = getAttackRange(meL);
       const dist = getDistance(meL.id, target.id);
       if (dist > reach) {
-        addLog(`距离不足：你与 ${target.hero.name} 距离 ${dist}，攻击范围 ${reach}`, 'warning');
+        hintBlocked(`距离不足：你与 ${target.hero.name} 距离 ${dist}，攻击范围 ${reach}`);
         setTimeout(() => { clickGuard.current = false; }, 200);
         return;
       }
       if (!canPlaySlash(meL)) {
-        addLog('本回合使用的【杀】已达到上限，无法再发动「激将」', 'warning');
+        hintBlocked('本回合使用的【杀】已达到上限，无法再发动「激将」');
         setIsJijiangMode(false);
         setTimeout(() => { clickGuard.current = false; }, 200);
         return;
@@ -5806,7 +5830,7 @@ const App: React.FC = () => {
         !p.isDead && p.id !== meL.id && p.hero.kingdom === meL.hero.kingdom
         && p.hand.some(c => c.name === CardName.SHA));
       if (!helper) {
-        addLog('没有其他蜀势力角色可以打出【杀】，「激将」无效', 'warning');
+        hintBlocked('没有其他蜀势力角色可以打出【杀】，「激将」无效');
         setIsJijiangMode(false);
         setTimeout(() => { clickGuard.current = false; }, 200);
         return;
@@ -5837,7 +5861,7 @@ const App: React.FC = () => {
         return;
       }
       if (target.id === meQ.id) {
-        addLog('「奇袭」不能对自己使用，请选择其他角色', 'warning');
+        hintBlocked('「奇袭」不能对自己使用，请选择其他角色');
         setTimeout(() => { clickGuard.current = false; }, 200);
         return;
       }
@@ -5864,17 +5888,17 @@ const App: React.FC = () => {
       const target = players.find(p => p.id === targetId);
       if (!target || target.isDead || target.id === meJ.id) return;
       if (target.hero.gender !== 'male') {
-        addLog(`【${target.hero.name}】不是男性角色，无法结姻`, 'warning');
+        hintBlocked(`【${target.hero.name}】不是男性角色，无法结姻`);
         setTimeout(() => { clickGuard.current = false; }, 200);
         return;
       }
       if (target.hp >= target.maxHp) {
-        addLog(`【${target.hero.name}】未受伤，无法结姻`, 'warning');
+        hintBlocked(`【${target.hero.name}】未受伤，无法结姻`);
         setTimeout(() => { clickGuard.current = false; }, 200);
         return;
       }
       if (meJ.hand.length < 2) {
-        addLog('「结姻」需要弃置两张手牌', 'warning');
+        hintBlocked('「结姻」需要弃置两张手牌');
         setIsJieyinMode(false);
         setTimeout(() => { clickGuard.current = false; }, 200);
         return;
@@ -5903,14 +5927,14 @@ const App: React.FC = () => {
       
       // 检查是否已经是男性角色
       if (target.hero.gender !== 'male') {
-        addLog(`${target.hero.name} 不是男性角色，无法作为离间目标`, 'warning');
+        hintBlocked(`${target.hero.name} 不是男性角色，无法作为离间目标`);
         setTimeout(() => { clickGuard.current = false; }, 200);
         return;
       }
       
       // 不能选择自己
       if (target.id === me.id) {
-        addLog(`不能选择自己作为离间目标`, 'warning');
+        hintBlocked(`不能选择自己作为离间目标`);
         setTimeout(() => { clickGuard.current = false; }, 200);
         return;
       }
@@ -5958,7 +5982,7 @@ const App: React.FC = () => {
       
       // 不能选择自己
       if (target.id === me.id) {
-        addLog(`不能选择自己作为仁德目标`, 'warning');
+        hintBlocked(`不能选择自己作为仁德目标`);
         setTimeout(() => { clickGuard.current = false; }, 200);
         return;
       }
@@ -5980,7 +6004,7 @@ const App: React.FC = () => {
     if (!target || !card || target.isDead) return;
     // 董白「黠慧」：体力未减少时，获得的黑色牌不能使用
     if (xiaohuiLocked(me.id, card.id)) {
-      addLog(`【黠慧】你获得的黑色牌【${card.name}】在体力减少前不能使用`, 'warning');
+      hintBlocked(`【黠慧】你获得的黑色牌【${card.name}】在体力减少前不能使用`);
       setTimeout(() => { clickGuard.current = false; }, 200);
       return;
     }
@@ -5988,7 +6012,7 @@ const App: React.FC = () => {
     {
       const zx = zhixiRef.current;
       if (zx && zx.id === me.id && zx.used >= zx.limit) {
-        addLog(`【止息】你本回合至多使用 ${zx.limit} 张牌，已达上限`, 'warning');
+        hintBlocked(`【止息】你本回合至多使用 ${zx.limit} 张牌，已达上限`);
         setTimeout(() => { clickGuard.current = false; }, 200);
         return;
       }
@@ -5997,7 +6021,7 @@ const App: React.FC = () => {
     // 通用目标合法性钩子：伤害牌的目标可能被技能禁止（花鬘「芳踪」等）
     const vetoReason = getTargetLegalityVeto(me, target, card);
     if (vetoReason) {
-      addLog(`【${vetoReason}】不能指定 ${target.hero.name} 为目标`, 'warning');
+      hintBlocked(`【${vetoReason}】不能指定 ${target.hero.name} 为目标`);
       setTimeout(() => { clickGuard.current = false; }, 200);
       return;
     }
@@ -6007,7 +6031,7 @@ const App: React.FC = () => {
       const dist = getDistance(me.id, target.id);
       if (dist > 1 && me.hero.name !== '黄月英'
           && !(me.hero.name === '王元姬' && me.qianchongType === 'trick')) {
-        addLog(`【${card.name}】只能对距离为1的角色使用（当前距离 ${dist}）`, 'warning');
+        hintBlocked(`【${card.name}】只能对距离为1的角色使用（当前距离 ${dist}）`);
         setTimeout(() => { clickGuard.current = false; }, 200);
         return;
       }
@@ -6024,14 +6048,14 @@ const App: React.FC = () => {
         && rankValue(card.rank) < qiangwuPointRef.current;
       const qianchongLong = me.hero.name === '王元姬' && me.qianchongType === 'basic';
       if (dist > reach && !qiangwuLong && !qianchongLong) {
-        addLog(`距离不足：你与 ${target.hero.name} 距离 ${dist}，攻击范围 ${reach}`, 'warning');
+        hintBlocked(`距离不足：你与 ${target.hero.name} 距离 ${dist}，攻击范围 ${reach}`);
         setTimeout(() => { clickGuard.current = false; }, 200);
         return;
       }
       if (!canPlaySlash(me, card)) {
-        addLog(mumuNoSlashRef.current === me.id
+        hintBlocked(mumuNoSlashRef.current === me.id
           ? '「穆穆」：本回合已获得防具牌，不能使用【杀】'
-          : '出牌阶段只能使用一张【杀】（诸葛连弩 / 张飞「咆哮」不限；张星彩「枪舞」可让大点数【杀】不计次数）', 'warning');
+          : '出牌阶段只能使用一张【杀】（诸葛连弩 / 张飞「咆哮」不限；张星彩「枪舞」可让大点数【杀】不计次数）');
         setTimeout(() => { clickGuard.current = false; }, 200);
         return;
       }
@@ -6042,12 +6066,12 @@ const App: React.FC = () => {
       // 第一步：选择有武器的角色（不能是自己）
       if (!jiedaoWeaponTarget) {
         if (target.id === me.id) {
-          addLog(`不能选择自己作为借刀杀人的目标`, 'warning');
+          hintBlocked(`不能选择自己作为借刀杀人的目标`);
           setTimeout(() => { clickGuard.current = false; }, 200);
           return;
         }
         if (!target.equipment?.weapon) {
-          addLog(`【${target.hero.name}】装备区没有武器，无法成为借刀目标`, 'warning');
+          hintBlocked(`【${target.hero.name}】装备区没有武器，无法成为借刀目标`);
           setTimeout(() => { clickGuard.current = false; }, 200);
           return;
         }
@@ -6060,7 +6084,7 @@ const App: React.FC = () => {
       // 第二步：选择被攻击的角色（不能是借刀目标自己）
       if (jiedaoWeaponTarget && !jiedaoVictimTarget) {
         if (target.id === jiedaoWeaponTarget) {
-          addLog(`不能选择同一名角色，请选择另一名角色`, 'warning');
+          hintBlocked(`不能选择同一名角色，请选择另一名角色`);
           setTimeout(() => { clickGuard.current = false; }, 200);
           return;
         }
@@ -6120,7 +6144,7 @@ const App: React.FC = () => {
     // 伏皇后「惴恐」获胜：本回合使用牌不能选择除自己以外的角色为目标
     if (doutuSelfOnlyRef.current === me.id && target.id !== me.id
         && card.name !== CardName.TAO && card.name !== CardName.JIU) {
-      addLog(`${me.hero.name} 受「惴恐」影响，本回合不能选择其他角色为目标`, 'warning');
+      hintBlocked(`${me.hero.name} 受「惴恐」影响，本回合不能选择其他角色为目标`);
       setTimeout(() => { clickGuard.current = false; }, 200);
       return;
     }
@@ -8058,6 +8082,7 @@ const App: React.FC = () => {
     layoutDensity,
     lijianSelectedCardId,
     lijianSelectedTargets,
+    blockedHint,
     logCollapsed,
     logs,
     me,
