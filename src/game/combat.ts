@@ -283,7 +283,7 @@ export const createCombatEngine = (deps: CombatDeps): CombatEngine => {
  * 双锐的【杀】不可被响应，同一角色下一张普通的【杀】不受影响。
  * 用牌 id 做键的既有先例是马云禄「凤魄」的 fengpoBoostRef。
  */
-const cardMods = new Map<string, { noResponse?: boolean; damageBonus?: number }>();
+const cardMods = new Map<string, { noResponse?: boolean; damageBonus?: number; ignoreSlashLimit?: boolean }>();
 
 /** 虚拟牌的自增序号：同一毫秒内连发两张同名虚拟牌时也要能区分 */
 let virtualCardSeq = 0;
@@ -338,8 +338,10 @@ const useCardAs = async (
     };
   }
 
-  if (opts.noResponse || opts.damageBonus) {
-    cardMods.set(card.id, { noResponse: opts.noResponse, damageBonus: opts.damageBonus });
+  if (opts.noResponse || opts.damageBonus || opts.ignoreSlashLimit) {
+    cardMods.set(card.id, {
+      noResponse: opts.noResponse, damageBonus: opts.damageBonus, ignoreSlashLimit: opts.ignoreSlashLimit,
+    });
   }
   addLog(
     '【虚拟牌】' + actor.hero.name + ' 视为使用'
@@ -931,7 +933,10 @@ const skillDeps = (): DispatchDeps => ({
     // SHA（基本牌，不可被无懈可击响应）
     if (card.name === CardName.SHA) {
       playCard(source.id, card);
-      slashUsageRef.current[source.id] = (slashUsageRef.current[source.id] ?? 0) + 1;
+      // 「不计入次数」的【杀】（☆ 狩星 / 花火 / 锦绘）不递增本回合计数
+      if (!cardMods.get(card.id)?.ignoreSlashLimit) {
+        slashUsageRef.current[source.id] = (slashUsageRef.current[source.id] ?? 0) + 1;
+      }
 
       // 朱雀羽扇：你可以将一张普通【杀】当火【杀】使用。
       // 人类：本回合首张普通【杀】弹窗询问，选择记住本回合；AI：目标有藤甲才转火。

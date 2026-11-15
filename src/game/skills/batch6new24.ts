@@ -21,9 +21,8 @@ import type { Card, Player } from '../../../types';
  * 牌面元数据（目标数 / 是否伤害牌）引擎没有公开表，所以这里用白名单表达；
  * 新增卡牌若符合条件需要同步加进来（这是数据决定，不是实现取舍）。
  *
- * 一处已知缺口：「次数限制」这一半（「无距离与次数限制」）无法表达 ——
- * 【杀】次数记在 App.tsx 的 slashUsageRef 里，ctx 没有入口。与黄舞蝶「☆ 狩星」
- * 同一个缺口。
+ * 「无距离与次数限制」两半**都已实装**：useCardAs 的 ignoreDistance +
+ * ignoreSlashLimit（后者本轮补，见 registry.ts 注释）。
  */
 
 /** 默认目标为自己，使用时不需要另外指定目标 */
@@ -65,6 +64,8 @@ const useFromHero = async (ctx: SkillContext, card: Card, userId: number): Promi
   await ctx.useCardAs(card, targets, {
     asPlayerId: userId,
     ignoreDistance: true,
+    // 原文「因此使用的牌无距离与次数限制」
+    ignoreSlashLimit: true,
     reason: '锦绘',
   });
 };

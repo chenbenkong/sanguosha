@@ -20,9 +20,9 @@ import type { Player } from '../../../types';
  *           X为其攻击范围且至多为5）。
  *
  * 已知取舍（写在这里而不是埋在代码里）：
- * · 「不计入次数」（☆ 狩星）：引擎的【杀】次数记在 App.tsx 的 slashUsageRef 里，
- *   ctx 没有对应入口，所以这一次【杀】仍会占用正常次数。这是**规则差异**，
- *   不是实现省略 —— 需要给 ctx 补一个「本次用牌不计入次数」的标记才能真正对齐。
+ * · 「不计入次数」（☆ 狩星）**本轮已补**：useCardAs 的 ignoreSlashLimit 让这一次
+ *   【杀】不递增 slashUsageRef（combat.ts 的【杀】分支消费）。此前它占用正常次数，
+ *   是规则差异；现在对齐。
  * · 「本回合获得技能」：注册表是按**武将名**派发的，所以唯一的门闸是技能自己在
  *   入口处查 ctx.hasGrantedSkill（「☆ 狩星」已按此实现）。同组的「☆ 铩雪」
  *   （batch6new.ts）是更早写的、没有这个门闸 —— 因为黄舞蝶目前 pending 不可选、
@@ -151,7 +151,7 @@ registerSkill({
       ctx.banner();
       ctx.discard(ctx.self.id, cost);
       ctx.log(`【☆ 狩星】${ctx.self.hero.name} 将 ${cost.map(c => `【${c.name}】`).join('')} 当【杀】对 ${target.hero.name} 使用（距离 ${x}）`);
-      await ctx.useCardAs(CardName.SHA, [targetId], { ignoreDistance: true, reason: '☆ 狩星' });
+      await ctx.useCardAs(CardName.SHA, [targetId], { ignoreDistance: true, ignoreSlashLimit: true, reason: '☆ 狩星' });
     },
   },
 });

@@ -49,6 +49,8 @@ interface Trial {
   lock: () => number;
   logs: string[];
   players: () => Player[];
+  /** 本回合【杀】使用计数（slashUsageRef 的读数）—— 验证「不计入次数」用 */
+  slashCount: (id: number) => number;
 }
 
 type Roster = Array<{ name: string; id: number; hp?: number }>;
@@ -84,6 +86,8 @@ const buildTrial = (roster: Roster): Trial => {
   const logs: string[] = [];
   const lock = { value: 0 };
   const ref = <T,>(initial: T) => ({ current: initial });
+  // 【杀】次数单独拿出来：既注入 deps，也暴露给断言（验证 ignoreSlashLimit 不递增）
+  const slashRef = ref<Record<number, number>>({});
   const noop = () => {};
   const asyncNoop = async () => {};
 
@@ -180,7 +184,7 @@ const buildTrial = (roster: Roster): Trial => {
     showSkillBanner: noop,
     shuanghuaiUsedRef: ref(false),
     skillsOn: () => true,
-    slashUsageRef: ref({}),
+    slashUsageRef: slashRef,
     spawnCardFlight: noop,
     timeoutIdRef: ref(null),
     triggerBeige: asyncNoop,
@@ -209,6 +213,7 @@ const buildTrial = (roster: Roster): Trial => {
     lock: () => lock.value,
     logs,
     players: () => players,
+    slashCount: (id) => slashRef.current[id] ?? 0,
   };
   probeLock.trial = trial;
   return trial;
@@ -432,6 +437,27 @@ describe('useCardAs 在真实引擎里结算', () => {
     const t = buildTrial([{ name: '甲', id: 0 }, { name: '乙', id: 1, hp: 5 }]);
     await t.engine.useCardAs(0, CardName.SHA, [1], { damageBonus: 1 });
     expect(t.hp(1)).toBe(3);
+  });
+
+  it('虚拟【杀】默认计入本回合【杀】次数', async () => {
+    const t = buildTrial([{ name: '甲', id: 0 }, { name: '乙', id: 1, hp: 6 }]);
+    await t.engine.useCardAs(0, CardName.SHA, [1]);
+    expect(t.slashCount(0)).toBe(1);
+  });
+
+  it('ignoreSlashLimit：☆ 狩星 / 花火 / 锦绘 的【杀】不占用本回合次数', async () => {
+    const t = buildTrial([{ name: '甲', id: 0 }, { name: '乙', id: 1, hp: 8 }]);
+    await t.engine.useCardAs(0, CardName.SHA, [1], { ignoreSlashLimit: true, reason: '测试·狩星' });
+    expect(t.slashCount(0)).toBe(0);
+    // 伤害仍然照常落地 —— 「不计次数」不是「不结算」
+    expect(t.hp(1)).toBe(7);
+    // 连发三次都不计数
+    await t.engine.useCardAs(0, CardName.SHA, [1], { ignoreSlashLimit: true });
+    await t.engine.useCardAs(0, CardName.SHA, [1], { ignoreSlashLimit: true });
+    expect(t.slashCount(0)).toBe(0);
+    // 同一个人用一张普通【杀】仍然计数：说明关掉的是这一次，不是整个通道
+    await t.engine.useCardAs(0, CardName.SHA, [1]);
+    expect(t.slashCount(0)).toBe(1);
   });
 
   it('damageBonus 只作用于这一张牌（同一使用者下一张普通【杀】仍是 1 点）', async () => {

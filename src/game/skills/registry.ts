@@ -32,6 +32,16 @@ export interface UseCardAsOptions {
   noResponse?: boolean;
   /** 此牌造成的伤害 +N（黄舞蝶「双锐」） */
   damageBonus?: number;
+  /**
+   * 此【杀】不计入本回合的【杀】使用次数（黄舞蝶「☆ 狩星」、马伶俐「花火」、
+   * 赵嫣「锦绘」原文都写了「无次数限制」）。
+   *
+   * 为什么需要引擎原语而不是技能自己记账：【杀】次数记在 App.tsx 的 slashUsageRef，
+   * 由 combat.ts 的 resolveCardEffect 在【杀】分支里递增，并由 rules.ts 的
+   * canPlaySlashByRules 读取判定 —— 技能侧既读不到也不该绕过判定去自己减一次。
+   * 所以这里是「这一次结算不递增计数」，而不是「把已经用掉的一次还回来」。
+   */
+  ignoreSlashLimit?: boolean;
   /** 战报与牌面描述 */
   reason?: string;
 }
