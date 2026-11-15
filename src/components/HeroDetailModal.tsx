@@ -141,7 +141,7 @@ export const HeroDetailModal: React.FC<HeroDetailModalProps> = ({ hero, player, 
       aria-label={`${hero.name} 武将详情`}
     >
       <div
-        className="modal-shell w-full md:max-w-4xl lg:max-w-5xl h-full md:h-auto md:max-h-[88vh] rounded-none md:rounded-2xl flex flex-col overflow-hidden"
+        className="modal-shell w-full md:max-w-5xl lg:max-w-6xl h-full md:h-auto md:max-h-[88vh] rounded-none md:rounded-2xl flex flex-col overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
         {/* 头部：名字 + 势力 / 体力 / 包标签 */}
@@ -250,9 +250,18 @@ export const HeroDetailModal: React.FC<HeroDetailModalProps> = ({ hero, player, 
             </div>
           )}
 
-          <div className="flex flex-col md:flex-row gap-4 md:gap-6">
-            {/* 2:3 立绘 + 放大 */}
-            <div className="flex-none w-full md:w-[300px] lg:w-[340px]">
+          {/* 正文分栏：md 两栏、lg 起三栏。
+              改动前是「立绘 + 技能列」两栏，传记（56~705 字）和实战提示都压在技能列下方，
+              正文高度 = 技能总高 + 传记 + 提示 三者**相加**，所以又长又要一直往下拖。
+              现在把传记/提示拆成独立右栏，lg 上它们与技能列表**并排**，正文高度变成三者取最大。
+              中栏的技能列表保持单列、没有再对半分成两列：lg 起步时弹层被视口卡在 ~976px，中栏只剩
+              ~348px（与改动前 md 的宽度相当，见下方列宽），再对半分会把技能名、类型标签挤成碎行。
+              列宽按断点分级——lg 用 240px 的窄右栏换中栏宽度，xl 起弹层吃满 max-w-6xl、立绘增到
+              340px，右栏再放到 320px，让最长的传记也多换几行。 */}
+          <div className="grid grid-cols-1 items-start gap-4 md:grid-cols-[300px_minmax(0,1fr)] md:gap-6 lg:grid-cols-[300px_minmax(0,1fr)_240px] lg:gap-5 xl:grid-cols-[340px_minmax(0,1fr)_320px]">
+            {/* 2:3 立绘 + 放大：宽度交给栅格列，内部容器仍锁 aspect-[2/3]，
+                否则 Card3DViewer 拿不到尺寸就画不出画面 */}
+            <div className="min-w-0 w-full">
               <button
                 onClick={() => onZoom?.(hero)}
                 className="relative block w-full rounded-lg overflow-hidden border border-[#c8a45c]/50 hover:border-[#f0d894] transition-colors group"
@@ -303,8 +312,8 @@ export const HeroDetailModal: React.FC<HeroDetailModalProps> = ({ hero, player, 
               </div>
             </div>
 
-            {/* 技能列表 */}
-            <div className="min-w-0 flex-1 flex flex-col gap-3">
+            {/* 技能列表：md 是右栏、lg 起是中栏，始终单列 */}
+            <div className="min-w-0 flex flex-col gap-3">
               {skills.map((s, idx) => (
                 <div key={`${s.name}-${idx}`} className="rounded-lg border border-[#8b7355]/35 bg-[#1a1410]/70 p-3 md:p-4">
                   <div className="flex items-center gap-2 flex-wrap">
@@ -353,7 +362,14 @@ export const HeroDetailModal: React.FC<HeroDetailModalProps> = ({ hero, player, 
                   )}
                 </div>
               ))}
+            </div>
 
+            {/* 第三栏：传记 + 实战提示。
+                这两块原本接在技能列表下方，是弹窗「纵向拉扯」的主要来源——技能多时它们被顶到很远。
+                拆成独立一栏后，lg 上技能与传记并排读，正文高度从「三者相加」变成「三者取最大」。
+                md 用 col-start-2 让它们仍落在右栏技能列表下方，与改动前完全一致；
+                小于 md 时栅格退化成单列，DOM 顺序就是阅读顺序，移动端行为不变。 */}
+            <div className="min-w-0 flex flex-col gap-3 md:col-start-2 lg:col-start-3">
               {/* 传记：官方文案，长度 56~705 字。不截断、不做二次滚动容器，
                   交给弹层正文那一个滚动容器（flex-1 min-h-0 overflow-y-auto）消化，
                   break-words 兜住无空格长串，保证窄屏也不出现横向溢出。 */}

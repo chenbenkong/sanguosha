@@ -1,4 +1,5 @@
 import React from 'react';
+import { getHeroDetail } from '../../game/heroDetail';
 import { Player, Identity } from '../../../types';
 import { EQUIP_META } from '../../../constants';
 
@@ -72,15 +73,18 @@ export const PlayerInspectModal: React.FC<{
           </div>
         </div>
 
-        <div className="bg-gradient-to-r from-[rgba(var(--gold-rgb)/0.18)] to-transparent p-4 rounded-lg border-l-4 border-[var(--gold)] mb-4">
-          <h5 className="text-xl font-bold text-[var(--gold)] mb-2 font-ancient">【{p.hero.skillName}】</h5>
-          <p className="text-stone-300 leading-relaxed text-sm">{p.hero.skillDesc}</p>
-          {p.hero.lordSkillName && (
-            <div className="mt-3 pt-3 border-t border-[var(--line-soft)]">
-              <div className="text-base font-bold text-[var(--gold-strong)] mb-1 font-ancient">主公技【{p.hero.lordSkillName}】</div>
-              <p className="text-stone-300 leading-relaxed text-sm">{p.hero.lordSkillDesc}</p>
+        {/* 逐技能分块：以前是「【青囊 / 急救】+ 整段 skillDesc」连排，
+            两个技能的规则文本首尾相接，读不出边界（华佗这类双技能将尤其乱）。 */}
+        <div className="bg-gradient-to-r from-[rgba(var(--gold-rgb)/0.18)] to-transparent p-4 rounded-lg border-l-4 border-[var(--gold)] mb-4 space-y-3">
+          {getHeroDetail(p.hero).skills.map(s => (
+            <div key={s.name} className={s.isLord ? 'pt-3 border-t border-[var(--line-soft)]' : ''}>
+              <div className="flex items-center gap-2 flex-wrap mb-1">
+                <span className="text-xl font-bold text-[var(--gold)] font-ancient">【{s.name}】</span>
+                {s.isLord && <span className="text-[10px] text-stone-400">（仅主公身份生效）</span>}
+              </div>
+              <p className="text-stone-300 leading-relaxed text-sm">{s.desc}</p>
             </div>
-          )}
+          ))}
         </div>
 
         <div className="bg-[rgba(var(--gold-rgb)/0.05)] p-4 rounded-lg border border-[var(--line-soft)] text-sm space-y-2.5">

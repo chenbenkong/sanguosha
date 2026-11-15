@@ -1,6 +1,7 @@
 import React from 'react';
 import { Player, CardName, CardType, Suit } from '../../../types';
 import CardComponent from '../../../components/CardComponent';
+import { getHeroDetail } from '../../game/heroDetail';
 
 const KINGDOM_BADGE: Record<string, string> = {
   魏: 'bg-blue-900/60 text-blue-200',
@@ -78,15 +79,18 @@ export const SkillInfoModal: React.FC<{
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div className="space-y-4">
-            <div className="bg-gradient-to-r from-[rgba(var(--gold-rgb)/0.18)] to-transparent p-4 rounded-lg border-l-4 border-[var(--gold)]">
-              <h5 className="text-xl font-bold text-[var(--gold)] mb-2 font-ancient">【{me.hero.skillName}】</h5>
-              <p className="text-stone-300 leading-relaxed">{me.hero.skillDesc}</p>
-              {me.hero.lordSkillName && (
-                <div className="mt-3 pt-3 border-t border-[var(--line-soft)]">
-                  <div className="text-base font-bold text-[var(--gold-strong)] mb-1 font-ancient">主公技【{me.hero.lordSkillName}】</div>
-                  <p className="text-stone-300 leading-relaxed">{me.hero.lordSkillDesc}</p>
+            {/* 逐技能分块：以前「【青囊 / 急救】+ 整段 skillDesc」连排，双技能将的
+                两段规则首尾相接，读不出边界（与对局内查看面板同一处缺陷）。 */}
+            <div className="bg-gradient-to-r from-[rgba(var(--gold-rgb)/0.18)] to-transparent p-4 rounded-lg border-l-4 border-[var(--gold)] space-y-3">
+              {getHeroDetail(me.hero).skills.map(s => (
+                <div key={s.name} className={s.isLord ? 'pt-3 border-t border-[var(--line-soft)]' : ''}>
+                  <div className="flex items-center gap-2 flex-wrap mb-1">
+                    <span className="text-xl font-bold text-[var(--gold)] font-ancient">【{s.name}】</span>
+                    {s.isLord && <span className="text-[10px] text-stone-400">（仅主公身份生效）</span>}
+                  </div>
+                  <p className="text-stone-300 leading-relaxed">{s.desc}</p>
                 </div>
-              )}
+              ))}
             </div>
 
             <div className="bg-[rgba(var(--gold-rgb)/0.05)] p-4 rounded-lg border border-[var(--line-soft)]">

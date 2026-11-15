@@ -11,7 +11,15 @@ const ROOT = path.resolve(__dirname, '..');
 const SKIP_DIRS = new Set(['node_modules', '.git', 'dist', 'coverage', 'tests']);
 
 function walk(dir: string, out: string[] = []): string[] {
-  for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+  let entries: import('node:fs').Dirent[];
+  // 不可读目录（ACL 损坏的产物目录、无权限的挂载点）不该让整个体检文件崩掉：
+  // 这是体检，不是断言本身。跳过并在下方由调用方决定要不要报。
+  try {
+    entries = fs.readdirSync(dir, { withFileTypes: true });
+  } catch {
+    return out;
+  }
+  for (const e of entries) {
     if (SKIP_DIRS.has(e.name)) continue;
     const p = path.join(dir, e.name);
     if (e.isDirectory()) walk(p, out);

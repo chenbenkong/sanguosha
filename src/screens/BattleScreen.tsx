@@ -486,7 +486,10 @@ export const BattleScreen: React.FC<BattleScreenProps> = (props) => {
       )}
 
       {/* Dying State Modal - Ask for Peaches - 最高优先级 */}
-      {props.dyingState && props.dyingState.isActive && (
+      {/* 阵亡后不再弹求桃窗：AI 决定救不救时会短暂挂起 dyingState（让活人看见
+          「AI 在思考」），那个窗对已阵亡的玩家毫无意义，只会挡住结算与观战。
+          濒死者本人不受影响 —— 他此刻 isDead 仍是 false（要等求桃失败才置真）。 */}
+      {props.dyingState && props.dyingState.isActive && !props.me.isDead && (
         <DyingModal
           me={props.me}
           victim={props.getPlayer(props.dyingState.victimId)}
