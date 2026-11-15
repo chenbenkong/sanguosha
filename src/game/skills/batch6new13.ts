@@ -41,19 +41,11 @@ import { CardName } from '../../../types';
  *   · 取消 / 读秒超时（kind 为 cancel 或 timeout）一律按「不发动」，与 App.tsx:1374 等
  *     既有调用点对 timeout 的口径一致。
  *
- * ── 未实装 1：狷急 选项 2（出牌阶段开始时，失去 1 点体力，然后视为对一名角色使用【杀】）
- * 缺两件原语：
- *   a) 「出牌阶段开始」没有钩子。SkillHooks（registry.ts:147-212）的 18 个钩子里，
- *      阶段边界只有 onTurnStart / onTurnEnd 与 drawPhaseBegin / discardPhaseSkip；
- *      出牌阶段开始时既没有独立钩子，也无法从别的时机区分（用 onTurnStart 近似
- *      不叫「出牌阶段开始」——判定阶段跳过出牌阶段时二者根本不同，故不做）。
- *   b) 「视为使用一张牌」没有入口。SkillContext 能改变牌局的动作只有 draw / discard /
- *      heal / damage / gainCard / peekDeck / deckTo / takeFromDeck / takeFromDiscard /
- *      changeMaxHp / loseHp，没有任何「使用某张牌」的入口；combat.ts 的
- *      resolveCardEffect 与 App.tsx 的 useCard 流程都没有向技能开放。
- *      注意「失去 1 点体力」本身已有原语（ctx.loseHp，registry.ts:90、combat.ts:308），
- *      卡住的只有「视为使用【杀】」这一半。
- * 需要补：SkillContext 增加「视为使用一张牌」的入口（以及出牌阶段开始的钩子）。
+ * ── 狷急 选项 2（出牌阶段开始时，失去 1 点体力，然后视为对一名角色使用【杀】）
+ * **已实装**（见下方 onPlayPhaseBegin）：当时缺的两件原语后来都补上了 ——
+ *   a) onPlayPhaseBegin 钩子（第六批补的出牌阶段时机）
+ *   b) ctx.useCardAs（视为使用一张牌，走完整结算）
+ * 「失去 1 点体力」用 ctx.loseHp。
  *
  * ── 未实装 2：狷急 选项 3（调整手牌至手牌上限，然后弃置一名角色区域内至多 2 张牌）
  * 缺「区域弃牌」与「当前手牌上限」两个读出口：

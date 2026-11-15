@@ -11,12 +11,14 @@ import type { SkillContext, DamageEvent } from './registry';
  *                   「每回合每项各限一次」用 onTurnStart 复位（与「铿锵」「俐影」同一做法）。
  *                   第 1 项（令一名其他角色本回合所有非锁定技失效）缺引擎能力，见下方说明。
  *
- * 未实装 5 个（逐条写明缺什么 API；它们继续留在 skillCoverage.test.ts 的 LEGACY_INLINE 里）：
- *   全惠解「慧淑」  缺「摸牌阶段结束」时机 + 弃牌堆访问
- *   全惠解「离宫」  缺「失去技能 / 获得技能」入口（且 changeMaxHp 在准备阶段未接线）
- *   柏灵筠「灵慧」  缺「使用一张牌」入口 + 牌堆顶可见性（onTurnEnd 站点未接线）
- *   曹金玉「隅泣」  peekDeck / takeFromDeck 在 afterDamage 站点未接线（逻辑本身可写）
- *   赵嫣  「锦绘」  缺「使用一张牌」入口 + 目标数元数据
+ * 以下 5 条**本组当时未实装，现已在他处补齐并注册**（此段保留作历史，勿再当作缺口）：
+ *   全惠解「慧淑」  → batch6new11（摸牌阶段结束时机 + 弃牌堆访问已到位）
+ *   全惠解「离宫」  → batch6new19（技能授予/失去入口 grantSkill/revokeSkill 已到位）
+ *   柏灵筠「灵慧」  → batch6new14（useCardAs + peekDeck/takeFromDeck 已到位）
+ *   曹金玉「隅泣」  → batch6new12（skillDeps 统一后 afterDamage 站点能力齐全）
+ *   赵嫣  「锦绘」  → batch6new24（useCardAs + 牌名去重取牌已到位）
+ * 当时「不写降级版本、退回并精确到缺口」的取舍是对的：这些技能在缺原语时确实会静默不触发。
+ * 原语后来逐项补上后，它们才在别的批次里正式落地。
  *
  * 取舍说明：注册表条目是「这一局里真的会发动」的承诺。一个 ctx 能力缺席时会**静默不触发**
  * 的技能（dispatch.ts:139-142 给缺席的可选能力配了退化成空数组的桩），比留在 LEGACY_INLINE
