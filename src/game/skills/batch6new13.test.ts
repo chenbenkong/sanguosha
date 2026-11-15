@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { makeHarness, mkPlayer } from './testHarness';
-import { dispatchDrawPhaseBegin } from './dispatch';
+import { dispatchDrawPhaseBegin, dispatchPlayPhaseBegin } from './dispatch';
 import { skillsOf } from './registry';
 import './batch6new13';
 
@@ -10,9 +10,13 @@ import './batch6new13';
  * 断言的是**规则**：谁触发、改成了几张、什么时候不发动、有没有自己偷偷摸牌。
  * 正例与反例成对——只测正例等于没测边界。
  *
- * 本组另外 4 条技能（任婉「纫霜」、曹华「归离」、滕公主「幸宠」「流年」）与狷急的
- * 选项 2/3 都缺引擎原语未实装，本文件不含它们的断言，只留一条「不得装上降级版」的守卫
- * （理由逐条写在 batch6new13.ts 的文件头）。
+ * 选项 2 的断言在本文件末尾（它此前长期零覆盖，因此「视为使用【杀】会打到自己」
+ * 这个缺陷一直没被拦住 —— 见那几条负例）。
+ *
+ * 注：本组当年退回的 纫霜 / 归离 / 幸宠 / 流年 四条，后来引擎原语补齐后已在
+ * batch6new17 / 25 / 16 / 19 正式实装，各自的测试在那几个文件里。
+ * 这里原先有一条「四条一律未注册」的守卫，但它只 import 了本文件，
+ * skillsOf() 看不见别的批次 → 那条断言恒为真、什么都没测，已删除。
  */
 
 /** 任婉(0) + 甲(1)；任婉是否人类 / 体力上限可配 */
@@ -170,6 +174,67 @@ describe('任婉「狷急」选项 1：摸牌阶段开始时，摸体力上限�
   });
 });
 
+describe('任婉「狷急」选项 2：出牌阶段开始时，失去 1 点体力并视为使用【杀】', () => {
+  it('正例（人类）：选一名范围内角色 → 失去 1 点体力并视为对其使用【杀】', async () => {
+    const { rw, players } = board({ human: true });
+    // 选项 2 的人类分支只问一次：直接选目标（cancelLabel 即「不发动」）
+    const { fn } = script({ kind: 'target', ids: [1] });
+    const { deps, fx } = makeHarness(players, { requestChoice: fn });
+    deps.canReach = () => true;
+    await dispatchPlayPhaseBegin(deps, rw);
+    expect(fx.usedCards).toHaveLength(1);
+    expect(fx.usedCards[0].targetIds).toEqual([1]);   // 甲，不是自己
+    expect(fx.logs.some(l => l.includes('执行选项 2'))).toBe(true);
+  });
+
+  it('反例（人类）：目标选择点「不发动」→ 不失去体力也不出杀', async () => {
+    const { rw, players } = board({ human: true });
+    const { fn } = script({ kind: 'cancel' });
+    const { deps, fx } = makeHarness(players, { requestChoice: fn });
+    deps.canReach = () => true;
+    await dispatchPlayPhaseBegin(deps, rw);
+    expect(fx.usedCards).toEqual([]);
+    expect(fx.logs.some(l => l.includes('执行选项 2'))).toBe(false);
+  });
+
+  it('反例：【杀】不能指定自己 —— 只剩任婉一人时不发动', async () => {
+    const rw = mkPlayer({ id: 0, name: '任婉', isHuman: false, maxHp: 3, hp: 3 });
+    const { deps, fx } = makeHarness([rw]);
+    deps.canReach = () => true;
+    await dispatchPlayPhaseBegin(deps, rw);
+    expect(fx.usedCards).toEqual([]);
+    expect(fx.logs.some(l => l.includes('执行选项 2'))).toBe(false);
+  });
+
+  it('反例：AI 不得因为「刚失去 1 点体力后自己体力最低」而打自己', async () => {
+    // 回归用例：旧实现 others 只过 !isDead，AI 分支按体力最低排序，
+    // 任婉 1 体力而甲 3 体力时，loseHp 之后最低的反而是任婉自己。
+    const rw = mkPlayer({ id: 0, name: '任婉', isHuman: false, maxHp: 3, hp: 1 });
+    const a = mkPlayer({ id: 1, name: '甲', hp: 3 });
+    const { deps, fx } = makeHarness([rw, a]);
+    deps.canReach = () => true;
+    await dispatchPlayPhaseBegin(deps, rw);
+    expect(fx.usedCards).toHaveLength(1);
+    expect(fx.usedCards[0].targetIds).toEqual([1]);   // 必须是甲
+  });
+
+  it('反例：目标都在攻击范围外 —— 不发动（选项 2 不免距离）', async () => {
+    const { players } = board({ human: false });
+    const { deps, fx } = makeHarness(players);
+    deps.canReach = () => false;
+    await dispatchPlayPhaseBegin(deps, players[0]);
+    expect(fx.usedCards).toEqual([]);
+  });
+
+  it('反例：不是任婉的出牌阶段 —— 不派发', async () => {
+    const { a, players } = board();
+    const { deps, fx } = makeHarness(players);
+    deps.canReach = () => true;
+    await dispatchPlayPhaseBegin(deps, a);
+    expect(fx.usedCards).toEqual([]);
+  });
+});
+
 describe('注册名与 HEROES 逐字一致，且不装降级版', () => {
   it('任婉：狷急已进注册表', () => {
     expect(skillsOf('任婉').map(d => d.skill)).toContain('狷急');
@@ -180,10 +245,4 @@ describe('注册名与 HEROES 逐字一致，且不装降级版', () => {
     expect(def?.locked).toBeFalsy();
   });
 
-  it('4 条缺原语的技能一律未注册（宁可缺席，不装降级版）', () => {
-    expect(skillsOf('任婉').map(d => d.skill)).not.toContain('纫霜');
-    expect(skillsOf('曹华').map(d => d.skill)).not.toContain('归离');
-    expect(skillsOf('滕公主').map(d => d.skill)).not.toContain('幸宠');
-    expect(skillsOf('滕公主').map(d => d.skill)).not.toContain('流年');
-  });
 });

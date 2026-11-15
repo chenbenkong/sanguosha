@@ -244,7 +244,10 @@ registerSkill({
       if (ctx.memory.usedThisTurn) return;
       const reds = ctx.self.hand.filter(c => c.suit === Suit.HEART || c.suit === Suit.DIAMOND);
       if (reds.length === 0) return;
-      const others = aliveOthers(ctx);
+      // 花火是「无**次数**限制」，不是「无距离限制」—— 它仍是一张普通【杀】的范围。
+      // 引擎的 resolveCardEffect 不校验主目标距离（按本仓约定由技能自己筛，
+      // 枕戈 / 双锐 都是这么做的），所以这里必须过 canReach。
+      const others = aliveOthers(ctx).filter(p => ctx.canReach(ctx.self.id, p.id));
       if (others.length === 0) return;
       let card: Card | undefined;
       let targetId: number | undefined;
@@ -269,8 +272,10 @@ registerSkill({
       // —— 硝引牌区由同武将的「硝引」（batch6new22）写在 ctx.heroMemory.niaoyin，
       //    形状是 Record<pid, Card[]>；heroMemory 按武将名共享，所以这里读得到。
       const niaoyinZone = (ctx.heroMemory.niaoyin as Record<string, Card[]> | undefined) ?? {};
+      // 改为全体时同样只含能打到的人：【杀】的多目标也必须逐个是合法目标
       const holders = ctx.players.filter(
-        q => !q.isDead && q.id !== ctx.self.id && (niaoyinZone[String(q.id)]?.length ?? 0) > 0,
+        q => !q.isDead && q.id !== ctx.self.id && ctx.canReach(ctx.self.id, q.id)
+          && (niaoyinZone[String(q.id)]?.length ?? 0) > 0,
       );
       let targetIds = [targetId];
       if (holders.some(q => q.id === targetId)) {

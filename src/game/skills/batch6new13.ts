@@ -165,7 +165,12 @@ registerSkill({
 
     onPlayPhaseBegin: async (ctx: SkillContext, ev: PlayPhaseEvent) => {
       if (ev.owner.id !== ctx.self.id) return;
-      const others = ctx.players.filter(p => !p.isDead);
+      // 「视为对一名角色使用【杀】」：【杀】不能指定自己，且仍受攻击范围限制。
+      // 原来只过 !isDead，于是 AI 分支「挑体力最低」在刚失去 1 点体力之后
+      // 经常选中任婉自己 —— 花一刀把自己打死。引擎不校验主目标距离，这里自己筛。
+      const others = ctx.players.filter(
+        p => !p.isDead && p.id !== ctx.self.id && ctx.canReach(ctx.self.id, p.id),
+      );
       if (others.length === 0) return;
       let targetId: number | undefined;
       if (ctx.self.isHuman) {

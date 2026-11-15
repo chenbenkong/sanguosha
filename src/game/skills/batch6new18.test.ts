@@ -210,6 +210,7 @@ describe('马伶俐「花火」', () => {
     mll.hand = [mkCard({ name: CardName.TAO, suit: Suit.HEART })];
     const a = P(1, '甲');
     const { deps, fx } = makeHarness([mll, a]);
+    deps.canReach = () => true;   // 花火现在会筛距离（夹具默认 false）
     await dispatchPlayPhaseBegin(deps, mll);
     expect(fx.usedCards).toHaveLength(1);
     expect(fx.usedCards[0].opts?.attribute).toBe('fire');
@@ -224,6 +225,7 @@ describe('马伶俐「花火」', () => {
     const b = P(2, '乙');
     const c = P(3, '丙');
     const { deps, fx } = makeHarness([mll, a, b, c]);
+    deps.canReach = () => true;
     // 甲、丙有硝引牌，乙没有
     await seedNiaoyin(deps, mll, { 1: [sc(Suit.SPADE)], 3: [sc(Suit.CLUB)] });
     await dispatchPlayPhaseBegin(deps, mll);
@@ -238,10 +240,35 @@ describe('马伶俐「花火」', () => {
     mll.hand = [mkCard({ name: CardName.TAO, suit: Suit.HEART })];
     const a = P(1, '甲');
     const { deps, fx } = makeHarness([mll, a]);
+    deps.canReach = () => true;
     // 硝引牌区挂在「乙」身上，而乙不在场 / 或干脆空区
     await seedNiaoyin(deps, mll, {});
     await dispatchPlayPhaseBegin(deps, mll);
     expect(fx.usedCards[0].targetIds).toEqual([1]);
+  });
+
+  it('反例：目标在攻击范围外 —— 不发动（花火只免次数，不免距离）', async () => {
+    const mll = P(0, '马伶俐');
+    mll.hand = [mkCard({ name: CardName.TAO, suit: Suit.HEART })];
+    const a = P(1, '甲');
+    const { deps, fx } = makeHarness([mll, a]);
+    deps.canReach = () => false;   // 谁都打不到
+    await dispatchPlayPhaseBegin(deps, mll);
+    expect(fx.usedCards).toEqual([]);
+    expect(fx.discarded).toEqual([]);   // 连代价牌都不该弃
+  });
+
+  it('反例：改为全体时，范围外的「硝引」持有者不被拉进目标', async () => {
+    const mll = P(0, '马伶俐');
+    mll.hand = [mkCard({ name: CardName.TAO, suit: Suit.HEART })];
+    const a = P(1, '甲');
+    const b = P(2, '乙');
+    const { deps, fx } = makeHarness([mll, a, b]);
+    deps.canReach = (_f, id) => id === 1;   // 只打得到甲
+    await seedNiaoyin(deps, mll, { 1: [sc(Suit.SPADE)], 2: [sc(Suit.CLUB)] });
+    await dispatchPlayPhaseBegin(deps, mll);
+    expect(fx.usedCards).toHaveLength(1);
+    expect(fx.usedCards[0].targetIds).toEqual([1]);   // 乙有硝引但打不到
   });
 
   it('反例：手里没有红色牌 —— 不发动', async () => {
@@ -258,6 +285,7 @@ describe('马伶俐「花火」', () => {
     mll.hand = [mkCard({ name: CardName.TAO, suit: Suit.HEART })];
     const a = P(1, '甲');
     const { deps, fx } = makeHarness([mll, a]);
+    deps.canReach = () => true;
     await dispatchPlayPhaseBegin(deps, mll);
     await dispatchPlayPhaseBegin(deps, mll);
     expect(fx.usedCards).toHaveLength(1);
