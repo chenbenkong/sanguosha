@@ -533,15 +533,27 @@ const BATCH6_PACK: Record<string, string | null> = {
  * 所以不能编造「一将成名」「SP」之类的归属。这里只写能由技能本身证明的信息：
  * 定位取自各技能的实际标签，提示点出技能名，难度保守取 2。
  */
-const batch6Profile = (hero: Hero, skills: HeroSkillView[]): HeroProfile => {
-  const roles = [...new Set(skills.flatMap(s => s.tags.filter(t => t !== '主公技')))].slice(0, 2);
-  return {
-    pack: BATCH6_PACK[hero.name] ?? '新将',
-    roles: roles.length > 0 ? roles : ['均衡'],
-    difficulty: 2,
-    tip: '技能【' + skills.map(s => s.name).join('】【') + '】均已实装，按各技能的触发时机出牌即可。',
-  };
-};
+/**
+ * 这批武将没有手写 profile。pack 取 manifest 真值（见 BATCH6_PACK），
+ * 但**定位（roles）没有任何数据源** —— lore / story / voice / manifest 四项里
+ * 都没有「定位」这一维，官方也没有公开口径。
+ *
+ * 这里曾经犯过一个分类错误：把 skills 的 SkillTag（主动技/被动技/锁定技/觉醒技）
+ * 当成 roles 用，于是魏娆详情显示「定位 主动技 / 被动技」。但 roles 的词表是
+ * 控制 / 爆发 / 辅助 / 防御 / 续航 / 均衡（见 HERO_PROFILES 的 45 条手写条目），
+ * 与 SkillTag 是两套完全不同的分类 —— 前者说「这个武将打什么位置」，
+ * 后者说「这条技能怎么触发」。技能名旁边本来就已经渲染了 SkillTag 彩色标签，
+ * 再把它搬到「定位」上既是重复也是错的。
+ *
+ * 没有依据就不编：沿用 FALLBACK_PROFILE 对「未知定位」的既有默认「均衡」，
+ * 与老武将缺 profile 时的表现一致。要填真实定位，得先有手写 profile。
+ */
+const batch6Profile = (hero: Hero, skills: HeroSkillView[]): HeroProfile => ({
+  pack: BATCH6_PACK[hero.name] ?? '新将',
+  roles: ['均衡'],
+  difficulty: 2,
+  tip: '技能【' + skills.map(s => s.name).join('】【') + '】均已实装，按各技能的触发时机出牌即可。',
+});
 
 /**
  * 技能台词：官方原文优先（同一技能常常 2 句），官方没收录时才回落到当初手写的近似句。

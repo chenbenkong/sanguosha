@@ -185,8 +185,9 @@ describe('getHeroDetail', () => {
       const d = getHeroDetail(h!);
       expect(d.profile.pack, name + ' 的 pack 应为 manifest 真值').toBe(pack);
       expect(d.skills.length).toBeGreaterThan(0);
-      // 定位标签来自技能本身，不是写死的「均衡」
-      expect(d.profile.roles.length).toBeGreaterThan(0);
+      // 定位没有数据源，如实留默认「均衡」。曾经误把 SkillTag（主动技/被动技）
+      // 当定位用，详情里渲染成「定位 主动技 / 被动技」—— 那是两套分类串了。
+      expect(d.profile.roles).toEqual(['均衡']);
     }
   });
 
