@@ -101,6 +101,8 @@ export interface DispatchDeps {
   deckCount: number;
   attackRange: (playerId: number) => number;
   setChained: (playerId: number, chained: boolean) => void;
+  setPhaseNoDistance: (playerId: number, on: boolean) => void;
+  setExtraTargets: (playerId: number, count: number) => void;
   requestExtraTurn: (playerId: number) => void;
 }
 
@@ -247,6 +249,8 @@ const ctxFor = (deps: DispatchDeps, self: Player, hero: string, skill: string): 
   deckCount: deps.deckCount,
   attackRange: deps.attackRange,
   setChained: deps.setChained,
+  setPhaseNoDistance: deps.setPhaseNoDistance,
+  setExtraTargets: deps.setExtraTargets,
   requestExtraTurn: deps.requestExtraTurn,
 });
 

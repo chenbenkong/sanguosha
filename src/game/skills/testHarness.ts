@@ -69,11 +69,15 @@ export interface Effects {
   revoked: Array<{ playerId: number; skill: string; reason: string }>;
   /** ctx.requestExtraTurn 的申请记录（玩家 id 序列） */
   extraTurns: number[];
+  /** setPhaseNoDistance / setExtraTargets 的调用记录 */
+  noDistance: Array<{ playerId: number; on: boolean }>;
+  extraTargets: Array<{ playerId: number; count: number }>;
 }
 
 export const emptyEffects = (): Effects => ({
   drawn: [], discarded: [], healed: [], damaged: [], logs: [], banners: [],
   usedCards: [], granted: [], revoked: [], extraTurns: [],
+  noDistance: [], extraTargets: [],
 });
 
 /**
@@ -113,6 +117,8 @@ export const noopDeps = (players: Player[]): DispatchDeps => ({
   deckCount: 0,
   attackRange: () => 1,
   setChained: () => {},
+  setPhaseNoDistance: () => {},
+  setExtraTargets: () => {},
   requestExtraTurn: () => {},
 });
 
@@ -184,6 +190,17 @@ export const makeHarness = (players: Player[], opts: HarnessOptions = {}): Harne
     },
     hasGrantedSkill: (playerId, skillName) => grantedByPlayer.get(playerId)?.has(skillName) ?? false,
     requestExtraTurn: (playerId) => { fx.extraTurns.push(playerId); },
+    // 夹具里如实落到 Player 对象上：帼武的「本阶段无距离」要能被 canReach 读到才算闭环
+    setPhaseNoDistance: (playerId, on) => {
+      fx.noDistance.push({ playerId, on });
+      const p = players.find(x => x.id === playerId);
+      if (p) p.phaseNoDistance = on;
+    },
+    setExtraTargets: (playerId, count) => {
+      fx.extraTargets.push({ playerId, count });
+      const p = players.find(x => x.id === playerId);
+      if (p) p.extraTargetCount = count;
+    },
   };
   return { deps, fx };
 };

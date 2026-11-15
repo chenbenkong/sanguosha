@@ -187,6 +187,18 @@ export interface Player {
   fumianValue2?: number;
   /** 吴苋「怠宴」上回合的目标 */
   daiyanTargetId?: number;
+  /**
+   * 本阶段使用牌无距离限制（吕玲绮「帼武」②）。
+   * 由技能在出牌阶段开始时置位、onPlayPhaseEnd 清除（该钩子对「死在出牌阶段中途」
+   * 也有补派发路径，所以不会残留）。canReach 是它唯一的消费点。
+   */
+  phaseNoDistance?: boolean;
+  /**
+   * 使用【杀】或普通锦囊时可额外指定的目标数（吕玲绮「帼武」③）。
+   * 与「福绵」的 fumianValue2 同一口径：由 combat.ts 在目标确定后自动追加
+   * （方天画戟 / 蚕食 / 福绵 也都是自动追加，不额外弹窗）。
+   */
+  extraTargetCount?: number;
   /** 何太后「戚乱」本回合击杀数（每个回合开始时清零） */
   killsThisTurn?: number;
 }

@@ -1112,6 +1112,14 @@ const App: React.FC = () => {
     requestExtraTurn: (pid) => {
       extraTurnRef.current = pid;
     },
+    // 「本阶段无距离限制」/「额外目标数」直接落到 Player 字段上：
+    // canReach 与 combat.ts 的目标追加各自读它，判定只有一处入口。
+    setPhaseNoDistance: (pid, on) => {
+      updatePlayer(pid, { phaseNoDistance: on });
+    },
+    setExtraTargets: (pid, count) => {
+      updatePlayer(pid, { extraTargetCount: count });
+    },
   });
 
   const excessCards = (p: Player) => {
@@ -1760,7 +1768,13 @@ const App: React.FC = () => {
     return Math.max(1, 1 + bonus + Math.max(-5, Math.min(5, skill)));
   }, []);
 
-  const canReach = useCallback((from: Player, to: Player) => getDistance(from.id, to.id) <= getAttackRange(from), [getDistance, getAttackRange]);
+  const canReach = useCallback((from: Player, to: Player) => {
+    // 吕玲绮「帼武」②：本阶段使用牌无距离限制。
+    // 距离判定只有这一个入口（人类选目标 / AI 选目标 / 虚拟牌都走它），
+    // 所以在这里认一次即可，不必在 5 处调用点各打一遍补丁。
+    if (from.phaseNoDistance) return true;
+    return getDistance(from.id, to.id) <= getAttackRange(from);
+  }, [getDistance, getAttackRange]);
 
   // 本回合是否还能使用这张【杀】（张飞「咆哮」、诸葛连弩不限；
   // 张星彩「枪舞」：点数大于判定结果的【杀】不计入次数）

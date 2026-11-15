@@ -212,6 +212,20 @@ export interface SkillContext {
   /** 横置 / 解除横置（曹华「彩翼」阴形态「翻面并横置」）。铁索连环状态由引擎的传导逻辑消费。 */
   setChained: (playerId: number, chained: boolean) => void;
   /**
+   * 设定「该角色本阶段使用牌无距离限制」（吕玲绮「帼武」②）。
+   *
+   * 必须自己配对清除（onPlayPhaseEnd）；距离判定的唯一入口是 App.tsx 的 canReach，
+   * 所以这里置位一次即可覆盖人类选目标与 AI 选目标两侧，不必逐处打补丁。
+   */
+  setPhaseNoDistance: (playerId: number, on: boolean) => void;
+  /**
+   * 设定「使用【杀】或普通锦囊可额外指定的目标数」（吕玲绮「帼武」③）。
+   *
+   * 与装备【方天画戟】、吴苋「福绵」、卑弥呼「蚕食」同一追加口径：目标在
+   * combat.ts 的结算入口统一追加（自动选取攻击范围内的敌人，不弹窗）。
+   */
+  setExtraTargets: (playerId: number, count: number) => void;
+  /**
    * 申请「在某角色当前回合结束后，由 playerId 执行一个额外回合」（曹华「归离」）。
    *
    * 只能在回合结束时机调用（onTurnEnd / 其后的钩子里）：标志由 App.tsx 主循环在

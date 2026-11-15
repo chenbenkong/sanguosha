@@ -522,6 +522,14 @@ const skillDeps = (): DispatchDeps => ({
     updatePlayer(pid, { isChained: chained });
     addLog(chained ? '【横置】' + p.hero.name + ' 被横置' : '【横置】' + p.hero.name + ' 解除横置', 'skill');
   },
+  // 「本阶段无距离」「额外目标数」是 Player 上的阶段态，写它本身无害；
+  // 但清除只该由技能在 onPlayPhaseEnd 做，而那个时机只由主循环派发。
+  setPhaseNoDistance: (pid: number, on: boolean) => {
+    updatePlayer(pid, { phaseNoDistance: on });
+  },
+  setExtraTargets: (pid: number, count: number) => {
+    updatePlayer(pid, { extraTargetCount: count });
+  },
   // 额外回合只能在**回合结束时机**申请，而 onTurnEnd 只由 App.tsx 主循环派发；
   // combat.ts 的 skillDeps 触不到回合循环，所以这里是有意空实现 ——
   // 若有技能在伤害/响应链里调用它，静默忽略比半生效安全（归离不会在这种时机触发）。
@@ -684,6 +692,28 @@ const skillDeps = (): DispatchDeps => ({
         extras.forEach(p => updatePlayer(p.id, { hasKui: false }));
         addLog(`【蚕食】卑弥呼令 ${extras.map(p => p.hero.name).join('、')} 成为额外目标（失去“傀”）`, 'skill');
         showSkillBanner('卑弥呼', '蚕食');
+      }
+    }
+
+    // 吕玲绮「帼武」③：本阶段使用【杀】或普通锦囊可额外指定至多 N 个目标。
+    // 追加口径与「蚕食」「福绵」一致（自动选取攻击范围内敌方，不弹窗），
+    // 且放在这里（targets 最终确定前），下游的镇南/凤魄等按最终目标数结算才正确。
+    // 「普通锦囊」= 非延时、非群体（南蛮/万箭/桃园/五谷本就多目标）。
+    if (source.extraTargetCount && source.extraTargetCount > 0 && targets.length === 1 && targets[0].id !== source.id) {
+      const isSlash = card.name === CardName.SHA;
+      const isNormalTrick = card.type === CardType.SCROLL
+        && ![CardName.LESI, CardName.BINGLIANG, CardName.SHANDIAN,
+          CardName.NANMAN, CardName.WANJIAN, CardName.TAOYUAN, CardName.WUGU].includes(card.name as CardName);
+      if (isSlash || isNormalTrick) {
+        const extras = playersRef.current
+          .filter(p => !p.isDead && p.id !== source.id && !targets.some(x => x.id === p.id)
+            && !isAlly(source, p) && canReach(source, p))
+          .slice(0, source.extraTargetCount);
+        if (extras.length > 0) {
+          targets = [...targets, ...extras];
+          addLog(`【帼武】${source.hero.name} 令【${card.name}】额外指定 ${extras.map(p => p.hero.name).join('、')} 为目标`);
+          showSkillBanner(source.hero.name, '帼武');
+        }
       }
     }
 

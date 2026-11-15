@@ -159,11 +159,11 @@ describe('getHeroDetail', () => {
   test('pending 只留给技能尚未实装的武将，老武将不得残留 pending', () => {
     const pend = HEROES.filter(h => h.pending);
     // 第六轮 30 名女将里 28 名的技能已全部进注册表并有单测，pending 随之清除；
-    // 只剩 宣公主「追姬」、吕玲绮「帼武」未实装，因此 pending 恰为这 2 名。
+    // 只剩 宣公主「追姬」未实装（需要「废除装备栏」跨层原语），因此 pending 恰为这 1 名。
     // 这条断言的价值：pending 是「不可开局」的硬开关，技能装完却还挂着，
     // 玩家看到的就是「有技能却玩不了」——正是这次要修的缺陷。
     // 用集合比而不是数组比：中文 sort 的次序依赖 collation，不该让断言去赌它
-    expect([...pend.map(h => h.name)].sort()).toEqual(['宣公主', '吕玲绮'].sort());
+    expect([...pend.map(h => h.name)].sort()).toEqual(['宣公主'].sort());
     expect(pend.every(h => h.gender === 'female')).toBe(true);
     expect(HEROES.filter(h => h.gender === 'female').length).toBe(108);
     // 规模只做下界断言，避免每加一批就要改一次数字
@@ -184,11 +184,15 @@ describe('getHeroDetail', () => {
   });
 
   test('仍在 pending 的武将保持「不可开局」语义', () => {
-    for (const name of ['宣公主', '吕玲绮']) {
+    for (const name of ['宣公主']) {
       const h = HEROES.find(x => x.name === name)!;
       expect(h.pending).toBe(true);
       expect(getHeroDetail(h).profile.pack).toBe('新将·技能实装中');
     }
+    // 吕玲绮「帼武」已实装：解除 pending，走「新将」档案
+    const ll = HEROES.find(x => x.name === '吕玲绮')!;
+    expect(ll.pending).toBeFalsy();
+    expect(getHeroDetail(ll).profile.pack).toBe('新将');
   });
 
   test('有 profile 条目的武将使用自己的条目', () => {
