@@ -250,18 +250,16 @@ export const HeroDetailModal: React.FC<HeroDetailModalProps> = ({ hero, player, 
             </div>
           )}
 
-          {/* 正文分栏：md 两栏、lg 起三栏。
-              改动前是「立绘 + 技能列」两栏，传记（56~705 字）和实战提示都压在技能列下方，
-              正文高度 = 技能总高 + 传记 + 提示 三者**相加**，所以又长又要一直往下拖。
-              现在把传记/提示拆成独立右栏，lg 上它们与技能列表**并排**，正文高度变成三者取最大。
-              中栏的技能列表保持单列、没有再对半分成两列：lg 起步时弹层被视口卡在 ~976px，中栏只剩
-              ~348px（与改动前 md 的宽度相当，见下方列宽），再对半分会把技能名、类型标签挤成碎行。
-              列宽按断点分级——lg 用 240px 的窄右栏换中栏宽度，xl 起弹层吃满 max-w-6xl、立绘增到
-              340px，右栏再放到 320px，让最长的传记也多换几行。 */}
-          <div className="grid grid-cols-1 items-start gap-4 md:grid-cols-[300px_minmax(0,1fr)] md:gap-6 lg:grid-cols-[300px_minmax(0,1fr)_240px] lg:gap-5 xl:grid-cols-[340px_minmax(0,1fr)_320px]">
-            {/* 2:3 立绘 + 放大：宽度交给栅格列，内部容器仍锁 aspect-[2/3]，
-                否则 Card3DViewer 拿不到尺寸就画不出画面 */}
-            <div className="min-w-0 w-full">
+          {/* 正文分栏：md 起「立绘 | 内容」两栏，lg 起宽度放宽。
+              为什么正文不做三栏（立绘 | 技能 | 传记）：实测过，传记压进窄栏后反而更高——
+              610px 宽时只要 414px 高，压到 320px 宽就翻了一倍，正文从 700px 涨到 912px。
+              传记字数中位数 210、最长 705，它是弹层里最吃高度的一块，所以保持通栏；
+              真正能压缩高度的是技能卡片，见下方技能列表注释。 */}
+          <div className="flex flex-col md:flex-row gap-4 md:gap-6">
+            {/* 2:3 立绘 + 放大。宽度只在 xl 才增到 340px：lg 档（视口 1024 左右）里弹层被视口卡在
+                ~976px，立绘多占的 40px 全是从两列技能那里抢的，实测多滚 20px、且没有收益；
+                尺寸不同不影响画面——容器始终 aspect-[2/3]，Card3DViewer 按挂载点建画布。 */}
+            <div className="flex-none w-full md:w-[300px] xl:w-[340px]">
               <button
                 onClick={() => onZoom?.(hero)}
                 className="relative block w-full rounded-lg overflow-hidden border border-[#c8a45c]/50 hover:border-[#f0d894] transition-colors group"
@@ -312,64 +310,65 @@ export const HeroDetailModal: React.FC<HeroDetailModalProps> = ({ hero, player, 
               </div>
             </div>
 
-            {/* 技能列表：md 是右栏、lg 起是中栏，始终单列 */}
-            <div className="min-w-0 flex flex-col gap-3">
-              {skills.map((s, idx) => (
-                <div key={`${s.name}-${idx}`} className="rounded-lg border border-[#8b7355]/35 bg-[#1a1410]/70 p-3 md:p-4">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="font-ancient text-xl md:text-2xl text-[#f0dcae]">{s.name}</span>
-                    {s.tags.map(t => (
-                      <span key={t} className={`px-1.5 py-0.5 rounded-[3px] text-[10px] font-bold border ${TAG_STYLE[t]}`}>{t}</span>
-                    ))}
-                    {s.isLord && (
-                      <span className="text-[10px] text-[#c8bda8]/70">（仅主公身份生效）</span>
-                    )}
-                    {/* 试听：仅当该武将该技能确有官方原声时出现。
-                        ml-auto 把它推到行尾，不与技能名/标签抢位置。 */}
-                    {hasOfficialSkillVoice(hero.name, s.name) && (
-                      <button
-                        type="button"
-                        onClick={() => audition(s.name)}
-                        aria-label={`试听 ${s.name} 台词`}
-                        title="试听官方原声"
-                        aria-pressed={auditioning === s.name}
-                        className={`ml-auto flex h-7 w-7 shrink-0 items-center justify-center rounded-full border transition-colors ${
-                          auditioning === s.name
-                            ? 'border-[#f0d894] bg-[#c8a45c]/35 text-[#f4e4bf]'
-                            : 'border-[#c8a45c]/45 text-[#d9c49a] hover:border-[#f0d894] hover:bg-[#c8a45c]/20'
-                        }`}
-                      >
-                        <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                          <path d="M11 5 6 9H3v6h3l5 4V5z" />
-                          <path d="M15.5 8.5a5 5 0 0 1 0 7" />
-                        </svg>
-                      </button>
-                    )}
-                  </div>
-                  <p className="mt-1.5 text-[13px] md:text-sm leading-relaxed modal-text">{s.desc}</p>
-                  <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] md:text-xs">
-                    <span className="text-[#9a8b74]">触发时机</span>
-                    <span className="text-[#e8cf94]">{s.timing}</span>
-                  </div>
-                  {/* 台词：官方原文常常 2 句，逐句成行（1 句时与旧观感一致）；
-                      0 句时整块不渲染，避免出现只有标题的空台词区 */}
-                  {s.quotes.length > 0 && (
-                    <div className="mt-1.5 space-y-0.5">
-                      {s.quotes.map((q, qi) => (
-                        <p key={qi} className="text-[11px] md:text-xs italic text-[#a99a80]">“{q}”</p>
+            {/* 技能列表：lg 起并排两列。
+                每张技能卡的高度来自「技能名 + 类型标签 + 规则 + 触发时机 + 台词」这几行，
+                规则文字本来就只有一两行、折行代价小，所以分列是净收益（高度减半）；
+                传记那种长段落不能这么压，故仍留在下方通栏。 */}
+            <div className="min-w-0 flex-1 flex flex-col gap-3">
+              {/* 只有技能卡进这层两列栅格：传记/实战提示留在栅格外面，否则它们会被当成
+                  第二个栅格项挤进半宽列——字数长的传记（最长 705 字）在 363px 宽时高度近乎翻倍，
+                  实测反而把正文从 700px 撑到 812px，与「更紧凑」的目标相反。 */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 content-start">
+                {skills.map((s, idx) => (
+                  <div key={`${s.name}-${idx}`} className="rounded-lg border border-[#8b7355]/35 bg-[#1a1410]/70 p-3 md:p-4">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-ancient text-xl md:text-2xl text-[#f0dcae]">{s.name}</span>
+                      {s.tags.map(t => (
+                        <span key={t} className={`px-1.5 py-0.5 rounded-[3px] text-[10px] font-bold border ${TAG_STYLE[t]}`}>{t}</span>
                       ))}
+                      {s.isLord && (
+                        <span className="text-[10px] text-[#c8bda8]/70">（仅主公身份生效）</span>
+                      )}
+                      {/* 试听：仅当该武将该技能确有官方原声时出现。
+                          ml-auto 把它推到行尾，不与技能名/标签抢位置。 */}
+                      {hasOfficialSkillVoice(hero.name, s.name) && (
+                        <button
+                          type="button"
+                          onClick={() => audition(s.name)}
+                          aria-label={`试听 ${s.name} 台词`}
+                          title="试听官方原声"
+                          aria-pressed={auditioning === s.name}
+                          className={`ml-auto flex h-7 w-7 shrink-0 items-center justify-center rounded-full border transition-colors ${
+                            auditioning === s.name
+                              ? 'border-[#f0d894] bg-[#c8a45c]/35 text-[#f4e4bf]'
+                              : 'border-[#c8a45c]/45 text-[#d9c49a] hover:border-[#f0d894] hover:bg-[#c8a45c]/20'
+                          }`}
+                        >
+                          <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M11 5 6 9H3v6h3l5 4V5z" />
+                            <path d="M15.5 8.5a5 5 0 0 1 0 7" />
+                          </svg>
+                        </button>
+                      )}
                     </div>
-                  )}
-                </div>
-              ))}
-            </div>
+                    <p className="mt-1.5 text-[13px] md:text-sm leading-relaxed modal-text">{s.desc}</p>
+                    <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] md:text-xs">
+                      <span className="text-[#9a8b74]">触发时机</span>
+                      <span className="text-[#e8cf94]">{s.timing}</span>
+                    </div>
+                    {/* 台词：官方原文常常 2 句，逐句成行（1 句时与旧观感一致）；
+                        0 句时整块不渲染，避免出现只有标题的空台词区 */}
+                    {s.quotes.length > 0 && (
+                      <div className="mt-1.5 space-y-0.5">
+                        {s.quotes.map((q, qi) => (
+                          <p key={qi} className="text-[11px] md:text-xs italic text-[#a99a80]">“{q}”</p>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
 
-            {/* 第三栏：传记 + 实战提示。
-                这两块原本接在技能列表下方，是弹窗「纵向拉扯」的主要来源——技能多时它们被顶到很远。
-                拆成独立一栏后，lg 上技能与传记并排读，正文高度从「三者相加」变成「三者取最大」。
-                md 用 col-start-2 让它们仍落在右栏技能列表下方，与改动前完全一致；
-                小于 md 时栅格退化成单列，DOM 顺序就是阅读顺序，移动端行为不变。 */}
-            <div className="min-w-0 flex flex-col gap-3 md:col-start-2 lg:col-start-3">
               {/* 传记：官方文案，长度 56~705 字。不截断、不做二次滚动容器，
                   交给弹层正文那一个滚动容器（flex-1 min-h-0 overflow-y-auto）消化，
                   break-words 兜住无空格长串，保证窄屏也不出现横向溢出。 */}

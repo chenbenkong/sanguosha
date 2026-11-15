@@ -2,6 +2,7 @@ import React from 'react';
 import { Player, Identity, CardName } from '../../../types';
 import { KINGDOM_CLASS } from '../../game/constants';
 import { useTilt } from './useTilt';
+import { skillLabelOf } from '../../game/heroDetail';
 
 /**
  * 与 theme.css 的 .tilt 同一表达式（OwnSeatPanel.tsx 里是同一份字面量）。
@@ -298,7 +299,7 @@ export const EnemySeats = React.memo(function EnemySeats({
               {/* 第一行：姓名 + 技能名（压在稳定暗层上，不压立绘高光） */}
               <div className="seat-name-rail">
                 <span className="seat-name">{p.hero.name}</span>
-                <span className="seat-skill">【{p.hero.skillName}】</span>
+                <span className="seat-skill">{skillLabelOf(p.hero)}</span>
               </div>
 
               {/* 第二行：勾玉 + 手牌 + 距离 */}

@@ -3,6 +3,7 @@ import { Player, Identity } from '../../../types';
 import { KINGDOM_CLASS } from '../../game/constants';
 import { EQUIP_META } from '../../../constants';
 import { useTilt } from './useTilt';
+import { skillLabelOf } from '../../game/heroDetail';
 
 /**
  * 主视角座位卡（与敌方座位同一套卡面）。
@@ -151,7 +152,9 @@ export const OwnSeatPanel = React.memo(function OwnSeatPanel({
       <div className="seat-info">
         <div className="seat-name-rail">
           <span className="seat-name">{me.hero.name}</span>
-          <span className="seat-skill">【{me.hero.skillName}】</span>
+          {/* 座位牌只有百来像素：不逐条换行（会挤成碎行），改用「·」分隔两个技能名，
+       避免「【青囊 / 急救】」这种把斜杠当分隔符连排、读起来像一个技能名。 */}
+          <span className="seat-skill">{skillLabelOf(me.hero)}</span>
         </div>
 
         <div className="seat-meta-row">

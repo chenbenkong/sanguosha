@@ -39,6 +39,30 @@ describe('双技能分列显示', () => {
   });
 });
 
+describe('座位牌（极窄容器）不再用斜杠连排技能名', () => {
+  it('skillLabelOf 把「A / B」拆成「【A】·【B】」，不被误读成一个技能名', async () => {
+    const { skillLabelOf } = await import('../game/heroDetail');
+    const hero = { name: '华佗', skillName: '青囊 / 急救', skillDesc: '', lordSkillName: undefined } as never;
+    expect(skillLabelOf(hero)).toBe('【青囊】·【急救】');
+  });
+
+  it('单技能不加多余分隔符；主公技一并带上', async () => {
+    const { skillLabelOf } = await import('../game/heroDetail');
+    const single = { name: '曹操', skillName: '奸雄', skillDesc: '' } as never;
+    expect(skillLabelOf(single)).toBe('【奸雄】');
+    const lord = { name: '曹操', skillName: '奸雄', skillDesc: '', lordSkillName: '护驾' } as never;
+    expect(skillLabelOf(lord)).toBe('【奸雄】·【护驾】');
+  });
+
+  it('两个座位面板都走 skillLabelOf，不再直接拼 skillName', () => {
+    for (const p of ['src/components/game/OwnSeatPanel.tsx', 'src/components/game/EnemySeats.tsx']) {
+      const src = read(p);
+      expect(src, p + ' 应当调用 skillLabelOf').toContain('skillLabelOf(');
+      expect(src, p + ' 仍在直接拼 skillName').not.toMatch(/seat-skill">【\{[a-z]+\.hero\.skillName\}】/);
+    }
+  });
+});
+
 describe('阵亡后不再被求桃窗挡住', () => {
   it('DyingModal 的渲染门必须同时检查 me.isDead', () => {
     const src = read('src/screens/BattleScreen.tsx');

@@ -569,6 +569,21 @@ function resolveSkillQuotes(heroName: string, skillName: string, handwritten?: s
 }
 
 /** 由武将数据生成详情面板所需的全部字段（不编造未实现技能） */
+/**
+ * 座位牌这类**极窄容器**用的技能名标签（约 120px 宽）。
+ *
+ * 不能像详情面板那样逐条换行——两行技能名会把座位牌撑高、挤成碎行；
+ * 也不该沿用 skillName 的「A / B」写法，那个斜杠是「多技能」的排版分隔符，
+ * 在窄栏里很容易被读成一个技能名（【青囊 / 急救】看着像一种叫「青囊/急救」的技能）。
+ * 这里统一成「【A】·【B】」。
+ */
+export function skillLabelOf(hero: Hero): string {
+  const names = hero.skillName.split('/').map(s => s.trim()).filter(Boolean);
+  const parts = names.length > 0 ? names.map(n => `【${n}】`) : [`【${hero.skillName}】`];
+  if (hero.lordSkillName) parts.push(`【${hero.lordSkillName}】`);
+  return parts.join('·');
+}
+
 export function getHeroDetail(hero: Hero): HeroDetailView {
   const names = hero.skillName.split('/').map(s => s.trim()).filter(Boolean);
   const descs = splitSkillDesc(hero.skillDesc, names);
