@@ -7843,6 +7843,7 @@ const App: React.FC = () => {
         onOpenDetail={(h) => { setDetailPlayerId(null); setDetailHero(h); }}
         onOpenPortrait={setPortraitHero}
         onStart={startGame}
+orient={orient}
         detailHero={detailHero}
         onCloseDetail={() => setDetailHero(null)}
         onSelectDetail={(h) => { setSelectedHero(h); setDetailHero(null); }}

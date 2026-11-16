@@ -47,9 +47,12 @@ export const HeroSelectScreen: React.FC<{
   onOpenDetail: (h: Hero) => void;
   onOpenPortrait: (h: Hero) => void;
   onStart: (h: Hero) => void;
+  /** 方向档位：横屏手机下选将网格改用「按高度定尺寸」的紧凑排布 */
+  orient: 'landscape-phone' | 'portrait-phone' | 'desktop';
 }> = ({
   theme, motionOn, fxLabel, fxTag, isMuted, onToggleMute, onToggleMotion, onCycleFx, onToggleTheme,
   onBack, heroTotal, heroKingdom, kingdomCounts, onKingdomChange, heroQuery, onQueryChange,
+  orient,
   onPageChange, allHeroes, selectedHero, onPickHero, onOpenDetail, onOpenPortrait, onStart,
 }) => {
   const { ids: recentIds, push: pushRecent } = useRecentHeroes();
@@ -108,7 +111,7 @@ export const HeroSelectScreen: React.FC<{
   const WAVE_SVG = 'url("data:image/svg+xml,%3Csvg width=\'100\' height=\'100\' viewBox=\'0 0 100 100\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cpath d=\'M20,20 Q40,5 60,20 T100,20 M20,50 Q40,35 60,50 T100,50 M20,80 Q40,65 60,80 T100,80\' stroke=\'%23d4af37\' stroke-width=\'0.5\' fill=\'none\' opacity=\'0.3\'/%3E%3C/svg%3E")';
 
   return (
-    <div className={'h-screen flex flex-col relative ' + shellCls}>      {theme === 'light' && (
+    <div className={'h-screen flex flex-col relative ' + shellCls} data-orient={orient}>      {theme === 'light' && (
         <BackgroundCarousel images={BACKGROUND_IMAGES} interval={CAROUSEL_CONFIG.interval} />
       )}
 
@@ -264,7 +267,11 @@ export const HeroSelectScreen: React.FC<{
               : '没有匹配的武将，试试清空搜索或切换势力'}
           </div>
         ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 min-[1200px]:grid-cols-8 gap-3 w-full max-w-[1440px] mx-auto pt-2">
+          /* 列数与卡片尺寸：桌面按宽度分列（8 列）；横屏手机按**高度**分列——
+             卡片是 2:3 竖幅，宽度由列宽决定，列数一少卡片就撑满高度。
+             实测 924×427 下 4 列时单卡 214×321（占屏高 75%），一屏只看得到 4 名武将。
+             横屏改为「固定行高 + auto-fill」：卡片高度锁在可用高度内，列数由宽度自动填。 */
+          <div className="hero-grid grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 min-[1200px]:grid-cols-8 gap-3 w-full max-w-[1440px] mx-auto pt-2">
             {pagedHeroes.map(hero => (
               <HeroCard
                 key={hero.id}

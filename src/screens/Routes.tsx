@@ -96,6 +96,8 @@ export interface SelectRouteProps {
   heroKingdom: string;
   kingdomCounts: Record<string, number>;
   onKingdomChange: (k: import('../components/game/HeroSelectScreen').HeroKingdomFilter) => void;
+  /** 方向档位：横屏手机下选将网格改用「按高度定尺寸」的紧凑排布 */
+  orient: 'landscape-phone' | 'portrait-phone' | 'desktop';
   heroQuery: string;
   onQueryChange: (v: string) => void;
   pageClamped: number;
@@ -146,6 +148,7 @@ export const SelectRoute: React.FC<SelectRouteProps> = (p) => (
       onOpenDetail={p.onOpenDetail}
       onOpenPortrait={p.onOpenPortrait}
       onStart={p.onStart as () => void}
+      orient={p.orient}
     />
     <HeroDetailModal
       hero={p.detailHero}

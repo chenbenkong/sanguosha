@@ -4751,6 +4751,146 @@ a:focus-visible {
   height: min(200px, 26vh);
 }
 
+/* ── 横屏手机：选将页改为「按高度定尺寸」的紧凑网格 ──────────────────────────
+   问题（实测 924×427，用户机型 2772×1280@3x）：网格按**宽度**分列，924 落在
+   lg:(1024) 之下 → 4 列；卡片是 aspect-ratio 2/3，宽度由列宽决定 →
+   单卡 214×321，占屏高 75%，一屏只看得到 4 名武将，下面还大片空白。
+
+   改法：横屏下给 .hero-grid 一个固定行高（= 可用高度），列数用 auto-fill 自动填。
+   卡片宽度由行高与 2:3 比例反推，于是「高度受控 → 宽度受控 → 列数够多」。
+   用 grid-auto-rows 而不是固定列数，是为了让不同宽度的横屏机型都自适应。 */
+[data-orient="landscape-phone"] .hero-grid {
+  grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
+  /* 行高：宁可只保证两行，也不把卡压到看不清。
+     试过 min(104px, (100vh-232px)/3)：780×360 下算出 43px，卡变成一���小图，
+     立绘完全认不出（实测 cardH=43）。所以改成「两行放得下」为下限目标，
+     再用 78px 兜住可读性（78px 高的卡在 0.188mm/px 的屏上约 15mm，
+     勉强能看出武将轮廓与立绘配色）。
+     结果：360 高 → 2 行 16 张；390 高 → 2 行 20 张；427 高 → 3 行 22 张。 */
+  grid-auto-rows: clamp(78px, calc((100vh - 258px) / 2.6), 104px);
+  gap: 8px;
+}
+
+/* 卡片本体：不再由列宽决定宽度，改为撑满格子 + 保持 2:3 */
+[data-orient="landscape-phone"] .hero-grid > * {
+  min-width: 0;
+}
+[data-orient="landscape-phone"] .hero-grid .hero-pick {
+  width: 100%;
+  height: 100%;
+  aspect-ratio: auto;
+}
+/* 卡片里的文字在这么小的卡上会糊：缩小，别把名字挤成两行 */
+[data-orient="landscape-phone"] .hero-grid .hero-pick-name {
+  font-size: 12px;
+}
+[data-orient="landscape-phone"] .hero-grid .hero-pick-title {
+  font-size: 10px;
+}
+[data-orient="landscape-phone"] .hero-grid .hero-pick-desc {
+  display: none;
+}
+/* 立绘模式的铭条（势力+名字+勾玉）：横屏卡片矮，铭条要贴着卡底一行，不能留白 */
+[data-orient="landscape-phone"] .hero-grid .hero-pick-strip {
+  padding: 2px 4px 3px;
+  gap: 3px;
+}
+[data-orient="landscape-phone"] .hero-grid .hero-pick-strip .hero-pick-name {
+  font-size: 12px;
+  letter-spacing: 0;
+  flex: 1 1 auto;
+  min-width: 0;
+  /* 单行 + 省略号：名字换成两行会把 78px 的卡撑破，实测铭条高度会从 18px 涨到 34px */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* 卡面模式：官方牌面自带技能文字，小卡上根本读不清 —— 整块隐藏，
+   只留一条自己画的铭条（名字 + 势力），否则满屏都是模糊的印刷字 */
+[data-orient="landscape-phone"] .hero-grid .hero-pick.is-fullcard .hero-pick-namebar {
+  inset-x: 0;
+  bottom: 0;
+  padding: 1px 4px 2px;
+  background: linear-gradient(180deg, rgba(12, 9, 6, 0) 0%, rgba(12, 9, 6, 0.92) 55%);
+}
+[data-orient="landscape-phone"] .hero-grid .hero-pick.is-fullcard .hero-pick-namebar .hero-pick-name {
+  font-size: 11px;
+}
+/* 勾玉在 74px 宽的卡上挤成一团：缩小 */
+[data-orient="landscape-phone"] .hero-grid .hero-hp-pip {
+  width: 4px !important;
+  height: 7px !important;
+}
+
+/* 「技能」速览按钮（竖屏用的：md:hidden）在横屏下要藏掉。
+   它是卡片右下角一个占满宽度的黑色条，写着「技能」两个字 —— 74px 宽的卡上
+   这一条几乎盖住整张卡底（实测截图里卡片只剩一个「技能」黑条）。
+   横屏下卡片小、一次能看到 22 张，技能速览改为点「详情」按钮看详情弹窗即可，
+   这个入口在这里只会碍事。 */
+[data-orient="landscape-phone"] .hero-grid .hero-skill-toggle {
+  display: none !important;
+}
+/* 详情按钮（ⓘ）在 74px 的卡上太大，圆盘几乎占满卡宽：缩成小图标并挪到右上角 */
+[data-orient="landscape-phone"] .hero-grid button[aria-label^="查看 "][aria-label$=" 详情"] {
+  height: 18px;
+  width: 18px;
+  right: 2px;
+  top: 2px;
+  bottom: auto !important;
+  border-width: 1px;
+}
+[data-orient="landscape-phone"] .hero-grid button[aria-label^="查看 "][aria-label$=" 详情"] svg {
+  height: 11px;
+  width: 11px;
+}
+
+/* 铭条：卡面模式也要有名字（官方牌面的竖排书法在 74px 卡上认不出） */
+[data-orient="landscape-phone"] .hero-grid .hero-pick.is-fullcard .hero-pick-namebar {
+  padding-right: 22px;
+}
+
+/* 「主公技」红标在 74px 的卡上会把名字整个挤掉（截图里曹操那张只剩标签）。
+   这么小的卡上这个标签信息量低、收益低，横屏下直接藏掉，把宽度让给名字。 */
+[data-orient="landscape-phone"] .hero-grid .hero-lord-chip {
+  display: none !important;
+}
+
+/* 第二行卡片被底部确认条压住：网格下方留出底部条的高度。
+   底部条在横屏下是固定定位的确认栏（约 56px），网格滚动区本身有 pb-8，
+   这里补足到能完整露出第三行的量。 */
+[data-orient="landscape-phone"] .hero-grid {
+  padding-bottom: 56px;
+}
+
+/* 铭条在 74px 宽里塞不下「势力 + 名字 + 勾玉」三样（截图里名字被挤到只剩一个字）。
+   优先级：名字 > 勾玉 > 势力。名字认不出来这张卡就没意义了，
+   而势力在小卡上本来就看不清（角标颜色区分度有限），勾玉还能从卡面本身读出来。 */
+[data-orient="landscape-phone"] .hero-grid .hero-pick-strip {
+  gap: 2px;
+  padding: 1px 2px 2px;
+  overflow: hidden;
+}
+[data-orient="landscape-phone"] .hero-grid .hero-pick-strip .hero-kingdom {
+  display: none;
+}
+[data-orient="landscape-phone"] .hero-grid .hero-pick-strip .hero-pick-name {
+  font-size: 11px;
+  letter-spacing: 0;
+  flex: 1 1 auto;
+  min-width: 0;
+  /* 不换行：宁可截断也要保持单行，否则两行会把 104px 的卡撑破 */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+[data-orient="landscape-phone"] .hero-grid .hero-pick-strip .hero-hp {
+  flex: none;
+}
+/* 铭条：卡面模式也要有名字（官方牌面的竖排书法在 74px 卡上认不出） */
+[data-orient="landscape-phone"] .hero-grid .hero-pick.is-fullcard .hero-pick-namebar {
+  padding-right: 22px;
+}
+
 /* ── 为什么上面的宽版式媒体查询都带了 (orientation: landscape) and (max-height: 520px) ──
    对局界面有两套版式：≥768px 的宽版式（座位环绕、自己座位卡绝对定位、HUD 侧栏展开）
    与 <768px 的竖屏版式（堆叠、紧凑 HUD）。横屏手机里有一批**视觉宽度不到 768** 的
