@@ -15,7 +15,6 @@ import { HeroDetailModal } from '../components/HeroDetailModal';
 import { IconArrowLeft } from '../components/Icons';
 import { LogPanel, MobilePhaseChip, ObjectiveStrip, PhasePanel, TurnRail, TurnStrip } from '../components/game/GameHud';
 import { OwnSeatPanel } from '../components/game/OwnSeatPanel';
-import { PlayerInspectModal } from '../components/game/PlayerInspectModal';
 import { PortraitLightbox } from '../components/PortraitLightbox';
 import { ReactionModal } from '../components/game/ReactionModal';
 import RulesDialog from '../components/RulesDialog';
@@ -85,7 +84,6 @@ export interface BattleScreenProps {
   handleTargetClick: (targetId: number) => Promise<void>;
   healAnimTarget: any;
   healNumber: any;
-  inspectPlayerId: any;
   isAiTakeover: any;
   isJiedaoMode: any;
   isJieyinMode: any;
@@ -125,7 +123,6 @@ export interface BattleScreenProps {
   setAdvice: any;
   setDetailHero: any;
   setDetailPlayerId: any;
-  setInspectPlayerId: any;
   setIsAiTakeover: any;
   setLogCollapsed: any;
   setOrderCollapsedPersist: (v: boolean) => void;
@@ -201,6 +198,19 @@ export const BattleScreen: React.FC<BattleScreenProps> = (props) => {
   const handleCycleFx = React.useCallback(() => latest.current.cycleFx(), []);
   const handleToggleUiMenu = React.useCallback(() => latest.current.setShowUiMenu((v: boolean) => !v), []);
   const handleSeatClick = React.useCallback((id: number) => { void latest.current.handleTargetClick(id); }, []);
+  /**
+   * 点击座位查看某角色 → 直接开完整武将详情。
+   *
+   * 以前先开一个精简面板（PlayerInspectModal），面板里再放「武将详情」按钮跳到完整页——
+   * 但完整页是它的**超集**（实时状态/装备明细/判定区/标记/临时技能/传记/实战提示/
+   * 定位难度全都有，精简页反而缺后四项）。于是「点武将→详情→里面还有个详情」，纯套娃。
+   */
+  const handleInspect = React.useCallback((id: number) => {
+    const p = latest.current.getPlayer(id);
+    if (!p) return;
+    latest.current.setDetailPlayerId(id);
+    latest.current.setDetailHero(p.hero);
+  }, []);
   const handleOrderCollapsedChange = React.useCallback((v: boolean) => latest.current.setOrderCollapsedPersist(v), []);
 
   // enemies 是 App 里 players.filter(...) 的结果，每次渲染都是新数组。玩家对象在引擎里
@@ -454,20 +464,6 @@ export const BattleScreen: React.FC<BattleScreenProps> = (props) => {
         />
       )}
 
-      {/* 武将详情：点击任意头像打开（人物介绍 + 技能说明） */}
-      {props.inspectPlayerId !== null && (() => {
-        const p = props.getPlayer(props.inspectPlayerId);
-        if (!p) return null;
-        return (
-          <PlayerInspectModal
-            player={p}
-            onClose={() => props.setInspectPlayerId(null)}
-            onZoom={(target) => { props.setInspectPlayerId(null); props.setPortraitHero(target.hero); }}
-            onOpenDetail={(target) => { props.setInspectPlayerId(null); props.setDetailPlayerId(target.id); props.setDetailHero(target.hero); }}
-          />
-        );
-      })()}
-
       {/* 立绘大图查看（竖幅原图，可关闭） */}
       <PortraitLightbox hero={props.portraitHero} onClose={() => props.setPortraitHero(null)} />
 
@@ -627,7 +623,7 @@ export const BattleScreen: React.FC<BattleScreenProps> = (props) => {
           getDistance={props.getDistance}
           getAttackRange={props.getAttackRange}
           onSeatClick={handleSeatClick}
-          onInspect={props.setInspectPlayerId}
+          onInspect={handleInspect}
         />
       </div>
 
@@ -702,7 +698,7 @@ export const BattleScreen: React.FC<BattleScreenProps> = (props) => {
             skillGlowId={props.skillGlowId}
             aiThinkingId={props.aiThinkingId}
             attackRange={props.getAttackRange(props.me)}
-            onInspect={props.setInspectPlayerId}
+            onInspect={handleInspect}
           />
 
         {/* Control Buttons - 操作按钮：托管已统一放在左上角，避免重复入口 */}

@@ -35,7 +35,6 @@ import { GameApiProvider } from './src/game/GameApiContext';
 import { BattleIntro } from './src/components/game/BattleIntro';
 import type { GameApi } from './src/game/gameApi';
 import { LogPanel, PhasePanel, TurnRail, TurnStrip, ObjectiveStrip, MobilePhaseChip } from './src/components/game/GameHud';
-import { PlayerInspectModal } from './src/components/game/PlayerInspectModal';
 import { SkillInfoModal } from './src/components/game/SkillInfoModal';
 import { DyingModal } from './src/components/game/DyingModal';
 import { WuguModal } from './src/components/game/WuguModal';
@@ -537,8 +536,8 @@ const App: React.FC = () => {
 
   // Skill Info Modal State
   const [showSkillModal, setShowSkillModal] = useState<boolean>(false);
-  // 点击头像查看任意角色的武将详情
-  const [inspectPlayerId, setInspectPlayerId] = useState<number | null>(null);
+  // 说明：曾有一个「点击头像查看」的精简面板（inspectPlayerId）套在完整武将详情外面，已删除——
+  // 座位点击现在直接开完整详情（见 BattleScreen 的 handleInspect）。
   // 立绘大图（竖幅原图）查看
   const [portraitHero, setPortraitHero] = useState<Hero | null>(null);
   // 武将详情面板（选将页 / 对局内）
@@ -4577,7 +4576,7 @@ const App: React.FC = () => {
       const humanInControl = !!human && !isAiTakeover && !human.isDead && turnIndex === human.id;
       if (humanInControl) { stallKeyRef.current = ''; stallCountRef.current = 0; return; }
       // 弹窗/查看面板打开属于正常停留，刷新心跳不判卡死
-      if (showRules || showDiscardViewer || inspectPlayerId !== null || showSkillModal || wuguSelection || dyingState || pendingReaction) {
+      if (showRules || showDiscardViewer || detailHero !== null || showSkillModal || wuguSelection || dyingState || pendingReaction) {
         progressAtRef.current = Date.now();
         return;
       }
@@ -4613,7 +4612,7 @@ const App: React.FC = () => {
     return () => window.clearInterval(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [screen, winnerSide, tutorialActive, players, isAiTakeover, turnIndex, phase,
-      showRules, showDiscardViewer, inspectPlayerId, showSkillModal, wuguSelection, dyingState, pendingReaction]);
+      showRules, showDiscardViewer, detailHero, showSkillModal, wuguSelection, dyingState, pendingReaction]);
 
   // 人类决策读秒：出牌 / 弃牌阶段 20 秒未操作则自动处理，避免对局永久卡住
   useEffect(() => {
@@ -4626,7 +4625,7 @@ const App: React.FC = () => {
       !!human && !human.isDead && turnIndex === human.id &&
       !dyingState && !pendingReaction && !showSkillModal && !wuguSelection &&
       // 看说明 / 查弃牌堆 / 查看武将详情时暂停读秒
-      !showRules && !showDiscardViewer && inspectPlayerId === null &&
+      !showRules && !showDiscardViewer && detailHero === null &&
       isProcessing === 0;
     const shouldCountDiscard =
       screen === 'game' &&
@@ -4635,7 +4634,7 @@ const App: React.FC = () => {
       phase === GamePhase.DISCARD &&
       !!human && !human.isDead && turnIndex === human.id &&
       !dyingState && !pendingReaction && !wuguSelection &&
-      !showRules && !showDiscardViewer && inspectPlayerId === null &&
+      !showRules && !showDiscardViewer && detailHero === null &&
       isProcessing === 0;
 
     if (!shouldCount && !shouldCountDiscard) {
@@ -4660,7 +4659,7 @@ const App: React.FC = () => {
       window.clearInterval(tick);
       setDecisionLeft(null);
     };
-  }, [screen, isAiTakeover, phase, turnIndex, players, dyingState, pendingReaction, showSkillModal, wuguSelection, isProcessing, showRules, showDiscardViewer, inspectPlayerId, tutorialActive]);
+  }, [screen, isAiTakeover, phase, turnIndex, players, dyingState, pendingReaction, showSkillModal, wuguSelection, isProcessing, showRules, showDiscardViewer, detailHero, tutorialActive]);
 
   // 五谷丰登选牌同样读秒：超时自动取第一张，避免对局停在此处
   useEffect(() => {
@@ -4784,7 +4783,6 @@ const App: React.FC = () => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return;
       // 1. 弹窗优先关闭
-      if (inspectPlayerId !== null) { setInspectPlayerId(null); return; }
       if (showRules) { setShowRules(false); return; }
       if (showSkillModal) { setShowSkillModal(false); return; }
       if (showDiscardViewer) { setShowDiscardViewer(false); return; }
@@ -4832,7 +4830,7 @@ const App: React.FC = () => {
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [showRules, showSkillModal, showDiscardViewer, advice, isZhihengMode, isLijianMode, isRendeMode, isJieyinMode, isQixiMode, isJijiangMode, isZhangbaMode, zhangbaPending, isFanjianMode, isGuoseMode, isQingnangMode, isAnxuMode, inspectPlayerId]);
+  }, [showRules, showSkillModal, showDiscardViewer, advice, isZhihengMode, isLijianMode, isRendeMode, isJieyinMode, isQixiMode, isJijiangMode, isZhangbaMode, zhangbaPending, isFanjianMode, isGuoseMode, isQingnangMode, isAnxuMode, detailHero]);
 
   // Clear any selection when entering reaction mode
   useEffect(() => {
@@ -4859,7 +4857,7 @@ const App: React.FC = () => {
       if (tutorialActive) return;
       if (dyingState || pendingReaction || showSkillModal || wuguSelection || isAiTakeover) return;
       // 弹窗打开时不响应快捷键，避免关着说明弹窗也能出牌
-      if (showRules || showDiscardViewer || advice || inspectPlayerId !== null) return;
+      if (showRules || showDiscardViewer || advice || detailHero !== null) return;
       if (!players.length) return;
       const meNow = players.find(p => p.isHuman) || players[0];
       if (!meNow || meNow.isDead || turnIndex !== meNow.id) return;
@@ -4896,7 +4894,7 @@ const App: React.FC = () => {
     window.addEventListener('keydown', onHotkey);
     return () => window.removeEventListener('keydown', onHotkey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [screen, phase, turnIndex, players, selectedCardIds, dyingState, pendingReaction, showSkillModal, wuguSelection, isAiTakeover, isProcessing, showRules, showDiscardViewer, advice, inspectPlayerId, tutorialActive]);
+  }, [screen, phase, turnIndex, players, selectedCardIds, dyingState, pendingReaction, showSkillModal, wuguSelection, isAiTakeover, isProcessing, showRules, showDiscardViewer, advice, detailHero, tutorialActive]);
 
   const clickGuard = useRef(false);
   const handleCardClick = (card: Card, e?: React.MouseEvent) => {
@@ -7717,7 +7715,8 @@ const App: React.FC = () => {
     setShowExitConfirm(false);
     setShowRules(false);
     setShowDiscardViewer(false);
-    setInspectPlayerId(null);
+    setDetailHero(null);
+    setDetailPlayerId(null);
     setWinnerSide(null);
     setScreen('start');
     setHomeNotice(notice);
@@ -8061,7 +8060,6 @@ const App: React.FC = () => {
     handleTargetClick,
     healAnimTarget,
     healNumber,
-    inspectPlayerId,
     isAiTakeover,
     isJiedaoMode,
     isJieyinMode,
@@ -8102,7 +8100,6 @@ const App: React.FC = () => {
     setAdvice,
     setDetailHero,
     setDetailPlayerId,
-    setInspectPlayerId,
     setIsAiTakeover,
     setLogCollapsed,
     setOrderCollapsedPersist,

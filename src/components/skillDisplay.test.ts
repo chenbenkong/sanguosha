@@ -16,16 +16,20 @@ import { readFileSync } from 'node:fs';
 const read = (p: string) => readFileSync(p, 'utf8').replace(/\r\n/g, '\n');
 
 describe('双技能分列显示', () => {
+  // 对局内快捷查看面板（PlayerInspectModal）已删除：它是完整详情页的真子集，
+  // 座位点击现在直接开 HeroDetailModal（见下方「不再套娃」一组）。
   const panels = [
-    'src/components/game/PlayerInspectModal.tsx',
+    'src/components/HeroDetailModal.tsx',
     'src/components/game/SkillInfoModal.tsx',
   ];
 
-  it('对局内两个查看面板都走 getHeroDetail().skills 逐条渲染', () => {
+  it('两个面板都走 getHeroDetail 的 skills 逐条渲染', () => {
     for (const p of panels) {
       const src = read(p);
-      expect(src, p + ' 应当逐技能渲染').toContain('getHeroDetail(');
-      expect(src, p + ' 应当对 skills 做 map').toMatch(/\.skills\.map\(/);
+      expect(src, p + ' 应当取自 getHeroDetail').toContain('getHeroDetail(');
+      // 两种等价写法都算数：`getHeroDetail(h).skills.map(...)` 与
+      // `const { skills } = getHeroDetail(h)` 后 `skills.map(...)`。
+      expect(src, p + ' 应当对 skills 做 map').toMatch(/\bskills\.map\(/);
     }
   });
 
@@ -59,6 +63,35 @@ describe('座位牌（极窄容器）不再用斜杠连排技能名', () => {
       const src = read(p);
       expect(src, p + ' 应当调用 skillLabelOf').toContain('skillLabelOf(');
       expect(src, p + ' 仍在直接拼 skillName').not.toMatch(/seat-skill">【\{[a-z]+\.hero\.skillName\}】/);
+    }
+  });
+});
+
+describe('武将详情不再套娃', () => {
+  it('对局内查看面板（精简版）已删除，完整页是唯一入口', () => {
+    expect(() => read('src/components/game/PlayerInspectModal.tsx')).toThrow();
+  });
+
+  it('座位点击直达完整详情：BattleScreen 的 onInspect 走 handleInspect', () => {
+    const src = read('src/screens/BattleScreen.tsx');
+    expect(src).toMatch(/onInspect=\{handleInspect\}/);
+    // 不再把「开精简面板」的 setter 直接当 onInspect
+    expect(src).not.toContain('onInspect={props.setInspectPlayerId}');
+    // handleInspect 必须同时设 id 与 hero，否则完整页拿不到实时状态
+    expect(src).toContain('latest.current.setDetailPlayerId(id)');
+    expect(src).toContain('latest.current.setDetailHero(p.hero)');
+  });
+
+  it('App 里不再有 inspectPlayerId 状态与守卫残留', () => {
+    const src = read('App.tsx');
+    expect(src).not.toContain('setInspectPlayerId');
+    expect(src).not.toMatch(/const \[inspectPlayerId/);
+  });
+
+  it('完整详情页确实是超集：实时状态 + 传记 + 实战提示都在', () => {
+    const src = read('src/components/HeroDetailModal.tsx');
+    for (const seg of ['当前状态', '判定区', '传记', '实战提示']) {
+      expect(src, 'HeroDetailModal 缺「' + seg + '」').toContain(seg);
     }
   });
 });
