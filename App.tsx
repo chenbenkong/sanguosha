@@ -116,7 +116,7 @@ const App: React.FC = () => {
   const [playerCount, setPlayerCount] = useState<5 | 7>(5); // 游戏人数选择
   
   // 视口分档（CSS 像素）：高分屏换算、密度档、宽屏档统一在 useLayoutProfile 里维护
-  const { viewport, uiScale, scaleStyle, layoutDensity, sizeTier, landscapePhone, orient, portraitPhone, isTouch } = useLayoutProfile();
+  const { viewport, uiScale, scaleStyle, layoutDensity, sizeTier, landscapePhone, orient, portraitPhone, isTouch, orientationLockState } = useLayoutProfile();
 
 
   // --- Game State ---
@@ -7787,12 +7787,26 @@ const App: React.FC = () => {
   // （start / select / game / 结算各一个），挂在最后一个只覆盖对局界面，
   // 实测竖屏打开应用时停在起始页，引导层根本不出现。
   // 只拦触屏设备：桌面浏览器把窗口拉窄不该被挡在外面。
-  if (portraitPhone && isTouch) return <RotateHint />;
+  //
+  // 「强制横屏」按钮：Screen Orientation Lock API 必须在用户手势里调用，
+  // 所以首屏自动锁一次通常会被浏览器拒绝，得给一个可点的入口。
+  const lockLandscape = () => {
+    const anyScreen = window.screen as (Screen & {
+      orientation?: { lock?: (o: string) => Promise<void> };
+    }) | undefined;
+    const lock = anyScreen?.orientation?.lock;
+    if (typeof lock !== 'function') return;
+    void lock.call(anyScreen!.orientation, 'landscape').catch(() => { /* 不支持就靠手动旋转 */ });
+  };
+  if (portraitPhone && isTouch) {
+    return <RotateHint canLock={orientationLockState !== 'unavailable'} onLockLandscape={lockLandscape} />;
+  }
 
   if (screen === 'start') {
     return (
       <StartRoute
         theme={theme}
+        orient={orient}
         layoutDensity={layoutDensity}
         sizeTier={sizeTier}
         motionOn={motionOn}

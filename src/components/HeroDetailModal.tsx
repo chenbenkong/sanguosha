@@ -32,6 +32,15 @@ const JUDGE_DESC: Record<string, string> = {
   '闪电': '判定：黑桃 2~9 受到 3 点雷电伤害，否则传递给下一名角色',
 };
 
+/**
+ * 类型标签显示成**单个字**（官方移动版的做法：技能名前的「主」「被」小方框）。
+ * 整词「主动技 / 被动技」在窄栏里要占四个字宽，把【技能名】挤得很短。
+ */
+const TAG_CHAR: Record<SkillTag, string> = {
+  锁定技: '锁', 限定技: '限', 觉醒技: '觉', 主动技: '主',
+  被动技: '被', 主公技: '主',
+};
+
 const TAG_STYLE: Record<SkillTag, string> = {
   锁定技: 'bg-[#3a2f14] text-[#f0d894] border-[#c8a45c]/60',
   限定技: 'bg-[#3a1530] text-[#f0b8dc] border-[#b07aa0]/60',
@@ -141,7 +150,7 @@ export const HeroDetailModal: React.FC<HeroDetailModalProps> = ({ hero, player, 
       aria-label={`${hero.name} 武将详情`}
     >
       <div
-        className="modal-shell w-full md:max-w-5xl lg:max-w-6xl h-full md:h-auto md:max-h-[88vh] rounded-none md:rounded-2xl flex flex-col overflow-hidden"
+        className="hd-scroll modal-shell w-full md:max-w-5xl lg:max-w-6xl h-full md:h-auto md:max-h-[88vh] rounded-none md:rounded-2xl flex flex-col overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
         {/* 头部：名字 + 势力 / 体力 / 包标签 */}
@@ -186,7 +195,7 @@ export const HeroDetailModal: React.FC<HeroDetailModalProps> = ({ hero, player, 
             <div className="mb-4 rounded-lg border border-[#c8a45c]/35 bg-[#1a1410]/80 p-3 md:p-4">
               <div className="flex items-center gap-2 flex-wrap">
                 <span className="w-[3px] h-3.5 rounded-sm bg-gradient-to-b from-[#f0d894] to-[#a8842c]" />
-                <span className="text-xs font-bold tracking-[0.18em] text-[#d9c49a]">当前状态</span>
+                <span className="hd-section-title">当前状态</span>
                 <span className={`text-sm font-bold ${player.hp <= 1 ? 'text-[#e8a99f]' : 'text-[#e8cf94]'}`}>♥ {player.hp}/{player.maxHp}</span>
                 <span className="text-[11px] md:text-xs text-[#a99a80]">手牌 {player.hand.length} · 装备 {equipCount} · 判定 {judgeZone.length}</span>
                 <span className="text-[11px] md:text-xs text-[#a99a80]">身份 {identityKnown ? player.identity : '未知'}</span>
@@ -282,6 +291,9 @@ export const HeroDetailModal: React.FC<HeroDetailModalProps> = ({ hero, player, 
                 <span className="absolute right-2 bottom-2 text-[11px] px-2 py-1 rounded bg-black/70 text-[#e8cf94] border border-[#c8a45c]/40 opacity-90 group-hover:opacity-100">
                   放大查看
                 </span>
+                {/* 左缘竖排姓名条：官方移动版的做法（深红底 + 竖排字），
+                    让「这是谁的详情」在扫视时一眼可辨，不依赖读顶部标题。 */}
+                <span className="hd-name-rail" aria-hidden="true">{hero.name}</span>
               </button>
 
               {/* 就地切换：详情页不必退回选将页也能改画面模式 */}
@@ -322,9 +334,9 @@ export const HeroDetailModal: React.FC<HeroDetailModalProps> = ({ hero, player, 
                 {skills.map((s, idx) => (
                   <div key={`${s.name}-${idx}`} className="rounded-lg border border-[#8b7355]/35 bg-[#1a1410]/70 p-3 md:p-4">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-ancient text-xl md:text-2xl text-[#f0dcae]">{s.name}</span>
+                      <span className="hd-skill-name font-ancient text-xl md:text-2xl">【{s.name}】</span>
                       {s.tags.map(t => (
-                        <span key={t} className={`px-1.5 py-0.5 rounded-[3px] text-[10px] font-bold border ${TAG_STYLE[t]}`}>{t}</span>
+                        <span key={t} className={`hd-tag ${TAG_STYLE[t]}`}>{TAG_CHAR[t] ?? t.slice(0, 1)}</span>
                       ))}
                       {s.isLord && (
                         <span className="text-[10px] text-[#c8bda8]/70">（仅主公身份生效）</span>
@@ -376,7 +388,7 @@ export const HeroDetailModal: React.FC<HeroDetailModalProps> = ({ hero, player, 
                 <div className="rounded-lg border border-[#c8a45c]/30 bg-[#241b12]/80 p-3 md:p-4">
                   <div className="flex items-center gap-2 mb-1">
                     <span className="w-[3px] h-3.5 rounded-sm bg-gradient-to-b from-[#f0d894] to-[#a8842c]" />
-                    <span className="text-xs font-bold tracking-[0.18em] text-[#d9c49a]">传记</span>
+                    <span className="hd-section-title">传记</span>
                   </div>
                   <p className="text-[12px] md:text-sm leading-relaxed modal-text break-words">{story}</p>
                 </div>
@@ -386,7 +398,7 @@ export const HeroDetailModal: React.FC<HeroDetailModalProps> = ({ hero, player, 
               <div className="rounded-lg border border-[#c8a45c]/30 bg-[#241b12]/80 p-3 md:p-4">
                 <div className="flex items-center gap-2 mb-1">
                   <span className="w-[3px] h-3.5 rounded-sm bg-gradient-to-b from-[#f0d894] to-[#a8842c]" />
-                  <span className="text-xs font-bold tracking-[0.18em] text-[#d9c49a]">实战提示</span>
+                  <span className="hd-section-title">实战提示</span>
                 </div>
                 <p className="text-[12px] md:text-sm leading-relaxed modal-text">{profile.tip}</p>
               </div>

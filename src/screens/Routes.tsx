@@ -49,11 +49,14 @@ export interface StartRouteProps {
   onToggleMotion: () => void;
   onCycleFx: () => void;
   onToggleTheme: () => void;
+  /** 方向档位：横屏手机下首页改用紧凑排布（否则内容 650px 塞进 427px 会被裁） */
+  orient: 'landscape-phone' | 'portrait-phone' | 'desktop';
 }
 
 export const StartRoute: React.FC<StartRouteProps> = (p) => (
   <StartScreen
     theme={p.theme}
+    orient={p.orient}
     layoutDensity={p.layoutDensity as never}
     sizeTier={p.sizeTier as never}
     motionOn={p.motionOn}

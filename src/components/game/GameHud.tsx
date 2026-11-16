@@ -293,7 +293,7 @@ export const MobilePhaseChip = React.memo(({ theme, phase, decisionLeft, decisio
   decisionSeconds: number;
   hidden: boolean;
 }) => (
-  <div className={`${hidden ? 'hidden' : 'md:hidden'} absolute top-2 left-[156px] z-[230]`}>
+  <div className={`mobile-phase-chip ${hidden ? 'hidden' : 'md:hidden'} absolute top-2 left-[156px] z-[230]`}>
     <div className="phase-panel relative overflow-hidden flex items-center gap-1.5 h-10 px-2.5 whitespace-nowrap">
       <span className="phase-panel-name text-[var(--fs-11)] font-bold font-ancient tracking-[0.12em]">
         {phase.replace('回合', '').replace('阶段', '')}

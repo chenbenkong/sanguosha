@@ -12,12 +12,18 @@
         android:supportsRtl="false"
         android:theme="@style/AppTheme">
 
+        <!-- 强制横屏：用固定的 landscape 而不是 sensorLandscape。
+             sensorLandscape 会跟随传感器 —— 用户在系统里锁了竖屏时它就跟着转竖屏，
+             而本作对局界面是横屏布局（手牌在下、对手在上），竖屏没法玩。
+             固定 landscape 会忽略传感器与锁定设置，强制保持横屏。
+             注意：XML 注释不能写在标签的属性列表中间，否则 manifest 解析失败
+             （实测 aapt2 报 ManifestMerger2$MergeFailureException）。 -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
             android:launchMode="singleTask"
             android:resizeableActivity="false"
-            android:screenOrientation="sensorLandscape"
+            android:screenOrientation="landscape"
             android:configChanges="orientation|screenSize|keyboardHidden|screenLayout|smallestScreenSize|uiMode"
             android:theme="@style/AppTheme">
             <intent-filter>

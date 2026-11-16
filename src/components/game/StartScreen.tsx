@@ -13,6 +13,8 @@ export const StartScreen: React.FC<{
   theme: 'dark' | 'light';
   layoutDensity: string;
   sizeTier: string;
+  /** 方向档位：横屏手机下首页也要紧凑排布（否则内容 650px 塞进 427px 会被裁） */
+  orient: 'landscape-phone' | 'portrait-phone' | 'desktop';
   motionOn: boolean;
   fxLevel: string;
   fxLabel: string;
@@ -37,7 +39,7 @@ export const StartScreen: React.FC<{
   onCycleFx: () => void;
   onToggleTheme: () => void;
 }> = ({
-  theme, layoutDensity, sizeTier, motionOn, fxLevel, fxLabel, fxTag, scaleStyle,
+  theme, layoutDensity, sizeTier, orient, motionOn, fxLevel, fxLabel, fxTag, scaleStyle,
   playerCount, onPlayerCount, aiDifficulty, onAiDifficulty, savedGame, onResume,
   onEnterSelect, onTutorial, onShowRules, onCloseRules, showRules, stats, homeNotice,
   isMuted, onToggleMute, onToggleMotion, onCycleFx, onToggleTheme,
@@ -45,9 +47,10 @@ export const StartScreen: React.FC<{
   <div
     data-density={layoutDensity}
     data-size-tier={sizeTier}
+  data-orient={orient}
     data-motion={motionOn ? 'on' : 'off'}
     data-fx={fxLevel}
-    className={`h-screen w-full flex flex-col items-center justify-center p-4 relative overflow-hidden ${theme === 'light' ? 'parchment-bg' : ''}`}
+    className={`h-screen w-full flex flex-col items-center p-4 relative overflow-y-auto overflow-x-hidden ${theme === 'light' ? 'parchment-bg' : ''}`}
     style={scaleStyle}
   >
     <BackgroundCarousel images={BACKGROUND_IMAGES} interval={CAROUSEL_CONFIG.interval} />
@@ -95,7 +98,10 @@ export const StartScreen: React.FC<{
       </button>
     </div>
 
-    <div className="relative z-10 flex min-h-full w-full flex-col items-center justify-center px-5 py-16">
+    {/* py-16 + justify-center 在矮屏上会把内容顶出上下两端（实测 924×427 下标题被切掉
+        25px、底部版本行被切掉 11px，两头都被裁）。改成：顶部对齐 + 可滚动，
+        内容多时往下滚而不是被裁掉；底部留白给固定定位的版本行。 */}
+    <div className="start-main relative z-10 flex min-h-full w-full flex-col items-center justify-start px-5 pt-8 pb-14">
       <div className="relative text-center">
         <div className={`absolute -top-5 right-1 md:-right-12 rotate-6 w-11 h-11 md:w-14 md:h-14 rounded-[5px] flex items-center justify-center border shadow-[0_6px_20px_rgba(0,0,0,0.5)] ${
           theme === 'dark'
@@ -105,7 +111,7 @@ export const StartScreen: React.FC<{
           <span className="font-ancient text-3xl md:text-4xl text-[#f3d9a4] leading-none select-none">殺</span>
         </div>
 
-        <h1 className={`font-ancient text-7xl md:text-8xl lg:text-[104px] leading-[1.15] tracking-[0.12em] relative ${
+        <h1 className={`start-title font-ancient text-7xl md:text-8xl lg:text-[104px] leading-[1.15] tracking-[0.12em] relative ${
           theme === 'dark'
             ? 'text-transparent bg-clip-text bg-gradient-to-b from-[#f6e3ae] via-[#d4af37] to-[#8d6a18]'
             : 'text-[#2a1d0e]'
@@ -181,7 +187,7 @@ export const StartScreen: React.FC<{
             );
           })()}
 
-          <div className="flex w-full max-w-[430px] flex-col sm:flex-row items-stretch justify-center gap-2.5">
+          <div className="start-actions flex w-full max-w-[430px] flex-col sm:flex-row items-stretch justify-center gap-2.5">
             <button
               onClick={onTutorial}
               aria-label="新手教学：9 步分步引导，可跳过，随时可重看"
@@ -218,7 +224,7 @@ export const StartScreen: React.FC<{
         </div>
       </div>
 
-      <div className="footer-line mt-6">
+      <div className="start-stats footer-line mt-6">
         <span>对局 <b>{stats.games}</b></span>
         <span className="sep">·</span>
         <span>胜 <b className={stats.wins > 0 ? '!text-[#9fcfae]' : ''}>{stats.wins}</b></span>

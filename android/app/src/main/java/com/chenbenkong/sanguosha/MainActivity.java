@@ -5,6 +5,7 @@ import android.app.Activity;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
+import android.content.pm.ActivityInfo;
 import android.os.Looper;
 import android.view.View;
 import android.view.ViewGroup;
@@ -49,6 +50,11 @@ public class MainActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        // 强制横屏，且**不受用户锁定屏幕方向的影响**。
+        // manifest 的 screenOrientation="landscape" 已经是固定横屏，但部分机型/系统
+        // 会在用户锁定竖屏时把 Activity 旋回竖屏；这里再显式指定一次，
+        // 优先级高于系统锁定（SCREEN_ORIENTATION_LOCKED）。
+        setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_LOCKED);
         applyImmersive();
 
         assetLoader = new WebViewAssetLoader.Builder()

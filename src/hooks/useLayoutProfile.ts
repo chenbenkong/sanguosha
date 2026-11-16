@@ -30,6 +30,13 @@ export interface LayoutProfile {
    * 桌面浏览器把窗口拉窄也符合「窄且不高」，但它不该被拦在外面。
    */
   isTouch: boolean;
+  /**
+   * 屏幕方向锁的状态：
+   *   · 'locked'      已成功锁定横屏（Android Chrome 全屏 / 我们的原生外壳）
+   *   · 'unavailable' 该环境不支持（iOS Safari、普通标签页）
+   *   · 'unknown'     还没试出结果
+   */
+  orientationLockState: 'unknown' | 'locked' | 'unavailable';
 }
 
 /**
@@ -70,14 +77,48 @@ export const useLayoutProfile = (): LayoutProfile => {
   // 配套的横屏紧凑样式（见 theme.css 里 [data-orient="landscape-phone"]）负责把
   // 内容真实高度压到这个目标以内，缩放在此只是把剩余差额补平。
   // 下限 0.6 是经验的可用性底线：再小字号就低于可读阈值了。
-  const LANDSCAPE_TARGET_H = 520;
-  // 手机端仅在「很矮」视口（<660）做整页缩放兜底；≥660 的常规手机（含 375×667）
-  // 不再缩放——缩放会把座位卡与字号一起压小，违背「手机端同步放大」的硬指标
-  const uiScale = landscapePhone
-    ? Math.max(0.6, Math.min(1, viewport.h / LANDSCAPE_TARGET_H))
-    : narrowShortPhone
-      ? Math.max(0.68, Math.min(1, viewport.h / 840))
-      : 1;
+  // ★ 横屏手机不再做整页缩放（uiScale 恒为 1）。
+  //
+  // 之前用 transform: scale(h/520) 把桌面布局等比塞进矮屏，实测两个问题：
+  //   ① 缩放盒（宽 = w/scale、高 = h/scale）与视口对不齐，底部区域被切；
+  //   ② 缩放后的字号/热区一起变小，手机上本来就该用更大的热区。
+  // 现在改成「视口就是真实布局空间」，由 theme.css 的
+  // [data-orient="landscape-phone"] 规则真正重排各分区的高度预算。
+  const uiScale = narrowShortPhone
+    ? Math.max(0.68, Math.min(1, viewport.h / 840))
+    : 1;
+
+  /**
+   * 尝试把屏幕**锁定**为横屏（Android Chrome / 部分 WebView 支持）。
+   *
+   * 为什么需要：网页无法像原生那样用 manifest 锁方向。若用户把手机竖着拿，
+   * 对局界面（横屏布局）就完全没法用。
+   *
+   * 限制与降级（都实测过）：
+   *   · Screen Orientation Lock API 只在**全屏**（fullscreen）时可用，
+   *     浏览器标签页里调用会抛 SecurityError —— 所以失败就静默忽略，
+   *     退回到「竖屏时显示『请横屏使用』引导层」。
+   *   · iOS Safari 不支持这个 API，锁不了 —— 同样走引导层。
+   */
+  const [orientationLockState, setOrientationLockState] = useState<'unknown' | 'locked' | 'unavailable'>('unknown');
+  useEffect(() => {
+    const anyScreen = window.screen as (Screen & {
+      orientation?: { lock?: (o: string) => Promise<void> };
+    }) | undefined;
+    const lock = anyScreen?.orientation?.lock;
+    if (typeof lock !== 'function') {
+      setOrientationLockState('unavailable');
+      return;
+    }
+    // 必须在用户手势里调用才不被拦，但首次加载时拿不到手势 ——
+    // 于是先试一次，失败就标记不可用；后续用户点「进入横屏」按钮时再补一次。
+    let cancelled = false;
+    void lock.call(anyScreen!.orientation, 'landscape')
+      .then(() => { if (!cancelled) setOrientationLockState('locked'); })
+      .catch(() => { if (!cancelled) setOrientationLockState('unavailable'); });
+    return () => { cancelled = true; };
+  }, []);
+
 
   // 触屏判定：粗指针或存在多点触控（两者任一即可，覆盖 iOS/Android 浏览器）
   const isTouch = typeof window !== 'undefined' && (
@@ -109,5 +150,8 @@ export const useLayoutProfile = (): LayoutProfile => {
 
   const sizeTier: SizeTier = viewport.w >= 1800 ? 'xl' : viewport.w >= 1440 ? 'lg' : 'md';
 
-  return { viewport, uiScale, scaleStyle, layoutDensity, sizeTier, landscapePhone, orient, portraitPhone, isTouch };
+  return {
+    viewport, uiScale, scaleStyle, layoutDensity, sizeTier, landscapePhone, orient,
+    portraitPhone, isTouch, orientationLockState,
+  };
 };

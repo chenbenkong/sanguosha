@@ -4741,9 +4741,190 @@ a:focus-visible {
 }
 
 /* 底部条在横屏下压掉内边距（Tailwind 的 pt-3/pb-2 是 12px/8px） */
+/* ── 横屏手机：对局界面的纵向预算 ─────────────────────────────────────────────
+   取消整页缩放后（useLayoutProfile 的 uiScale 横屏恒为 1），427px 高的视口就是真实
+   布局空间，必须显式分配高度，否则底部手牌会被挤出屏幕（玩家截图里手牌下半截被裁）。
+
+   预算（以 427 高为例）：
+     · 顶栏 + 对手座位排：绝对定位，浮在牌桌上，不占流
+     · 牌桌/牌堆区：flex-1 吃掉剩余（约 279px）
+     · 底部区：固定 148px = 手牌 118 + 上下内边距
+   自己的座位卡与操作栏在 md: 规则里已是绝对定位（见上面 2178/2181 行），
+   所以底部区在流内只剩手牌，高度可控。 */
 [data-orient="landscape-phone"] .bottom-bar {
-  padding-top: 4px;
-  padding-bottom: 4px;
+  padding-top: 2px;
+  padding-bottom: 2px;
+  /* 不要写死高度：.bottom-bar 在 md: 规则下是 display:grid，
+     手牌是 grid item、在 auto 行里按内容撑高（实测 166px）。
+     写死 148px 会让手牌溢出容器 56px（玩家截图里手牌下半截被裁就是这么来的）。
+     这里让它按内容自适应，手牌自然完整。 */
+  height: auto;
+  flex: none;
+  overflow: visible;
+}
+
+/* 手牌区：撑满底部区、卡底对齐容器底、不再让扇形溢出到屏幕外 */
+[data-orient="landscape-phone"] [data-region="hand"] {
+  /* 高度交给内容（卡片 124 + 扇形位移），不写 100%：grid item 的百分比高度
+     在 auto 行里是循环引用，浏览器会退回内容高度。 */
+  min-height: 0;
+  padding-bottom: 0;
+  align-items: flex-end;
+  /* 扇形旋转会让最外侧的卡角略微探出，裁掉不影响识别，但不裁会溢出屏幕 */
+  overflow: hidden;
+}
+
+/* 扇形卡片：去掉上抬位移，卡底贴住容器底 —— 之前 --fan-y 会把两侧的卡再往下推，
+   叠加旋转后整张卡移出屏幕。 */
+[data-orient="landscape-phone"] .fan-card {
+  --fan-y: 0px;
+}
+
+/* 牌桌区：允许压缩到内容高度以下，优先保证手牌完整可见 */
+[data-orient="landscape-phone"] [data-region="field"] {
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* 牌堆行再压一档（原来是 zoom 0.72），给牌桌留出呼吸空间 */
+[data-orient="landscape-phone"] [data-region="center-decks"] {
+  zoom: 0.62;
+}
+
+/* ── 更矮的横屏（≤400 / ≤370）：手牌按高度等比缩小 ─────────────────────────
+   427 高时手牌 166px + 底部其余 38px = 204px，正好放得下；
+   但 390 / 360 高的机型放不下（实测 780×360 下手牌被切 19px）。
+   用 zoom 而不是 transform：zoom 会真的改变布局尺寸，transform 只改绘制。
+   缩放比例按「可用高度」给，不写死某一机型。 */
+@media (orientation: landscape) and (max-height: 400px) {
+  [data-orient="landscape-phone"] [data-region="hand"] {
+    zoom: 0.82;
+  }
+}
+@media (orientation: landscape) and (max-height: 370px) {
+  [data-orient="landscape-phone"] [data-region="hand"] {
+    zoom: 0.72;
+  }
+}
+
+/* 出牌顺序侧栏：用 top/bottom 把盒子锚在视口内，而不是靠 max-height 计算 ——
+   实测 max-height 会被 md: 块里的规则链覆盖掉，最后几行（turn-rail-row）跑到屏幕外。
+   锚定后盒子必然落在视口内，内部再滚动。 */
+/* ── 横屏手机：收起常驻侧栏，改用手机版的一行式变体 ────────────────────────
+   手机屏幕寸土寸金（玩家原话）。原来两侧各挂一条折叠侧栏（各 40px，924 宽下占 9%），
+   加上 300px 的「当前阶段」浮层，牌桌和手牌被挤得没地方。
+
+   GameHud 里本来就有为 <768px 准备的手机变体（turn-strip 一行式顺序条、
+   MobilePhaseChip 一行式阶段条），只是横屏手机宽度 ≥768 落进了 md: 分支、
+   拿到的是桌面版侧栏。这里在横屏作用域里换回来：
+     · 战况记录侧栏      → 隐藏（需要看时用顶部「战况记录」入口展开）
+     · 出牌顺序侧栏      → 换成一行式 turn-strip
+     · 五阶段大浮层      → 换成一行式阶段条
+   这样右侧腾出约 260px、左侧腾出约 40px，全部让给牌桌与手牌。 */
+[data-orient="landscape-phone"] [data-region="log"] { display: none !important; }
+
+/* 出牌顺序：桌面版侧栏隐藏，手机版一行条显示 */
+[data-orient="landscape-phone"] [data-region="turn-rail"] { display: none !important; }
+[data-orient="landscape-phone"] [data-region="turn-strip"] { display: flex !important; }
+
+/* 五阶段进度轨：桌面版浮层隐藏，手机版一行条显示。
+   注意 MobilePhaseChip 内部**也复用了 .phase-panel 类**做过样式，
+   所以不能笼统地 `.phase-panel { display:none }` —— 那会把手机版阶段条一起干掉。
+   桌面版那个的类名里有 `absolute`，手机版内部的是 `relative`，据此区分。 */
+[data-orient="landscape-phone"] .phase-panel.absolute { display: none !important; }
+/* MobilePhaseChip 的容器是 md:hidden，横屏下强制显示 */
+[data-orient="landscape-phone"] .mobile-phase-chip { display: flex !important; }
+
+/* ── 横屏手机：首页紧凑化 ────────────────────────────────────────────────────
+   实测 924×427 下首页内容需要约 650px（标题 7xl + 出征面板 py-6 + 若干 mt-9/mt-6），
+   而视口只有 427 —— 上下两头都被 overflow-hidden 裁掉，玩家反馈「高度被挡住」。
+   这里按「一屏放得下」重排：标题降两档、各处间距收紧、把纵向堆叠改成更扁的排布。
+   作用域限定 [data-orient="landscape-phone"]，桌面与竖屏手机不受影响。 */
+[data-orient="landscape-phone"] .start-title {
+  font-size: 30px !important;
+  line-height: 1.02 !important;
+  letter-spacing: 0.06em !important;
+}
+/* 首页主体：上下内边距从 pt-8/pb-14 压到 6px，省 32px */
+[data-orient="landscape-phone"] .start-main {
+  padding-top: 6px !important;
+  padding-bottom: 6px !important;
+}
+/* 面板内部逐行收紧：标签行、选项瓦片、按钮都压一档。
+   实测面板内容 289px（两行选项 + 出征按钮 + 继续 + 两个动作按钮），是首页最高的一块。 */
+[data-orient="landscape-phone"] .ui-panel .grid {
+  row-gap: 2px !important;
+}
+[data-orient="landscape-phone"] .ui-panel .ui-tile {
+  padding-top: 3px !important;
+  padding-bottom: 3px !important;
+  font-size: 14px !important;
+}
+[data-orient="landscape-phone"] .ui-panel .mt-5,
+[data-orient="landscape-phone"] .ui-panel .mt-6 { margin-top: 4px !important; }
+[data-orient="landscape-phone"] .ui-panel .mt-9 { margin-top: 4px !important; }
+[data-orient="landscape-phone"] .ui-panel .h-px { margin-top: 4px !important; }
+/* 标题下的副标题行与英文行：小一档、去掉多余外边距 */
+[data-orient="landscape-phone"] .start-subtitle { margin-top: 4px !important; font-size: 11px !important; }
+[data-orient="landscape-phone"] .start-subtitle-en { margin-top: 0 !important; font-size: 9px !important; }
+
+/* 出征面板：内边距减半、上外边距收紧 */
+[data-orient="landscape-phone"] .ui-panel {
+  margin-top: 8px !important;
+  padding: 8px 14px !important;
+}
+/* 面板内两行选项（人数 / 难度）：行间距收紧 */
+[data-orient="landscape-phone"] .ui-panel .grid {
+  gap-top: 0;
+  row-gap: 4px !important;
+}
+[data-orient="landscape-phone"] .ui-panel .section-caption { font-size: 11px !important; }
+[data-orient="landscape-phone"] .ui-panel .ui-tile { padding-top: 5px; padding-bottom: 5px; }
+
+/* 出征按钮与「继续上一局」等：纵向间距全部收紧 */
+[data-orient="landscape-phone"] .ui-cta { margin-top: 8px !important; padding-top: 8px !important; padding-bottom: 8px !important; font-size: 20px !important; }
+[data-orient="landscape-phone"] .start-resume { margin-top: 6px !important; padding-top: 6px !important; padding-bottom: 6px !important; }
+[data-orient="landscape-phone"] .start-actions { margin-top: 6px !important; gap: 6px !important; }
+[data-orient="landscape-phone"] .start-actions button { min-height: 38px !important; padding-top: 4px !important; padding-bottom: 4px !important; }
+/* 战绩行在横屏下没有必要占一整行，收成一窄条 */
+[data-orient="landscape-phone"] .start-stats {
+  /* 战绩行贴到底部，不占流 —— 它在横屏下只是辅助信息，不该把出征面板往下挤。
+     注意要与版本行（.footer-line，bottom:2px）错开：两条都设 absolute bottom 会叠在一起
+     （第一版就是这样，截图里「对局 0 · 胜 0」直接压在「三国杀 · 5人军争篇 · v3.70」上）。 */
+  position: absolute !important;
+  bottom: 16px !important;
+  left: 0 !important;
+  right: 0 !important;
+  margin-top: 0 !important;
+  font-size: 10px !important;
+}
+/* 右下角版本行：贴底但不遮内容 */
+[data-orient="landscape-phone"] .footer-line { bottom: 2px !important; font-size: 9px !important; }
+
+/* ── 更矮的横屏（≤400 / ≤370）：首页再压一档 ─────────────────────────────────
+   实测 844×390 还需省 ~21px、780×360 还需 ~51px。这一档把标题再降、副标题直接藏掉、
+   选项与按钮的内边距收到最小 —— 手机横屏本来就没有垂直余地放装饰性文字。 */
+@media (orientation: landscape) and (max-height: 400px) {
+  [data-orient="landscape-phone"] .start-title { font-size: 24px !important; }
+  /* 副标题（群雄逐鹿 · 5人军争 / SANGUOSHA · IDENTITY）在矮屏上隐藏：
+     主标题与它信息重复，省下的 30px 用来保证出征按钮不被裁 */
+  [data-orient="landscape-phone"] .start-subtitle,
+  [data-orient="landscape-phone"] .start-subtitle-en { display: none !important; }
+  [data-orient="landscape-phone"] .ui-panel { padding: 5px 10px !important; margin-top: 4px !important; }
+  [data-orient="landscape-phone"] .ui-panel .ui-tile { padding-top: 2px !important; padding-bottom: 2px !important; font-size: 12px !important; }
+  [data-orient="landscape-phone"] .ui-panel .section-caption { font-size: 10px !important; }
+  [data-orient="landscape-phone"] .ui-cta { font-size: 16px !important; padding-top: 5px !important; padding-bottom: 5px !important; margin-top: 5px !important; }
+  [data-orient="landscape-phone"] .start-resume { margin-top: 4px !important; padding-top: 4px !important; padding-bottom: 4px !important; }
+  [data-orient="landscape-phone"] .start-actions { margin-top: 4px !important; }
+  [data-orient="landscape-phone"] .start-actions button { min-height: 30px !important; padding-top: 2px !important; padding-bottom: 2px !important; }
+  [data-orient="landscape-phone"] .start-main { padding-top: 2px !important; }
+}
+
+/* 360 高的机型（780×360 这类）还差最后 3px：面板内边距与标题再各收一点 */
+@media (orientation: landscape) and (max-height: 370px) {
+  [data-orient="landscape-phone"] .start-title { font-size: 22px !important; }
+  [data-orient="landscape-phone"] .ui-panel { padding: 4px 8px !important; margin-top: 2px !important; }
+  [data-orient="landscape-phone"] .ui-cta { margin-top: 3px !important; }
 }
 
 /* 牌桌在横屏下再矮一点，给手牌行让位（原来是 min(250px, 30vh)） */
@@ -4900,3 +5081,173 @@ a:focus-visible {
    内容高度从 520 冲到 666，手牌再次被裁出屏幕。
    媒体查询只能看视觉视口、看不到缩放后的盒子，所以这里显式把横屏手机并入宽版式。
    这条不会误伤竖屏手机：它们 h >= w，不满足 orientation: landscape。 */
+
+/* ── 武将详情：官方移动版的「羊皮纸卷轴」风 ────────────────────────────────────
+   参考正版三国杀移动版的技能详情面板：米黄纸底、深棕双线画框、居中分区标题带横线、
+   左侧立绘（左缘竖排姓名）、右侧【技能名】+ 单字类型方框。
+   本项目原来用的是暗色玻璃面板（跟对局界面同色系），手机上看等于又一块深色区域，
+   与官方那种「翻开一页纸」的观感差得远。这里换成纸质风格。 */
+.hd-scroll {
+  background:
+    radial-gradient(ellipse 120% 80% at 50% 0%, #e8dcc2 0%, #ddceb0 55%, #cdbb98 100%) !important;
+  border: 2px solid #8a6a3c !important;
+  box-shadow:
+    inset 0 0 0 6px rgba(214, 192, 152, 0.55),
+    inset 0 0 0 7px rgba(138, 106, 60, 0.45),
+    0 18px 48px rgba(0, 0, 0, 0.55) !important;
+  color: #4a3520;
+  border-radius: 10px !important;
+}
+/* 纸张纤维噪点：极淡，只做质感不做图案 */
+.hd-scroll::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: inherit;
+  background-image: url("data:image/svg+xml,%3Csvg width='120' height='120' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.06'/%3E%3C/svg%3E");
+}
+
+/* 顶部标题：沿用深棕、加一条下线；关闭按钮改成深棕描边 */
+.hd-scroll .modal-title { color: #5b3f1e !important; }
+.hd-scroll .modal-divider { background: linear-gradient(90deg, transparent, rgba(138, 106, 60, 0.7), transparent) !important; }
+.hd-scroll button[aria-label="关闭武将详情"] {
+  color: #5b3f1e !important;
+  border-color: rgba(138, 106, 60, 0.5) !important;
+  background: rgba(255, 250, 238, 0.5) !important;
+}
+
+/* 技能名：【】包裹 + 酒红（官方就是酒红/枣红） */
+.hd-scroll .hd-skill-name { color: #8c2f22 !important; }
+/* 单字类型方框：主=绿、被=金、锁=赭、限=紫、觉=靛 */
+.hd-scroll .hd-tag {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 3px;
+  border-radius: 2px;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  border: 1px solid currentColor;
+  background: rgba(255, 255, 255, 0.35);
+}
+/* 正文段落：深棕，行距放宽（纸面上太密会糊） */
+.hd-scroll .text-stone-300,
+.hd-scroll .text-stone-400,
+.hd-scroll .modal-text-dim { color: #5a4227 !important; }
+.hd-scroll .leading-relaxed { line-height: 1.75 !important; }
+
+/* 分区标题（当前状态 / 传记 / 实战提示）：居中 + 两侧横线，官方「装备区域」那种 */
+.hd-scroll .hd-section-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  justify-content: center;
+  color: #7a5a30 !important;
+  font-family: 'Ma Shan Zheng', 'STKaiti', 'KaiTi', serif;
+  font-size: 17px;
+  letter-spacing: 0.14em;
+}
+.hd-scroll .hd-section-title::before,
+.hd-scroll .hd-section-title::after {
+  content: '';
+  flex: 1 1 auto;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(138, 106, 60, 0.55), transparent);
+}
+/* 分区容器：纸面上的浅色隔断，不再用暗色玻璃块 */
+.hd-scroll .hd-block {
+  background: rgba(255, 252, 244, 0.42) !important;
+  border: 1px solid rgba(138, 106, 60, 0.35) !important;
+  border-radius: 8px !important;
+}
+/* 立绘左缘的竖排姓名条（官方做法：深红底、竖排白字） */
+.hd-scroll .hd-name-rail {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  writing-mode: vertical-rl;
+  letter-spacing: 0.22em;
+  font-family: 'Ma Shan Zheng', 'STKaiti', 'KaiTi', serif;
+  font-size: 15px;
+  color: #f3e4c6;
+  background: linear-gradient(180deg, #8c2f22 0%, #6d221a 100%);
+  border-radius: 8px 0 0 8px;
+}
+
+/* 卷轴面板内部：把原本的暗色玻璃块统一改成纸面浅色。
+   面板底色换成羊皮纸后，内部若还是 #1a1410/#241b14 这类暗底，就变成
+   「浅色纸上贴几块黑胶布」，文字对比度也差（实测截图就是这样）。
+   这里用类名子串匹配现有的 Tailwind 暗色工具类做覆盖，避免逐个改 JSX。 */
+.hd-scroll [class*="bg-[#1a1410]"],
+.hd-scroll [class*="bg-[#241b14]"],
+.hd-scroll [class*="bg-[#14100c]"],
+.hd-scroll [class*="bg-[#0d0a07]"] {
+  background: rgba(255, 252, 244, 0.55) !important;
+}
+.hd-scroll [class*="border-[#c8a45c]"],
+.hd-scroll [class*="border-[#8b7355]"] {
+  border-color: rgba(138, 106, 60, 0.38) !important;
+}
+/* 浅底上的浅色字（原设计给暗底用的）统一压成深棕 */
+.hd-scroll .text-\[\#f0dcae\],
+.hd-scroll .text-\[\#e8cf94\],
+.hd-scroll .text-\[\#f0d894\],
+.hd-scroll .text-\[\#d9c49a\],
+.hd-scroll .text-\[\#c8bda8\],
+.hd-scroll .text-\[\#f4e4bf\],
+.hd-scroll .text-\[\#e8a99f\],
+.hd-scroll .text-\[\#f0b8b0\] {
+  color: #5a4227 !important;
+}
+/* 体力数字保留朱红以示重要 */
+.hd-scroll .text-\[\#e8a99f\] { color: #9e2b25 !important; }
+
+/* 标题：原来是「渐变裁切」文字（bg-clip-text + text-transparent），
+   在浅色纸面上会糊掉。改成实色深棕 + 取消裁切。 */
+.hd-scroll .modal-title,
+.hd-scroll h2.modal-title {
+  background: none !important;
+  -webkit-background-clip: border-box !important;
+  background-clip: border-box !important;
+  -webkit-text-fill-color: #5b3f1e !important;
+  color: #5b3f1e !important;
+  text-shadow: none !important;
+}
+
+/* 底部的关闭 / 出战按钮：纸面上用描边款 */
+.hd-scroll .btn-ink {
+  background: rgba(255, 250, 238, 0.65) !important;
+  border-color: rgba(138, 106, 60, 0.6) !important;
+  color: #5b3f1e !important;
+}
+
+/* 徽章（势力 / 包 / 体力上限）：原来都是暗底浅字，换纸面后要反过来 ——
+   浅色底 + 深棕字；「体力上限」原来是朱红底，保留红但把字改成米白以保证对比度。 */
+.hd-scroll [class*="bg-[#2a1512]"],
+.hd-scroll [class*="bg-[#14100c]"],
+.hd-scroll [class*="bg-[#3a2f14]"],
+.hd-scroll [class*="bg-[#241b14]"] {
+  background: rgba(255, 250, 238, 0.75) !important;
+}
+.hd-scroll [class*="bg-[#9e2b25]"],
+.hd-scroll [class*="border-[#9e2b25]"] {
+  color: #f6e3c8 !important;
+  border-color: rgba(158, 43, 37, 0.75) !important;
+  background: rgba(158, 43, 37, 0.85) !important;
+}
+
+/* 底部按钮栏（关闭 / 出战）：跟着纸面走，不要留一条暗色底 */
+.hd-scroll > div:last-child,
+.hd-scroll .hd-footer {
+  background: rgba(226, 210, 178, 0.55) !important;
+  border-top-color: rgba(138, 106, 60, 0.4) !important;
+}
