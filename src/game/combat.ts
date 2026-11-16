@@ -866,7 +866,9 @@ const skillDeps = (): DispatchDeps => ({
           min: 1,
           max: 3,
           cancelLabel: '不猜测',
-        });
+        // 决策者是发动「凌人」的 source。上面注释写着「AI 按公开信息推测」，
+        // 但此前没把这个意图落到 allowPrompt 上（缺省 true），结果 AI 的猜测弹给了人类。
+        }, source.isHuman);
         if (pick && pick.kind === 'multi') {
           guessIds = pick.ids;
         } else if (pick && pick.kind === 'cancel') {

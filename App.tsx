@@ -51,6 +51,7 @@ import { ActionBar } from './src/components/game/ActionBar';
 import { GameTopBar, UiDisplayMenu, UiRegion, BgmPref } from './src/components/game/GameTopBar';
 import { IconSpeaker, IconSun, IconMoon, IconBolt, IconBook, IconDice, IconMotion, IconArrowLeft, ThemeIcon, IconEye } from './src/components/Icons';
 import { useLayoutProfile } from './src/hooks/useLayoutProfile';
+import { shouldPromptSkillChoice } from './src/game/skills/skillPromptPolicy';
 import { RotateHint } from './src/components/RotateHint';
 import GameOverScreen from './src/components/GameOverScreen';
 import { useTheme } from './src/contexts/ThemeContext';
@@ -1011,18 +1012,23 @@ const App: React.FC = () => {
     banner: (h: string, sk: string) => showSkillBanner(h, sk),
     delay: (ms: number) => delay(ms),
     skillsOn: (pid: number) => skillsOn(pid),
-    requestChoice: (req: SkillChoiceReq) => requestSkillChoice({
-      skill: req.title,
-      owner: '技能',
-      title: req.title,
-      hint: req.hint,
-      mode: req.mode,
-      choices: req.choices,
-      targets: req.targets,
-      min: req.min,
-      max: req.max,
-      cancelLabel: req.cancelLabel,
-    }, !isAiTakeoverRef.current),
+    requestChoice: (req: SkillChoiceReq) => {
+      return requestSkillChoice({
+        skill: req.title,
+        owner: '技能',
+        title: req.title,
+        hint: req.hint,
+        mode: req.mode,
+        choices: req.choices,
+        targets: req.targets,
+        min: req.min,
+        max: req.max,
+        cancelLabel: req.cancelLabel,
+        askerId: req.askerId,
+      // 谁在问：技能拥有者。AI 武将的技能由 AI 自己决定，绝不弹给人类
+      // （判据抽成纯函数便于单测，见 src/game/skills/skillPromptPolicy.ts）
+      }, shouldPromptSkillChoice(req.askerId, playersRef.current, isAiTakeoverRef.current));
+    },
     // ── 第六批能力：视为使用牌 / 技能授予 / 轮数 ──
     useCardAs: async (pid, cardIn, targetIds, opts) => {
       if (!combatEngine) return false;
@@ -5571,7 +5577,9 @@ const App: React.FC = () => {
         min: 1,
         max: 1,
         cancelLabel: '暂不使用',
-      });
+      // 决策者是发动「矫诏」的 owner（郭皇后）。它若是 AI，必须让 AI 自己选，
+      // 否则会把「选择【杀】的目标」这种 AI 决策弹到人类脸上。此前漏传，默认 true。
+      }, owner.isHuman);
       if (!pick || pick.kind === 'cancel' || pick.kind === 'timeout') return;
       const target = candidates.find(p => pick.kind === 'target' && pick.ids[0] === p.id);
       if (!target) return;

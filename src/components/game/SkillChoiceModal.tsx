@@ -7,6 +7,8 @@ export type SkillChoiceRequest = {
   owner: string;
   title: string;
   hint?: string;
+  /** 谁在提问（技能拥有者 id）。缺省 = 非技能来源，照旧弹窗。 */
+  askerId?: number;
   mode: 'choose' | 'multi' | 'card' | 'target';
   choices?: { id: string; label: string; desc?: string }[];
   cards?: Card[];

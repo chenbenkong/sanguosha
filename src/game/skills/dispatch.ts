@@ -21,6 +21,14 @@ export type SkillChoiceReq = {
   title: string;
   hint?: string;
   mode: 'choose' | 'multi' | 'card' | 'target';
+  /**
+   * 谁在提问（技能拥有者的 id）。由 ctxFor 自动注入，技能作者不用写。
+   *
+   * 用途：让「弹窗层」判断该不该弹 —— AI 武将的技能必须由 AI 自己决定，
+   * 绝不能把选择弹给人类玩家（此前 deps.requestChoice 只知道「是否托管」，
+   * 不知道「是谁在问」，于是 AI 的技能也会弹给人类）。
+   */
+  askerId?: number;
   choices?: Array<{ id: string; label: string; desc?: string }>;
   targets?: Array<{ id: number; name: string; sub?: string }>;
   min?: number;
@@ -63,6 +71,8 @@ export interface DispatchDeps {
     title: string;
     hint?: string;
     mode: 'choose' | 'multi' | 'card' | 'target';
+    /** 谁在提问（技能拥有者 id），由 ctxFor 注入；弹窗层据此决定该不该弹给人类 */
+    askerId?: number;
     choices?: Array<{ id: string; label: string; desc?: string }>;
     targets?: Array<{ id: number; name: string; sub?: string }>;
     min?: number;
@@ -225,6 +235,11 @@ const ctxFor = (deps: DispatchDeps, self: Player, hero: string, skill: string): 
     // 弹窗需要知道是哪个技能在问
     title: req.title,
     hint: req.hint ?? `${hero} 的「${skill}」`,
+    // 谁在问。self 是技能拥有者；弹窗层据此判断该不该弹给人类——
+    // AI 武将的技能由 AI 自己决定，绝不弹给人类玩家。
+    // 放在这里而不是在本层硬拦：本层若直接返回 null，测试的脚本化替身
+    // 也会被拦掉（harness 的 requestChoice 不是弹窗，是测试驱动）。
+    askerId: self.id,
   }),
   // 下面四项在 deps 层都要求显式给 playerId（技能可能作用于别人：
   // 日彗令「信众」持有者各自使用牌、连枝令他人获得「受责」），
