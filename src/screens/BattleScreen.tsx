@@ -102,6 +102,8 @@ export interface BattleScreenProps {
   jiedaoWeaponTarget: any;
   judgmentVisual: any;
   layoutDensity: any;
+  landscapePhone: boolean;
+  orient: 'landscape-phone' | 'portrait-phone' | 'desktop';
   lijianSelectedCardId: any;
   lijianSelectedTargets: any;
   logCollapsed: any;
@@ -230,6 +232,9 @@ export const BattleScreen: React.FC<BattleScreenProps> = (props) => {
       data-motion={props.motionOn ? 'on' : 'off'}
       data-fx={props.fxLevel}
       data-seat-stagger={props.enemies.length >= 6 ? 'true' : 'false'}
+      // 方向档位：横屏手机的紧凑样式全部挂在 [data-orient="landscape-phone"] 下，
+      // 这样桌面（1440×900）与竖屏手机（375×667）的既有规则一个字都不用动。
+      data-orient={props.orient}
       className={`h-screen w-full flex flex-col overflow-hidden relative ${props.theme === 'light' ? 'parchment-bg' : 'bg-[#1c1c1c]'}`}
       style={props.scaleStyle}
     >

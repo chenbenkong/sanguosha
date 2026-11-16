@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 与网页侧 theme-color / 水墨底色一致，避免启动瞬间闪白 -->
+    <color name="brand_bg">#FF1A1410</color>
+    <color name="brand_bg_translucent">#00000000</color>
+</resources>

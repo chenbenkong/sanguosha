@@ -554,11 +554,45 @@ describe('端到端 · 覆盖补充', () => {
     beforeAll(async () => { ctx = await openApp(BASE); }, 60000);
     afterAll(async () => { if (ctx) await ctx.close(); });
 
-    it('390×844 视口下无横向滚动，且武将卡片可点选', async () => {
-      // 手机竖屏：iPhone 12/13/14 的逻辑分辨率
-      await ctx.page.setViewport({ width: 390, height: 844, deviceScaleFactor: 1 });
+    // 产品决策变更：手机竖屏不再是受支持的形态。
+    // 对局界面按横屏设计（手牌铺在下、对手在上、两侧贴信息条），竖屏 390 宽塞不下，
+    // 因此竖屏手机现在被引导层拦住，要求先转横屏。原先这条用例断言的
+    // 「390×844 竖屏可用 + 卡片可点」对应的是旧行为，已被下面三条取代。
+    it('竖屏手机（触屏）被拦下，显示「请横屏使用」而不是进入界面', async () => {
+      await ctx.page.setViewport({ width: 390, height: 844, deviceScaleFactor: 1, isMobile: true, hasTouch: true });
       await sleep(600);
 
+      const state = await ctx.page.evaluate(() => ({
+        hint: !!document.querySelector('[data-rotate-hint]'),
+        hintText: (document.querySelector('[data-rotate-hint]')?.textContent || '').replace(/\s+/g, ''),
+        // 引导层是拦截：选将/对局界面不该同时渲染出来
+        startBtn: [...document.querySelectorAll('button')].some((b) => (b.textContent || '').trim() === '点兵出征'),
+        heroCards: document.querySelectorAll('button[aria-label^="选择 "]').length,
+      }));
+      expect(state.hint).toBe(true);
+      expect(state.hintText).toContain('请横屏使用');
+      expect(state.startBtn).toBe(false);
+      expect(state.heroCards).toBe(0);
+      await shot(ctx.page, 'coverage-mobile-rotate-hint');
+    }, 60000);
+
+    it('非触屏的窄窗口不被拦（桌面浏览器拉窄仍可用）', async () => {
+      // 触屏判定（pointer:coarse / maxTouchPoints）才是拦截条件；
+      // 桌面把窗口拉成窄高不该被挡在外面。
+      await ctx.page.setViewport({ width: 390, height: 844, deviceScaleFactor: 1, isMobile: false, hasTouch: false });
+      await sleep(600);
+
+      const hint = await ctx.page.evaluate(() => !!document.querySelector('[data-rotate-hint]'));
+      expect(hint).toBe(false);
+      expect(await ctx.page.evaluate(() => [...document.querySelectorAll('button')].some((b) => (b.textContent || '').trim() === '点兵出征'))).toBe(true);
+    }, 60000);
+
+    it('横屏手机下选将可用：无横向滚动，且武将卡片可点选', async () => {
+      // 横屏手机：iPhone 12/13/14 的横屏逻辑分辨率
+      await ctx.page.setViewport({ width: 844, height: 390, deviceScaleFactor: 1, isMobile: true, hasTouch: true });
+      await sleep(600);
+
+      expect(await ctx.page.evaluate(() => !!document.querySelector('[data-rotate-hint]'))).toBe(false);
       expect(await enterHeroSelect(ctx.page)).toBe(true);
 
       const widths = await ctx.page.evaluate(() => ({
@@ -571,7 +605,7 @@ describe('端到端 · 覆盖补充', () => {
       // 严格相等：多 1px 也是横向滚动
       expect(widths.docScroll).toBe(widths.docClient);
       expect(widths.bodyScroll).toBe(widths.bodyClient);
-      expect(widths.docClient).toBe(390);
+      expect(widths.docClient).toBe(844);
 
       // 卡片在移动端是两列，先确认真的渲染出来了
       const cards = await readHeroCards(ctx.page);

@@ -32,7 +32,56 @@ export interface OpenAppOptions {
   seed?: Record<string, string>;
 }
 
+/**
+ * 防止「拿旧产物跑 e2e」。
+ *
+ * 背景（实测踩过）：vitest.e2e.config.ts 只跑测试、**不构建**，preview 直接吃 dist/。
+ * CI 里是 workflow 先 vite build 再 e2e，所以线上没问题；但本地改完源码忘了重建时，
+ * e2e 会对着旧 dist 全绿 —— 断言看起来在保护新代码，实际保护的是上一版，
+ * 真实的回归可以从这里溜过去。本函数把这种情况变成一次明确的失败。
+ *
+ * 判据：src/**、App.tsx、index.html 里任一文件的 mtime 比 dist/index.html 新，
+ * 就说明产物过期。构建后立刻跑测试的 mtime 粒度误差用 2 秒容差吸收。
+ */
+const assertDistFresh = (): void => {
+  const repoRoot = path.resolve(__dirname, '..');
+  const distEntry = path.join(repoRoot, 'dist', 'index.html');
+  if (!fs.existsSync(distEntry)) {
+    throw new Error('e2e 需要先构建：dist/index.html 不存在。请先运行 node node_modules/vite/bin/vite.js build 。');
+  }
+  const distMtime = fs.statSync(distEntry).mtimeMs;
+
+  let newestSrc = 0;
+  let newestFile = '';
+  const consider = (file: string) => {
+    try {
+      const m = fs.statSync(file).mtimeMs;
+      if (m > newestSrc) { newestSrc = m; newestFile = file; }
+    } catch { /* 读不到的路径忽略 */ }
+  };
+  const walk = (dir: string) => {
+    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+      const full = path.join(dir, e.name);
+      if (e.isDirectory()) walk(full);
+      else if (/\.(ts|tsx|css|html)$/.test(e.name)) consider(full);
+    }
+  };
+  walk(path.join(repoRoot, 'src'));
+  consider(path.join(repoRoot, 'App.tsx'));
+  consider(path.join(repoRoot, 'index.html'));
+
+  if (newestSrc > distMtime + 2000) {
+    throw new Error(
+      'e2e 用的 dist 比源码旧，测的会是上一版产物。\n'
+      + '  最新源码：' + path.relative(repoRoot, newestFile) + '\n'
+      + '  请先运行：node node_modules/vite/bin/vite.js build\n'
+      + '（CI 的 workflow 已经先 build 再跑 e2e，这条只在本地忘记重建时触发。）',
+    );
+  }
+};
+
 export const openApp = async (baseUrl: string, opts: OpenAppOptions = {}): Promise<E2EContext> => {
+  assertDistFresh();
   const browser = await puppeteer.launch({
     executablePath: CHROME_PATH,
     headless: true,

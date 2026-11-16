@@ -31,3 +31,13 @@ shots/
 
 # 素材脚本的上游数据（voice.json 等），按需重新下载，不入库
 cardsrepo/
+
+# Android 原生工程（repo/android/）构建产物
+android/.gradle/
+android/build/
+android/app/build/
+android/.idea/
+android/captures/
+android/local.properties
+android/app/src/main/assets/www/
+

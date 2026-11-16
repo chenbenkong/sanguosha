@@ -51,6 +51,7 @@ import { ActionBar } from './src/components/game/ActionBar';
 import { GameTopBar, UiDisplayMenu, UiRegion, BgmPref } from './src/components/game/GameTopBar';
 import { IconSpeaker, IconSun, IconMoon, IconBolt, IconBook, IconDice, IconMotion, IconArrowLeft, ThemeIcon, IconEye } from './src/components/Icons';
 import { useLayoutProfile } from './src/hooks/useLayoutProfile';
+import { RotateHint } from './src/components/RotateHint';
 import GameOverScreen from './src/components/GameOverScreen';
 import { useTheme } from './src/contexts/ThemeContext';
 import { WINNER_LABEL, WinnerSide, APP_VERSION, KINGDOM_CLASS } from './src/game/constants';
@@ -114,7 +115,7 @@ const App: React.FC = () => {
   const [playerCount, setPlayerCount] = useState<5 | 7>(5); // 游戏人数选择
   
   // 视口分档（CSS 像素）：高分屏换算、密度档、宽屏档统一在 useLayoutProfile 里维护
-  const { viewport, uiScale, scaleStyle, layoutDensity, sizeTier } = useLayoutProfile();
+  const { viewport, uiScale, scaleStyle, layoutDensity, sizeTier, landscapePhone, orient, portraitPhone, isTouch } = useLayoutProfile();
 
 
   // --- Game State ---
@@ -7773,6 +7774,12 @@ const App: React.FC = () => {
 
   // --- Render ---
 
+  // 手机竖屏：所有界面统一先要求横屏。
+  // 必须放在这里（渲染区最前面）而不是某个 return 上——App 按 screen 分成多个 return
+  // （start / select / game / 结算各一个），挂在最后一个只覆盖对局界面，
+  // 实测竖屏打开应用时停在起始页，引导层根本不出现。
+  // 只拦触屏设备：桌面浏览器把窗口拉窄不该被挡在外面。
+  if (portraitPhone && isTouch) return <RotateHint />;
 
   if (screen === 'start') {
     return (
@@ -7890,7 +7897,9 @@ const App: React.FC = () => {
   // 手牌尺寸只按设备类型分档：桌面始终大卡（高度≥140px 硬指标），手机小卡但高度≥110px
   // 例外：ultra 档（≤640px 高的窗口）用标准卡，否则 152px 高的大卡旋转后会超出视口底部
   const compactHand = layoutDensity !== 'roomy';
-  const isMobileHand = viewport.w < 768;
+  // 横屏手机（844 宽）原本落在 viewport.w < 768 之外，拿到的是桌面大卡 96×144，
+  // 手牌行因此高达 163px —— 而横屏手机只有 390 高。改用 small 卡（82×118）省 26px。
+  const isMobileHand = viewport.w < 768 || landscapePhone;
   const handLarge = !isMobileHand && layoutDensity !== 'ultra';
 
   // 对局接线对象：由 App 一次性组装，对局内组件通过 useGameApi() 读取
@@ -8078,6 +8087,8 @@ const App: React.FC = () => {
     jiedaoWeaponTarget,
     judgmentVisual,
     layoutDensity,
+    landscapePhone,
+    orient,
     lijianSelectedCardId,
     lijianSelectedTargets,
     blockedHint,
