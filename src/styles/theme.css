@@ -1,3 +1,38 @@
+/* ── 内置字体（离线可用）─────────────────────────────────────────────────────
+   为什么必须有：CSS 里 `font-ancient` 用的是「Ma Shan Zheng」这个**系统字体族名**，
+   而仓库里那三份 woff2 此前**从来没有被 @font-face 引用过** —— index.html 里 preload 了，
+   CSS 里却没有任何一条 @font-face 声明，等于装饰品。
+   后果是：设备没装该字体时（Android WebView 基本没装），标题字会静默掉成默认字形，
+   单机离线场景尤其明显（实测 Noto Serif SC: unloaded，中文全部回退）。
+
+   现在把 Ma Shan Zheng（OFL 开源，见 public/fonts/OFL.txt）做成**按游戏用字裁剪**的子集内联：
+   完整版 5.8MB → 子集 596KB（1460 个码点，其中 CJK 1359 个，覆盖源码里出现的全部汉字）。
+   font-family 仍写 'Ma Shan Zheng'，因此**装了系统字体的设备照旧优先用系统版本**，
+   没装的（Android WebView）自动落到内置子集，两种环境观感一致。
+
+   Noto Serif SC 保留给正文衬线，同样内联子集。 */
+@font-face {
+  font-family: 'Ma Shan Zheng';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('../../fonts/MaShanZheng-sub.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Noto Serif SC';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('../../fonts/NotoSerifSC-400-sub.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Noto Serif SC';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('../../fonts/NotoSerifSC-700-sub.woff2') format('woff2');
+}
+
 /* 历史样式（原 index.html 内联 <style>）先于 Tailwind 引入，
    保证本文件后续规则在层叠顺序上仍与原内联样式一致 */
 @import './legacy.css';
