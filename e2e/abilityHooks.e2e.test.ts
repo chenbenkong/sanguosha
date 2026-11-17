@@ -242,7 +242,11 @@ describe('端到端：结算前钩子', () => {
       // 拉长等待不削弱这条用例：条件仍然必须成立，只是给它 3 倍余量。
       // 另外已核对那一次的 CI 日志里「结算停滞」告警为 0 条，
       // 说明是机器慢，不是主循环卡死。
-      const judged = await until(ctx.page, 180000, async () =>
+      // 等待预算按 **CI 实测**给，不按本地：本地这句 22s 就过，但 GitHub 共享 runner
+      // 上实测 191s 还没等到（该用例整体 191s，比本地慢 8.7 倍）。
+      // 这条证的是「红颜判定日志会不会出现」，不是「多快出现」；
+      // 真不出日志，300s 后依然是红。
+      const judged = await until(ctx.page, 300000, async () =>
         (await snapshot(ctx.page, 0)).logs.some(l => l.includes('小乔 的【乐不思蜀】判定：')));
       expect(judged).toBe(true);
 
@@ -259,5 +263,5 @@ describe('端到端：结算前钩子', () => {
       await ctx.close();
     }
     // 用例超时必须大于上面两段等待之和（180s + 60s）再加准备时间
-  }, 320000);
+  }, 480000);
 });
