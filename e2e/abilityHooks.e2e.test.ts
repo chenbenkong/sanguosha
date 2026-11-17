@@ -6,6 +6,20 @@ import { startPreview } from './preview';
 import type { E2EContext } from './helpers';
 
 /**
+ * CI 上的等待倍率。
+ *
+ * 依据（同一份代码的实测对比）：
+ *   · 本地：本文件整体 51–60s，其中释衅 28–31s、小乔红颜 14–22s
+ *   · GitHub 共享 runner：本文件 620–1500s，单条用例 191–1320s，慢 6–25 倍
+ * 而且**失败用例在三次部署里轮换**（完整局超时 → 小乔超时 → 释衅超时），
+ * 同一次里其余 24-25 条全过、日志 0 条停滞告警 —— 是 runner 算力波动，
+ * 不是某条逻辑卡死。所以 CI 上统一给 3 倍余量：条件仍必须成立，只是等更久。
+ */
+const CI_WAIT_FACTOR = process.env.CI ? 3 : 1;
+const ci = (ms: number) => ms * CI_WAIT_FACTOR;
+
+
+/**
  * 端到端：结算前钩子在真实对局里生效。
  *
  * 用 vite **dev** server 而不是 preview：要构造「喂火焰伤害」「判定牌必定方块」这类
@@ -48,7 +62,7 @@ beforeAll(async () => {
   // 不一致直接报错而不是静默连到别人的服务上。
   previewHandle = await startPreview({ dev: true });
   BASE = previewHandle.base;
-}, 120000);
+}, ci(120000));
 
 afterAll(() => {
   previewHandle?.stop();
@@ -76,6 +90,7 @@ const snapshot = (page: Page, playerId: number) =>
 /** 开发态探针就位（只有 dev server 有；preview 上是 false） */
 const probeReady = (page: Page): Promise<boolean> =>
   page.evaluate(() => typeof (window as unknown as { __devState?: unknown }).__devState === 'function');
+
 
 /** 轮询直到 check 为真；超时返回 false（所有等待都带 deadline，不用无上限轮询） */
 const until = async (page: Page, timeoutMs: number, check: () => Promise<boolean>): Promise<boolean> => {
@@ -143,7 +158,7 @@ describe('端到端：结算前钩子', () => {
       // 先等仪式退场再取快照。
       // 实测（3 局，preview）：仪式在点下「确认出战」后 3162 / 3166 / 3183 ms 消失。
       expect(
-        await until(ctx.page, 15000, () =>
+        await until(ctx.page, ci(15000), () =>
           ctx.page.evaluate(() => !document.querySelector('.battle-intro'))),
       ).toBe(true);
       expect(await probeReady(ctx.page)).toBe(true);
@@ -159,7 +174,7 @@ describe('端到端：结算前钩子', () => {
       // 等空闲与喂探针合并在一次求值里，理由见 feedProbes 的注释。
       expect(await feedProbes(ctx.page, [['__devDamage', [0, 1, 2, 'fire']]])).toBe(true);
 
-      const prevented = await until(ctx.page, 15000, async () =>
+      const prevented = await until(ctx.page, ci(15000), async () =>
         (await snapshot(ctx.page, 0)).logs.some(l => l.includes('释衅') && l.includes('不受火焰伤害')));
       expect(prevented).toBe(true);
 
@@ -178,7 +193,7 @@ describe('端到端：结算前钩子', () => {
       // ── 结算锁：上一批扩展真正翻车的地方 ──
       // 泄漏时 setIsProcessing 停在 1，主循环 effect 直接 return，整局冻结在
       // 「回合 / 阶段不再变化」。所以断言的是用户能看见的后果：对局还在往前走。
-      const advanced = await until(ctx.page, 45000, async () =>
+      const advanced = await until(ctx.page, ci(45000), async () =>
         (await snapshot(ctx.page, 0)).loop.turnIndex !== before.loop.turnIndex);
       expect(advanced).toBe(true);
 
@@ -186,7 +201,7 @@ describe('端到端：结算前钩子', () => {
       // 原先这里是一次 until(...) 求值后再一次 evaluate：前一次的返回值没人接，
       // 等空闲超时了也会照旧喂伤害——是本次要收掉的第二处同源竞态。
       expect(await feedProbes(ctx.page, [['__devDamage', [0, 1, 1]]])).toBe(true);
-      const hurt = await until(ctx.page, 20000, async () => {
+      const hurt = await until(ctx.page, ci(20000), async () => {
         const s = await snapshot(ctx.page, 0);
         return s.logs.some(l => l.includes('孙茹 受到 1 点伤害')) || s.hp < before.hp;
       });
@@ -194,7 +209,7 @@ describe('端到端：结算前钩子', () => {
     } finally {
       await ctx.close();
     }
-  }, 180000);
+  }, ci(180000));
 
   /**
    * 「红颜：方块判定视为红桃」这条玩家可见规则必须成立。
@@ -214,7 +229,7 @@ describe('端到端：结算前钩子', () => {
       // 同释衅：先等入场仪式退场（实测 3162 / 3166 / 3183 ms），仪式期间
       // isProcessing 恒为 0，不代表主循环真的空闲。
       expect(
-        await until(ctx.page, 15000, () =>
+        await until(ctx.page, ci(15000), () =>
           ctx.page.evaluate(() => !document.querySelector('.battle-intro'))),
       ).toBe(true);
       expect(await probeReady(ctx.page)).toBe(true);
@@ -246,7 +261,7 @@ describe('端到端：结算前钩子', () => {
       // 上实测 191s 还没等到（该用例整体 191s，比本地慢 8.7 倍）。
       // 这条证的是「红颜判定日志会不会出现」，不是「多快出现」；
       // 真不出日志，300s 后依然是红。
-      const judged = await until(ctx.page, 300000, async () =>
+      const judged = await until(ctx.page, ci(300000), async () =>
         (await snapshot(ctx.page, 0)).logs.some(l => l.includes('小乔 的【乐不思蜀】判定：')));
       expect(judged).toBe(true);
 
@@ -256,12 +271,12 @@ describe('端到端：结算前钩子', () => {
       expect(line).toContain('触发「红颜」视为红桃');
 
       // 改写后的花色真的参与了结算：【乐不思蜀】判定为红桃即解除
-      const removed = await until(ctx.page, 60000, async () =>
+      const removed = await until(ctx.page, ci(60000), async () =>
         (await snapshot(ctx.page, 0)).logs.some(l => l.includes('判定为红桃，【乐不思蜀】解除')));
       expect(removed).toBe(true);
     } finally {
       await ctx.close();
     }
     // 用例超时必须大于上面两段等待之和（180s + 60s）再加准备时间
-  }, 480000);
+  }, ci(480000));
 });
