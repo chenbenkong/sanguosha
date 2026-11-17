@@ -88,6 +88,24 @@ export const HeroDetailModal: React.FC<HeroDetailModalProps> = ({ hero, player, 
   /** 最近一次拖动结束的时刻，用来吞掉随之而来的那次 click */
   /** 最近试听过的技能名（用于按钮的「播放中」反馈）+ 复位定时器 */
   const [auditioning, setAuditioning] = useState<string | null>(null);
+  /**
+   * 可收起的分区。
+   *
+   * 手机上寸土寸金：427px 高的横屏弹层里，「当前状态 + 技能 + 传记 + 实战提示」全摊开时
+   * 技能会被挤到折叠区外，玩家根本看不到技能（这正是他反馈「布局有问题」的核心）。
+   * 官方移动版的做法是**分区可折叠**：默认只展开最重要的那块，其余点标题展开。
+   *
+   * 桌面空间充裕，默认全展开，行为与改动前一致。
+   */
+  type SectionKey = 'state' | 'story' | 'tip';
+  const [collapsedSections, setCollapsedSections] = useState<Record<SectionKey, boolean>>(() => {
+    const isPhoneLandscape = typeof window !== 'undefined'
+      && window.innerWidth > window.innerHeight && window.innerHeight <= 520;
+    return isPhoneLandscape ? { state: true, story: true, tip: true } : { state: false, story: false, tip: false };
+  });
+  const toggleSection = useCallback((k: SectionKey) => {
+    setCollapsedSections(prev => ({ ...prev, [k]: !prev[k] }));
+  }, []);
   const auditionTimer = useRef<number | null>(null);
 
   /**
@@ -192,8 +210,13 @@ export const HeroDetailModal: React.FC<HeroDetailModalProps> = ({ hero, player, 
         <div className="flex-1 min-h-0 overflow-y-auto scrollbar-thin px-4 md:px-6 py-4">
           {/* 对局实时状态：体力 / 手牌 / 装备明细 / 判定区 / 标记 */}
           {player && (
-            <div className="mb-4 rounded-lg border border-[#c8a45c]/35 bg-[#1a1410]/80 p-3 md:p-4">
-              <div className="flex items-center gap-2 flex-wrap">
+            <div className="hd-block mb-3 rounded-lg border border-[#c8a45c]/35 bg-[#1a1410]/80 p-3 md:p-4">
+              <button
+                type="button"
+                onClick={() => toggleSection('state')}
+                aria-expanded={!collapsedSections.state}
+                className="flex w-full items-center gap-2 flex-wrap text-left"
+              >
                 <span className="w-[3px] h-3.5 rounded-sm bg-gradient-to-b from-[#f0d894] to-[#a8842c]" />
                 <span className="hd-section-title">当前状态</span>
                 <span className={`text-sm font-bold ${player.hp <= 1 ? 'text-[#e8a99f]' : 'text-[#e8cf94]'}`}>♥ {player.hp}/{player.maxHp}</span>
@@ -211,9 +234,13 @@ export const HeroDetailModal: React.FC<HeroDetailModalProps> = ({ hero, player, 
                 {player.isChained && (
                   <span className="px-1.5 py-0.5 rounded text-[10px] border border-[#6a8aa0]/60 bg-[#14283a] text-[#b8d8f0]">铁索横置</span>
                 )}
-              </div>
+                {/* 折叠指示：收起时显示「展开 ▾」，展开时「收起 ▴」 */}
+                <span className="ml-auto text-[11px] hd-collapse-hint">
+                  {collapsedSections.state ? '展开 ▾' : '收起 ▴'}
+                </span>
+              </button>
 
-              <div className="mt-2.5 space-y-1.5">
+              <div className={`mt-2.5 space-y-1.5 ${collapsedSections.state ? 'hidden' : ''}`}>
                 {SLOT_ORDER.map(slot => {
                   const c = player.equipment?.[slot];
                   return (
@@ -385,22 +412,38 @@ export const HeroDetailModal: React.FC<HeroDetailModalProps> = ({ hero, player, 
                   交给弹层正文那一个滚动容器（flex-1 min-h-0 overflow-y-auto）消化，
                   break-words 兜住无空格长串，保证窄屏也不出现横向溢出。 */}
               {story !== null && (
-                <div className="rounded-lg border border-[#c8a45c]/30 bg-[#241b12]/80 p-3 md:p-4">
-                  <div className="flex items-center gap-2 mb-1">
+                <div className="hd-block rounded-lg border border-[#c8a45c]/30 bg-[#241b12]/80 p-3 md:p-4">
+                  <button
+                    type="button"
+                    onClick={() => toggleSection('story')}
+                    aria-expanded={!collapsedSections.story}
+                    className="flex w-full items-center gap-2 mb-1 text-left"
+                  >
                     <span className="w-[3px] h-3.5 rounded-sm bg-gradient-to-b from-[#f0d894] to-[#a8842c]" />
                     <span className="hd-section-title">传记</span>
-                  </div>
-                  <p className="text-[12px] md:text-sm leading-relaxed modal-text break-words">{story}</p>
+                    <span className="ml-auto text-[11px] hd-collapse-hint">
+                      {collapsedSections.story ? '展开 ▾' : '收起 ▴'}
+                    </span>
+                  </button>
+                  <p className={`text-[12px] md:text-sm leading-relaxed modal-text break-words ${collapsedSections.story ? 'hidden' : ''}`}>{story}</p>
                 </div>
               )}
 
               {/* 实战提示 */}
-              <div className="rounded-lg border border-[#c8a45c]/30 bg-[#241b12]/80 p-3 md:p-4">
-                <div className="flex items-center gap-2 mb-1">
+              <div className="hd-block rounded-lg border border-[#c8a45c]/30 bg-[#241b12]/80 p-3 md:p-4">
+                <button
+                  type="button"
+                  onClick={() => toggleSection('tip')}
+                  aria-expanded={!collapsedSections.tip}
+                  className="flex w-full items-center gap-2 mb-1 text-left"
+                >
                   <span className="w-[3px] h-3.5 rounded-sm bg-gradient-to-b from-[#f0d894] to-[#a8842c]" />
                   <span className="hd-section-title">实战提示</span>
-                </div>
-                <p className="text-[12px] md:text-sm leading-relaxed modal-text">{profile.tip}</p>
+                  <span className="ml-auto text-[11px] hd-collapse-hint">
+                    {collapsedSections.tip ? '展开 ▾' : '收起 ▴'}
+                  </span>
+                </button>
+                <p className={`text-[12px] md:text-sm leading-relaxed modal-text ${collapsedSections.tip ? 'hidden' : ''}`}>{profile.tip}</p>
               </div>
             </div>
           </div>

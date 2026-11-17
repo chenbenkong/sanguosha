@@ -5251,3 +5251,60 @@ a:focus-visible {
   background: rgba(226, 210, 178, 0.55) !important;
   border-top-color: rgba(138, 106, 60, 0.4) !important;
 }
+
+/* 折叠提示：纸面上的浅棕小字，右侧对齐 */
+.hd-scroll .hd-collapse-hint {
+  color: rgba(122, 90, 48, 0.85) !important;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+}
+/* 折叠段的标题按钮不要有默认按钮外观，整行可点 */
+.hd-scroll .hd-block > button {
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.hd-scroll .hd-block > button:active { opacity: 0.7; }
+
+/* 技能卡正文：原来用 .modal-text / .text-stone-300 这类为暗底设计的浅灰，
+   换到羊皮纸上就变成「白字压白纸」，实测几乎看不清（截图里技能规则是灰白的）。
+   这里统一压成深棕；技能名已在上面单独处理成酒红。 */
+.hd-scroll .modal-text,
+.hd-scroll .text-stone-300,
+.hd-scroll .text-stone-400,
+.hd-scroll .text-stone-500,
+.hd-scroll p {
+  color: #4a3520 !important;
+}
+/* 台词（斜体引文）稍浅一档，保持主次 */
+.hd-scroll .italic { color: rgba(90, 66, 39, 0.82) !important; }
+/* 触发时机一类的小字 */
+.hd-scroll .text-\[11px\],
+.hd-scroll .text-\[10px\] { color: rgba(90, 66, 39, 0.76) !important; }
+
+/* 底部按钮栏：横屏手机高度紧张，压成一条窄栏，不再占 60px */
+@media (orientation: landscape) and (max-height: 520px) {
+  .hd-scroll > div:last-child {
+    padding-top: 4px !important;
+    padding-bottom: 4px !important;
+  }
+  .hd-scroll > div:last-child button {
+    padding-top: 4px !important;
+    padding-bottom: 4px !important;
+    min-height: 30px !important;
+    font-size: 13px !important;
+  }
+  /* 正文区多留一点底部内边距，避免最后一张技能卡被按钮栏压住 */
+  .hd-scroll .flex-1.min-h-0 { padding-bottom: 8px !important; }
+}
+
+/* 「体力上限 N」徽章：原来是朱红实底 + 暗字，压在羊皮纸上像贴了块胶布。
+   改成「朱红描边 + 浅底 + 朱红字」，既有强调又不破坏纸面。 */
+.hd-scroll [class*="bg-[#9e2b25]"] {
+  background: rgba(158, 43, 37, 0.1) !important;
+  border-color: rgba(158, 43, 37, 0.65) !important;
+  color: #8c2f22 !important;
+}
