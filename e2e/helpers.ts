@@ -30,6 +30,13 @@ export interface E2EContext {
 export interface OpenAppOptions {
   /** 载入前写入的 localStorage（如 sgs-speed / sgs-theme），用于免去 UI 上多步点选 */
   seed?: Record<string, string>;
+  /**
+   * 把页面里的 Math.random 换成确定性 PRNG（mulberry32）。
+   * 引擎里有 78 处 Math.random（洗牌、AI 决策、猜牌…），这是 e2e「整局跑到结算」
+   * 变成概率事件的主因（本地 228s、CI 1320s 超时，同一份代码跑出完全不同的局面）。
+   * 这里在页面脚本执行前注入固定种子，引擎代码零改动，随机调用全部可复现。
+   */
+  seedRandom?: number;
 }
 
 /**
@@ -99,6 +106,19 @@ export const openApp = async (baseUrl: string, opts: OpenAppOptions = {}): Promi
     timeout: 90_000,
   });
   const page = await browser.newPage();
+  if (opts.seedRandom !== undefined) {
+    // evaluateOnNewDocument 在页面任何脚本之前执行 —— 引擎加载时拿到的已是确定性随机。
+    // （这个 puppeteer-core 版本还没有 page.addInitScript，二者等价）
+    await page.evaluateOnNewDocument((initialSeed: number) => {
+      let a = initialSeed >>> 0;
+      Math.random = () => {
+        a |= 0; a = (a + 0x6D2B79F5) | 0;
+        let t = Math.imul(a ^ (a >>> 15), 1 | a);
+        t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+      };
+    }, opts.seedRandom);
+  }
   await page.setViewport({ width: 1440, height: 900, deviceScaleFactor: 1 });
   const errors: string[] = [];
   page.on('pageerror', (e: unknown) => {

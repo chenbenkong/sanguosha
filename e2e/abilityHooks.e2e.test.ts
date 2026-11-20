@@ -15,7 +15,7 @@ import type { E2EContext } from './helpers';
  * 同一次里其余 24-25 条全过、日志 0 条停滞告警 —— 是 runner 算力波动，
  * 不是某条逻辑卡死。所以 CI 上统一给 3 倍余量：条件仍必须成立，只是等更久。
  */
-const CI_WAIT_FACTOR = process.env.CI ? 3 : 1;
+const CI_WAIT_FACTOR = process.env.CI ? 2 : 1;
 const ci = (ms: number) => ms * CI_WAIT_FACTOR;
 
 
@@ -150,7 +150,8 @@ const feedProbes = (
 
 describe('端到端：结算前钩子', () => {
   it('孙茹「释衅」免疫火焰伤害、普通伤害照常结算，且结算后主循环没有被锁死', async () => {
-    const ctx = await openApp(BASE);
+    // 固定随机种子：AI 决策/伤害牌来源都走 Math.random，不固定会在 CI 上误红
+    const ctx = await openApp(BASE, { seedRandom: 20241116 });
     try {
       expect(await startGameWithHero(ctx.page, '孙茹')).toBe(true);
       // 开局入场仪式期间主循环被门控暂停（BattleIntro 2200ms 起淡出、2600ms 交还），
@@ -223,7 +224,8 @@ describe('端到端：结算前钩子', () => {
    * 钩子本身的行为由单测 abilityIntegration.test.ts 直接覆盖。
    */
   it('小乔「红颜」：方块判定牌生效为红桃（【乐不思蜀】因此解除）', async () => {
-    const ctx = await openApp(BASE);
+    // 同样固定种子；判定牌堆本轮又会被 __devDeckOnly 全量覆盖为方块
+    const ctx = await openApp(BASE, { seedRandom: 20241116 });
     try {
       expect(await startGameWithHero(ctx.page, '小乔')).toBe(true);
       // 同释衅：先等入场仪式退场（实测 3162 / 3166 / 3183 ms），仪式期间
@@ -247,10 +249,6 @@ describe('端到端：结算前钩子', () => {
           ['__devDeckOnly', [Array.from({ length: 120 }, () => '♦杀')]],
         ]),
       ).toBe(true);
-      // 3) 托管 + 3 倍速，让回合自己推到小乔的判定阶段
-      await setSpeedLevel(ctx.page, 3);
-      await enableTakeover(ctx.page);
-
       // 预算 90s → 180s。依据：CI 上共享 runner 一慢，等待就超时误报——
       // 那一次整个文件耗时 118s（此前 33s，慢约 3 倍），断言等的是
       // 「回合自然推进到小乔的判定阶段」，慢机器上就是来不及。
@@ -261,7 +259,18 @@ describe('端到端：结算前钩子', () => {
       // 上实测 191s 还没等到（该用例整体 191s，比本地慢 8.7 倍）。
       // 这条证的是「红颜判定日志会不会出现」，不是「多快出现」；
       // 真不出日志，300s 后依然是红。
-      const judged = await until(ctx.page, ci(300000), async () =>
+      // 确定化：不再等托管 AI 把回合随机推到判定阶段（此前 CI 超时/用例轮换的根因），
+      // 直接用 dev 探针把回合设为小乔并进入判定阶段。之后**走的是与玩家真实对局
+      // 完全相同的判定路径**（App.tsx 的判定阶段循环），包括「乐不思蜀红桃解除」的结算。
+      // 牌堆已固定为全方块，判定牌不可能是红桃 —— 若日志出现 ♥，只能是「红颜」改写。
+      const turnSet = await ctx.page.evaluate(() => {
+        const w = window as unknown as { __devSetTurn?: (id: number, phase?: string) => void };
+        if (typeof w.__devSetTurn !== 'function') return false;
+        w.__devSetTurn(0, 'judge');
+        return true;
+      });
+      expect(turnSet, 'dev 探针 __devSetTurn 必须存在（dev server）').toBe(true);
+      const judged = await until(ctx.page, ci(15000), async () =>
         (await snapshot(ctx.page, 0)).logs.some(l => l.includes('小乔 的【乐不思蜀】判定：')));
       expect(judged).toBe(true);
 

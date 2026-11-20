@@ -2140,6 +2140,8 @@ const App: React.FC = () => {
         __devDeckTop?: (names: string[]) => void;
         __devDeckOnly?: (names: string[]) => void;
         __devUseCard?: (sourceId: number, targetId: number, names: string[]) => Promise<void>;
+        /** 把当前回合设为指定角色并进入判定阶段（供 e2e 确定化：不再等 AI 随机把回合推过来） */
+        __devSetTurn?: (playerId: number, phase?: 'judge' | 'play') => void;
         __devLogs?: () => string[];
         __devDiscard?: () => Array<{ id: string; name: string; suit: string }>;
       };
@@ -2241,6 +2243,22 @@ const App: React.FC = () => {
         });
         deckRef.current = made;
         setDeck(made);
+      };
+      // 把回合直接设给指定角色，并可跳到判定阶段。
+      // 动机：小乔「红颜」用例此前靠托管 + 3 倍速「等回合自然走到判定阶段」，
+      // 依赖 AI 随机节奏 —— 本地 14s、CI 却跑到 191s 超时，失败用例还在三条之间轮换。
+      // 现在用例只需：固定牌堆 → 指定回合 → 主流程自己判定并结算「乐不思蜀」，
+      // 全程走与玩家真实对局**同一条判定路径**，不引入测试专用分支。
+      devWin.__devSetTurn = (playerId, phaseName) => {
+        // 只用引擎已有的状态：turnIndex 是 state（setTurnIndex），
+        // turnOwnerIdRef 是它的 ref 影子（主循环与技能都读它）。
+        turnOwnerIdRef.current = playerId;
+        setTurnIndex(playerId);
+        if (phaseName === 'judge') {
+          setPhase(GamePhase.JUDGE);
+        } else if (phaseName === 'play') {
+          setPhase(GamePhase.ACTION);
+        }
       };
       devWin.__devDamage = (victimId, sourceId, amount, nature, cardName) => {
         let card: Card | undefined;

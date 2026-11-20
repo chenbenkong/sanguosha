@@ -147,7 +147,11 @@ describe('端到端 · 玩家真实流程', () => {
 
     beforeAll(async () => {
       // 预置 3 倍速，省掉 UI 上多步点选
-      ctx = await openApp(BASE, { seed: { 'sgs-speed': '3' } });
+      // 固定随机种子：引擎 78 处 Math.random 决定洗牌/AI 决策，不固定时同一份代码
+      // 在本地 228s 跑完、CI 却 1320s 超时（失败用例还在三条之间轮换）。
+      // 这里注入固定种子让整局局面可复现 —— 验证的仍是「能否走到结算」，
+      // 只是每次走的是同一条确定路径，不再靠运气。
+      ctx = await openApp(BASE, { seed: { 'sgs-speed': '3' }, seedRandom: 20241116 });
     }, 60000);
     afterAll(async () => { if (ctx) await ctx.close(); });
 
