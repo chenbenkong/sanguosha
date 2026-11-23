@@ -14,7 +14,7 @@ import {
 } from './src/game/save';
 import { shuffle, rankValue, wuguKeepPriority } from './src/game/utils';
 import { useGameState, setPlayers, setDeck, setDiscardPile, setTurnIndex, setPhase, setWinnerSide } from './src/game/gameStore';
-import { countExemptHandCards, computeDiscardExcess, evaluateWinnerSide, nextAliveTurnIndex, seatDistance, suddenDeathDamage, targetProtection, canPlaySlashByRules } from './src/game/rules';
+import { countExemptHandCards, computeDiscardExcess, evaluateWinnerSide, nextAliveTurnIndex, suddenDeathDamage, targetProtection, canPlaySlashByRules } from './src/game/rules';
 import { convertSourceFor } from './src/game/convertRules';
 import { jiexingTriggers, countHuguanExempt, tianzeDraws, shengduDrawCount, nifuAdjust } from './src/game/skills-batch6';
 import { isAlly as isAllyImpl, isEnemy as isEnemyImpl } from './src/game/ai/relations';
@@ -55,6 +55,7 @@ import { GameTopBar, UiDisplayMenu, UiRegion, BgmPref } from './src/components/g
 import { IconSpeaker, IconSun, IconMoon, IconBolt, IconBook, IconDice, IconMotion, IconArrowLeft, ThemeIcon, IconEye } from './src/components/Icons';
 import { useLayoutProfile } from './src/hooks/useLayoutProfile';
 import { shouldPromptSkillChoice } from './src/game/skills/skillPromptPolicy';
+import { distanceByRules, attackRangeByRules, canReachByRules } from './src/game/policies/distance';
 import { RotateHint } from './src/components/RotateHint';
 import GameOverScreen from './src/components/GameOverScreen';
 import { useTheme } from './src/contexts/ThemeContext';
@@ -1811,36 +1812,28 @@ const App: React.FC = () => {
 
   // --- 距离与攻击范围 ---
   // 座位距离：环形相邻为 1；-1 马减少自己到他人的距离，+1 马增加他人到自己的距离
-  // 基础计算在 src/game/rules.ts（seatDistance），这里只叠加临时的「视为 1」效果
-  const getDistance = useCallback((fromId: number, toId: number) => {
-    const d = seatDistance(playersRef.current, fromId, toId);
-    // 伏皇后「惴恐」没赢：该角色与她本回合的距离视为 1
-    if (doutuDistanceRef.current[fromId] === toId) return 1;
-    // 孙鲁育「魅步」：弃置的牌不为【杀】或黑色锦囊牌时，该角色本回合与孙鲁育的距离视为 1
-    if (meibuDistanceRef.current[fromId] === toId) return 1;
-    return d;
-  }, []);
+  const getDistance = useCallback((fromId: number, toId: number) => distanceByRules(
+    playersRef.current, fromId, toId,
+    { doutu: doutuDistanceRef.current, meibu: meibuDistanceRef.current },
+  ), []);
 
   // 目标保护：诸葛亮「空城」、陆逊「谦逊」
   const getTargetProtection = (target: Player, cardName: CardName): string | null =>
     targetProtection(target, cardName);
 
   // 攻击范围 = 1 + 武器范围
-  const getAttackRange = useCallback((p: Player) => {
-    const weapon = p.equipment?.weapon;
-    const bonus = weapon ? (EQUIP_META[weapon.name]?.range ?? 1) : 0;
-    // 技能修正（「枕戈」）：夹在 ±5 内，且攻击范围最低仍是 1
-    const skill = attackRangeBonusRef.current[p.id] ?? 0;
-    return Math.max(1, 1 + bonus + Math.max(-5, Math.min(5, skill)));
-  }, []);
+  const getAttackRange = useCallback((p: Player) => attackRangeByRules(
+    p, { attackRangeBonus: attackRangeBonusRef.current },
+  ), []);
 
-  const canReach = useCallback((from: Player, to: Player) => {
-    // 吕玲绮「帼武」②：本阶段使用牌无距离限制。
-    // 距离判定只有这一个入口（人类选目标 / AI 选目标 / 虚拟牌都走它），
-    // 所以在这里认一次即可，不必在 5 处调用点各打一遍补丁。
-    if (from.phaseNoDistance) return true;
-    return getDistance(from.id, to.id) <= getAttackRange(from);
-  }, [getDistance, getAttackRange]);
+  const canReach = useCallback((from: Player, to: Player) => canReachByRules(
+    from, to, playersRef.current,
+    {
+      doutu: doutuDistanceRef.current,
+      meibu: meibuDistanceRef.current,
+      attackRangeBonus: attackRangeBonusRef.current,
+    },
+  ), []);
 
   // 本回合是否还能使用这张【杀】（张飞「咆哮」、诸葛连弩不限；
   // 张星彩「枪舞」：点数大于判定结果的【杀】不计入次数）
