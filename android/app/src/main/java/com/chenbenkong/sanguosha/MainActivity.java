@@ -7,6 +7,9 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.content.pm.ActivityInfo;
 import android.os.Looper;
+import android.content.Context;
+import android.content.SharedPreferences;
+import android.webkit.JavascriptInterface;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.WindowManager;
@@ -43,6 +46,15 @@ public class MainActivity extends Activity {
     private WebView webView;
     private ImageView splashOverlay;
     private WebViewAssetLoader assetLoader;
+
+    /**
+     * 原生存档备份。网页的 localStorage 在 APK 的 file:// 环境下与本应用数据目录绑定，
+     * 用户「清除数据 / 清缓存」就没了；这里把每次存档同步一份到 SharedPreferences，
+     * 下次启动若 localStorage 为空则回填。与网页的「导出/导入 JSON」互补：
+     * 这个防手滑清数据，那个负责换机与长期备份。
+     */
+    private static final String SAVE_PREFS = "sanguosha_save_backup";
+    private static final String SAVE_KEY = "sanguosha-save-v1";
     private final Handler handler = new Handler(Looper.getMainLooper());
     private boolean fallbackUsed = false;
 
@@ -104,6 +116,21 @@ public class MainActivity extends Activity {
         s.setJavaScriptCanOpenWindowsAutomatically(false);
         s.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
 
+        // JS → 原生：网页写存档时同步一份到 SharedPreferences
+        view.addJavascriptInterface(new Object() {
+            @JavascriptInterface
+            public void backupSave(String json) {
+                SharedPreferences sp = getSharedPreferences(SAVE_PREFS, Context.MODE_PRIVATE);
+                sp.edit().putString(SAVE_KEY, json).apply();
+            }
+
+            @JavascriptInterface
+            public String readBackup() {
+                SharedPreferences sp = getSharedPreferences(SAVE_PREFS, Context.MODE_PRIVATE);
+                return sp.getString(SAVE_KEY, null);
+            }
+        }, "SGSNativeSave");
+
         view.setWebViewClient(new WebViewClient() {
             @Override
             public WebResourceResponse shouldInterceptRequest(WebView v, WebResourceRequest request) {
@@ -112,6 +139,17 @@ public class MainActivity extends Activity {
 
             @Override
             public void onPageFinished(WebView v, String url) {
+                // localStorage 被清（换机恢复 / 用户清了 WebView 数据）时，
+                // 从原生备份回填一次。用 evaluateJavascript 而不是重写 localStorage：
+                // 只在「当前没有存档」时写，绝不覆盖用户刚打的新局。
+                v.evaluateJavascript(
+                    "(function(){try{" +
+                    "if (localStorage.getItem('sgs-save-v1')) return 'has';" +
+                    "var b = window.SGSNativeSave && window.SGSNativeSave.readBackup();" +
+                    "if (b) { localStorage.setItem('sgs-save-v1', b); return 'restored'; }" +
+                    "return 'none';}catch(e){return 'error'}})()",
+                    null);
+
                 hideSplash();
                 if (url != null && url.startsWith("file://")) {
                     armModuleWatchdog();

@@ -38,11 +38,16 @@ export const StartScreen: React.FC<{
   onToggleMotion: () => void;
   onCycleFx: () => void;
   onToggleTheme: () => void;
+  /** 存档导入/导出（单机可备份、可换机） */
+  onExportSave: () => void;
+  onImportSave: (file: File) => void;
+  canExportSave: boolean;
 }> = ({
   theme, layoutDensity, sizeTier, orient, motionOn, fxLevel, fxLabel, fxTag, scaleStyle,
   playerCount, onPlayerCount, aiDifficulty, onAiDifficulty, savedGame, onResume,
   onEnterSelect, onTutorial, onShowRules, onCloseRules, showRules, stats, homeNotice,
   isMuted, onToggleMute, onToggleMotion, onCycleFx, onToggleTheme,
+  onExportSave, onImportSave, canExportSave,
 }) => (
   <div
     data-density={layoutDensity}
@@ -202,6 +207,38 @@ export const StartScreen: React.FC<{
                 <span className={`text-[10px] tracking-wide ${theme === 'dark' ? 'text-[#9a8b74]' : 'text-[#8a7a60]'}`}>9 步 · 可跳过 · 随时重看</span>
               </span>
             </button>
+
+            {canExportSave && (
+              <button
+                onClick={onExportSave}
+                aria-label="导出存档备份"
+                title="把当前进度导出成文件，可备份或换设备继续"
+                className={`flex items-center justify-center gap-2 min-h-[52px] px-4 rounded-lg border transition-colors ${theme === 'dark'
+                  ? 'border-[#c8a45c]/30 hover:border-[#e8cf94]/70'
+                  : 'border-[#8b6914]/30 hover:border-[#8b6914]/70'}`}
+              >
+                <span className="font-ancient text-base tracking-[0.18em] ${theme === 'dark' ? 'text-[#d9c49a]' : 'text-[#6b4a1a]'}">导出存档</span>
+              </button>
+            )}
+            <label
+              title="从备份文件恢复进度（会覆盖当前存档）"
+              className={`flex items-center justify-center gap-2 min-h-[52px] px-4 rounded-lg border cursor-pointer transition-colors ${theme === 'dark'
+                ? 'border-[#c8a45c]/30 hover:border-[#e8cf94]/70'
+                : 'border-[#8b6914]/30 hover:border-[#8b6914]/70'}`}
+            >
+              <span className="font-ancient text-base tracking-[0.18em] ${theme === 'dark' ? 'text-[#d9c49a]' : 'text-[#6b4a1a]'}">导入存档</span>
+              <input
+                type="file"
+                accept="application/json,.json"
+                aria-label="导入存档文件"
+                className="hidden"
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) onImportSave(f);
+                  e.target.value = '';   // 允许重复导入同一个文件
+                }}
+              />
+            </label>
 
             <button
               onClick={onShowRules}

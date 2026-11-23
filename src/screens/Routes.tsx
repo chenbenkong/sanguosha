@@ -51,12 +51,18 @@ export interface StartRouteProps {
   onToggleTheme: () => void;
   /** 方向档位：横屏手机下首页改用紧凑排布（否则内容 650px 塞进 427px 会被裁） */
   orient: 'landscape-phone' | 'portrait-phone' | 'desktop';
+  onExportSave: () => void;
+  onImportSave: (file: File) => void;
+  canExportSave: boolean;
 }
 
 export const StartRoute: React.FC<StartRouteProps> = (p) => (
   <StartScreen
     theme={p.theme}
     orient={p.orient}
+    onExportSave={p.onExportSave}
+    onImportSave={p.onImportSave}
+    canExportSave={p.canExportSave}
     layoutDensity={p.layoutDensity as never}
     sizeTier={p.sizeTier as never}
     motionOn={p.motionOn}

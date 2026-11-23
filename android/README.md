@@ -109,3 +109,19 @@ cd android && ./gradlew assembleRelease      # Windows cmd/PowerShell 用 gradle
    的 `https://appassets.androidplatform.net/assets/www/index.html` 重载同一份 assets
    （路径映射一致，相对路径解析结果相同，仅换源）。
 3. `assets/www/` 是生成物（84MB），已加入 `.gitignore`，重建前必须先跑第 1 步。
+
+
+## 存档可靠性（网页 + 原生双层）
+
+单机游戏的进度只存在 localStorage 里，用户「清除 WebView 数据 / 清缓存」就没了，换机更带不走。
+这里做了两层保护，互补：
+
+| 层 | 机制 | 防的是什么 |
+| --- | --- | --- |
+| 网页 | 首页「导出存档 / 导入存档」按钮，JSON 文件 | 长期备份、换设备、跨网页版与 APK |
+| 原生 | 每次写档经 `SGSNativeSave` 桥同步到 SharedPreferences；启动时若 localStorage 为空则回填 | 手滑清数据、WebView 存储被系统回收 |
+
+原生桥只在 `writeSave` 时调用，网页版 / e2e 里桥不存在就是 no-op，行为不变。
+回填只发生在「当前 localStorage 没有存档」时，**绝不覆盖用户刚打的新局**。
+
+对应测试：`tests/saveImportExport.test.ts`（10 条，含导入校验、已结束拒绝、桥接同步/no-op）。

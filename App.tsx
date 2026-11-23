@@ -8,7 +8,10 @@ import TutorialOverlay from './src/components/TutorialOverlay';
 import { PortraitLightbox } from './src/components/PortraitLightbox';
 import { HeroDetailModal } from './src/components/HeroDetailModal';
 import RulesDialog from './src/components/RulesDialog';
-import { GameSave, SAVE_VERSION, readSave, writeSave, clearSave, consumeSaveRejected, isSaveFinished } from './src/game/save';
+import {
+  GameSave, SAVE_VERSION, readSave, writeSave, clearSave, consumeSaveRejected, isSaveFinished,
+  serializeSave, importSave, saveFileName,
+} from './src/game/save';
 import { shuffle, rankValue, wuguKeepPriority } from './src/game/utils';
 import { useGameState, setPlayers, setDeck, setDiscardPile, setTurnIndex, setPhase, setWinnerSide } from './src/game/gameStore';
 import { countExemptHandCards, computeDiscardExcess, evaluateWinnerSide, nextAliveTurnIndex, seatDistance, suddenDeathDamage, targetProtection, canPlaySlashByRules } from './src/game/rules';
@@ -7798,6 +7801,48 @@ const App: React.FC = () => {
     }
   };
 
+  // ── 存档导入 / 导出（单机可备份、可换机）──────────────────────────────────────
+  // 存档原本只在 localStorage，APK 的 WebView 数据一清就没了、换机更带不走。
+  // 这里让首页能导出 JSON 备份、从 JSON 恢复，两条路都走 save.ts 的统一校验。
+  const handleExportSave = useCallback(() => {
+    const s = readSave();
+    if (!s) { setHomeNotice('当前没有可导出的存档'); return; }
+    try {
+      const blob = new Blob([serializeSave(s)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = saveFileName(s);
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      setHomeNotice('存档已导出，请妥善保存这个文件');
+    } catch {
+      setHomeNotice('导出失败：浏览器不允许下载文件');
+    }
+  }, []);
+
+  const handleImportSave = useCallback(async (file: File) => {
+    try {
+      const text = await file.text();
+      const result = importSave(text);
+      if (result === 'ok') {
+        const s = readSave();
+        setSavedGame(s);
+        setHomeNotice('存档已导入，可点「继续上一局」');
+      } else if (result === 'finished') {
+        setHomeNotice('这个文件里的对局已经结束，无法继续');
+      } else if (result === 'invalid') {
+        setHomeNotice('存档文件格式不对或版本不匹配');
+      } else {
+        setHomeNotice('导入失败：浏览器存储不可用');
+      }
+    } catch {
+      setHomeNotice('读取文件失败');
+    }
+  }, []);
+
   // --- Render ---
 
   // 手机竖屏：所有界面统一先要求横屏。
@@ -7843,6 +7888,9 @@ const App: React.FC = () => {
         showRules={showRules}
         stats={stats}
         homeNotice={homeNotice}
+        onExportSave={handleExportSave}
+        onImportSave={handleImportSave}
+        canExportSave={!!savedGame}
         isMuted={isMuted}
         onToggleMute={toggleMute}
         onToggleMotion={toggleMotion}
