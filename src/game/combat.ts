@@ -365,8 +365,21 @@ const skillDeps = (): DispatchDeps => ({
   discard: (pid: number, cards: Card[]) => discardCards(pid, cards),
   heal: (pid: number, n: number) => recoverHp(pid, n),
   damage: async (vid: number, sid: number, amt: number, cd?: Card) => { await takeDamage(vid, sid, amt, cd); },
-  gainCard: (fromId: number, toId: number, cd: Card) => {
-    mutateHand(fromId, h => h.filter(c => c.id !== cd.id));
+  gainCard: (fromId: number, toId: number, cd: Card, zone?: 'hand' | 'equip' | 'judge') => {
+    // zone 缺省 = 手牌；跨区域时先从对应区域移除，避免凭空复制
+    if (zone === 'equip') {
+      updatePlayerWith(fromId, pl => {
+        const eq = { ...(pl.equipment ?? {}) };
+        for (const k of Object.keys(eq) as Array<keyof typeof eq>) {
+          if (eq[k]?.id === cd.id) delete eq[k];
+        }
+        return { equipment: eq };
+      });
+    } else if (zone === 'judge') {
+      updatePlayerWith(fromId, pl => ({ judgeZone: (pl.judgeZone ?? []).filter(c => c.id !== cd.id) }));
+    } else {
+      mutateHand(fromId, h => h.filter(c => c.id !== cd.id));
+    }
     mutateHand(toId, h => [...h, cd]);
   },
   log: (t: string) => addLog(t, 'skill'),

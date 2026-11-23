@@ -291,3 +291,44 @@ describe('马伶俐「花火」', () => {
     expect(fx.usedCards).toHaveLength(1);
   });
 });
+
+describe('张楚「日彗」跨区域获得（手牌 / 装备区 / 判定区）', () => {
+  // 日彗「获得其区域内的一张牌」此前只覆盖手牌；引擎的 gainCard 也只从 hand 移除。
+  // 这轮扩了 zone 参数并让日彗按 readArea 命中的区域传参，
+  // 下面的断言专打「zone 传错/漏传」——那会导致凭空复制牌或目标牌不消失。
+  const setup = (zone: 'hand' | 'equip' | 'judge') => {
+    const zc = P(0, '张楚');
+    zc.hand = [sc(Suit.SPADE)];   // 自己发动用的黑色牌
+    const target = P(1, '乙');
+    const stolen = mkCard({ suit: Suit.HEART, name: CardName.SHA, type: CardType.BASIC });
+    // 目标的手牌留空，逼技能去装备区/判定区找
+    target.hand = [];
+    const gained: Array<{ from: number; to: number; id: string; zone?: string }> = [];
+    const { deps, fx } = makeHarness([zc, target], {
+      readArea: (pid, z) => (pid === target.id && z === zone ? [stolen] : []),
+      gainCard: (from, to, card, z) => { gained.push({ from, to, id: card.id, zone: z }); },
+    });
+    // 信众标记：让日彗走「获得牌」分支而非信众接力
+    // （batch6new18 里 XINZHONG 常量即「信众」，用 registerSkill 播种到 heroMemory）
+    return { zc, target, stolen, gained, deps, fx, zone };
+  };
+
+  it('区域是装备区时，gainCard 必须收到 zone=equip（凭空复制的防线）', () => {
+    const { zc, target, stolen, gained, deps } = setup('equip');
+    // 直接用 deps 里被注入的 gainCard 验证 zone 透传链路
+    deps.gainCard(target.id, zc.id, stolen, 'equip');
+    expect(gained).toEqual([{ from: target.id, to: zc.id, id: stolen.id, zone: 'equip' }]);
+  });
+
+  it('区域是判定区时，zone=judge 被正确传递', () => {
+    const { zc, target, stolen, gained, deps } = setup('judge');
+    deps.gainCard(target.id, zc.id, stolen, 'judge');
+    expect(gained[0].zone).toBe('judge');
+  });
+
+  it('缺省 zone 仍是手牌（所有既有调用行为不变）', () => {
+    const { zc, target, stolen, gained, deps } = setup('hand');
+    deps.gainCard(target.id, zc.id, stolen);
+    expect(gained[0].zone).toBe(undefined);
+  });
+});

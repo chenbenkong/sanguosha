@@ -26,7 +26,8 @@ import type { Card, Player } from '../../../types';
  *   交互（ActionBar 的转化候选）与 convertRules.ts 的判定表，不是技能钩子。
  *   上一轮我把这条记成「缺按区域弃牌原语」是判错了——补完原语后它依然不通，
  *   因为不通的地方在 UI/转化层。留作待办，不在这里硬凑一个只在 AI 侧生效的版本。
- * · 日彗「获得其区域内的一张牌」只覆盖手牌：装备区 / 判定区读不到也拿不到。
+ * · 日彗「获得其区域内的一张牌」覆盖 手牌 / 装备区 / 判定区：
+ *   先用 ctx.readArea 读出牌及其所在区域，再用 ctx.gainCard(..., zone) 纯移除并转移。
  * · 花火「改为指定所有拥有『硝引』牌的角色」**已补**：硝引（batch6new22）落地后，
  *   其牌区写在同武将共享的 heroMemory.niaoyin，花火直接读它筛出持有者。
  *   「无次数限制」那一半本轮已补：useCardAs 新增 ignoreSlashLimit，由 combat.ts 的
@@ -166,6 +167,26 @@ registerSkill({
 });
 
 // ── 张楚「日彗」 ──────────────────────────────────────
+/**
+ * 「获得其区域内的一张牌」：区域 = 手牌 + 装备区 + 判定区。
+ * readArea 返回的牌**不告诉所在区域**，所以按三个区域分别查，
+ * 命中哪个就把 zone 传给 gainCard —— 传错 zone 会「凭空复制一张牌」或漏移除。
+ * 人机共用同一实现，避免 AI 与人走两套规则。
+ */
+const stealFromAnyArea = (
+  ctx: SkillContext,
+  targetId: number,
+  toId: number,
+): boolean => {
+  for (const zone of ['hand', 'equip', 'judge'] as const) {
+    const cards = ctx.readArea(targetId, zone);
+    if (!cards.length) continue;
+    const card = cards[Math.floor(Math.random() * cards.length)];
+    ctx.gainCard(targetId, toId, card, zone);
+    return true;
+  }
+  return false;
+};
 const isBlack = (c: Card): boolean => c.suit === '♠' || c.suit === '♣';
 
 registerSkill({
@@ -195,12 +216,10 @@ registerSkill({
       if (!ctx.self.isHuman) {
         // AI：有「信众」就改为拿一张牌，没有就走「信众接力」
         if (hasXinzhong) {
-          const stolen = [...target.hand].sort(() => Math.random() - 0.5)[0];
-          if (!stolen) return;
           ctx.memory.usedThisTurn = true;
           ctx.banner();
-          ctx.gainCard(target.id, ctx.self.id, stolen);
-          ctx.log(`【日彗】${ctx.self.hero.name} 获得 ${target.hero.name} 的一张手牌`);
+          if (!stealFromAnyArea(ctx, target.id, ctx.self.id)) return;
+          ctx.log(`【日彗】${ctx.self.hero.name} 获得 ${target.hero.name} 区域内的一张牌`);
           return;
         }
         ctx.memory.usedThisTurn = true;
@@ -222,10 +241,12 @@ registerSkill({
       ctx.memory.usedThisTurn = true;
       ctx.banner();
       if (hasXinzhong) {
-        const stolen = [...target.hand].sort(() => Math.random() - 0.5)[0];
-        if (!stolen) { ctx.log('【日彗】对方没有手牌可拿'); return; }
-        ctx.gainCard(target.id, ctx.self.id, stolen);
-        ctx.log(`【日彗】${ctx.self.hero.name} 获得 ${target.hero.name} 的一张手牌`);
+        // 与 AI 分支共用同一套跨区域获得：手牌 / 装备区 / 判定区
+        if (!stealFromAnyArea(ctx, target.id, ctx.self.id)) {
+          ctx.log('【日彗】对方区域内没有牌可拿');
+          return;
+        }
+        ctx.log(`【日彗】${ctx.self.hero.name} 获得 ${target.hero.name} 区域内的一张牌`);
         return;
       }
       await useByBelievers();

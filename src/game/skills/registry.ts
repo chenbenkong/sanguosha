@@ -58,7 +58,8 @@ export interface SkillContext {
   discard: (playerId: number, cards: Card[]) => void;
   heal: (playerId: number, amount: number) => number;
   damage: (victimId: number, sourceId: number, amount: number, card?: Card) => Promise<void>;
-  gainCard: (fromId: number, toId: number, card: Card) => void;
+  /** zone 缺省 = 手牌；传 equip/judge 时从对应区域纯移除（「获得区域内牌」用） */
+  gainCard: (fromId: number, toId: number, card: Card, zone?: 'hand' | 'equip' | 'judge') => void;
   log: (text: string) => void;
   banner: () => void;
   delay: (ms: number) => Promise<void>;

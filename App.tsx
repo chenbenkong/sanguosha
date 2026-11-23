@@ -943,8 +943,23 @@ const App: React.FC = () => {
     damage: async (vid: number, sid: number, amt: number, cd?: Card) => {
       if (combatEngine) await combatEngine.takeDamage(vid, sid, amt, cd);
     },
-    gainCard: (fromId: number, toId: number, cd: Card) => {
-      mutateHand(fromId, h => h.filter(c => c.id !== cd.id));
+    gainCard: (fromId: number, toId: number, cd: Card, zone?: 'hand' | 'equip' | 'judge') => {
+      // zone 缺省 = 手牌（既有调用行为不变）。传 zone 时先从对应区域移除：
+      // 装备区 / 判定区的牌不在 hand 里，只 mutateHand 会「凭空复制一张牌」。
+      if (zone === 'equip') {
+        // 装备区：纯移除，不进弃牌堆、不触发枭姬/白银狮子 —— 「获得」不是「弃置」
+        updatePlayerWith(fromId, pl => {
+          const eq = { ...(pl.equipment ?? {}) };
+          for (const k of Object.keys(eq) as Array<keyof typeof eq>) {
+            if (eq[k]?.id === cd.id) delete eq[k];
+          }
+          return { equipment: eq };
+        });
+      } else if (zone === 'judge') {
+        updatePlayerWith(fromId, pl => ({ judgeZone: (pl.judgeZone ?? []).filter(c => c.id !== cd.id) }));
+      } else {
+        mutateHand(fromId, h => h.filter(c => c.id !== cd.id));
+      }
       mutateHand(toId, h => [...h, cd]);
       // 这里不再单独上报「失去牌」：mutateHand 是手牌移除的唯一入口，
       // 它自己判断手牌是否清零并跑一次 afterCardLost（否则同一张牌会触发两次连营）。

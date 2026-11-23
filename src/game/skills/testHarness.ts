@@ -144,6 +144,10 @@ export interface HarnessOptions {
   requestChoice?: DispatchDeps['requestChoice'];
   /** ctx.roundCount 的取值（「每轮首次」类技能用它去重） */
   roundCount?: number;
+  /** 覆盖 readArea：测「从装备区/判定区获得牌」时注入区域内容 */
+  readArea?: DispatchDeps['readArea'];
+  /** 覆盖 gainCard：断言 zone 参数是否被正确传递（缺省=手牌） */
+  gainCard?: DispatchDeps['gainCard'];
 }
 
 export interface Harness {
@@ -161,6 +165,8 @@ export const makeHarness = (players: Player[], opts: HarnessOptions = {}): Harne
     skillsOn: opts.skillsOn ?? (() => true),
     requestChoice: opts.requestChoice ?? (async () => null),
     roundCount: opts.roundCount ?? 1,
+    readArea: opts.readArea ?? noopDeps(players).readArea,
+    gainCard: opts.gainCard ?? noopDeps(players).gainCard,
     draw: (playerId, count) => {
       fx.drawn.push({ playerId, count });
       return [];

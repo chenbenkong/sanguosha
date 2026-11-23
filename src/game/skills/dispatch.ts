@@ -46,7 +46,8 @@ export interface DispatchDeps {
   discard: (playerId: number, cards: Card[]) => void;
   heal: (playerId: number, amount: number) => number;
   damage: (victimId: number, sourceId: number, amount: number, card?: Card) => Promise<void>;
-  gainCard: (fromId: number, toId: number, card: Card) => void;
+  /** zone 缺省 = 手牌；传 equip/judge 时从对应区域纯移除 */
+  gainCard: (fromId: number, toId: number, card: Card, zone?: 'hand' | 'equip' | 'judge') => void;
   log: (text: string) => void;
   banner: (hero: string, skill: string) => void;
   delay: (ms: number) => Promise<void>;
@@ -192,7 +193,7 @@ const ctxFor = (deps: DispatchDeps, self: Player, hero: string, skill: string): 
   discard: deps.discard,
   heal: deps.heal,
   damage: deps.damage,
-  gainCard: deps.gainCard,
+  gainCard: (fromId, toId, card, zone) => deps.gainCard(fromId, toId, card, zone),
   log: deps.log,
   // 可选能力：未提供时给一个「明确失败」的桩，而不是 undefined，
   // 这样技能里 `ctx.peekDeck(...)` 不会抛 TypeError，而是得到空数组并自行跳过。
