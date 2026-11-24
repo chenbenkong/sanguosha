@@ -5354,3 +5354,97 @@ a:focus-visible {
   padding-bottom: 2px !important;
   margin-top: 4px !important;
 }
+
+/* ═══════════════════════════════════════════════════════════════════
+   横屏手机对局：座位牌「寸土寸金」精简（用户真机截图 + 本地复现确认）
+
+   复现数据（924×427，五人局 4 对手 / 七人局 6 对手）：
+     · 座位牌 136×152px，六人局 pitch 仅 151px，牌几乎贴边、第 6 张被裁
+     · 目标条 obj (top 8~42) / 阶段条 (8~48) 压在牌顶 (top 36)
+     · 每张牌还显示技能名、距离、装备四格、判定区 —— 在 427 高里都是噪音
+
+   原则（用户明确要求）：手机空间小，非必要数据隐藏，灵活处理。
+   保留「谁、什么势力/身份、多少血、多少手牌」——够做决策；
+   技能名/距离/装备/判定在手机横屏一律收起（需要时点开武将详情看，
+   详情面板本来就有这些）。牌收窄到 106×~118，6 张也排得开。
+   桌面 1440×900 与竖屏手机都不命中本规则，行为完全不变。
+   ═══════════════════════════════════════════════════════════════════ */
+
+[data-orient="landscape-phone"] [data-region="seats"] .seat-card {
+  width: 104px !important;
+  height: 118px !important;
+}
+/* 精简内容：只留姓名 + 势力/身份 + 体力 + 手牌数 */
+[data-orient="landscape-phone"] [data-region="seats"] .seat-skill,
+[data-orient="landscape-phone"] [data-region="seats"] .seat-distance,
+[data-orient="landscape-phone"] [data-region="seats"] .seat-equip,
+[data-orient="landscape-phone"] [data-region="seats"] .seat-judge,
+[data-orient="landscape-phone"] [data-region="seats"] .seat-dead-tag {
+  display: none !important;
+}
+/* 姓名与体力在更小的牌里重新排布 */
+[data-orient="landscape-phone"] [data-region="seats"] .seat-name-rail {
+  padding: 2px 0 !important;
+}
+[data-orient="landscape-phone"] [data-region="seats"] .seat-name {
+  font-size: 15px !important;
+  letter-spacing: 0.04em !important;
+}
+[data-orient="landscape-phone"] [data-region="seats"] .seat-meta-row {
+  font-size: 11px !important;
+  gap: 3px !important;
+  flex-wrap: nowrap !important;
+}
+[data-orient="landscape-phone"] [data-region="seats"] .seat-hp-corner { top: 20px !important; }
+[data-orient="landscape-phone"] [data-region="seats"] .seat-pips { gap: 1px !important; max-width: 40px !important; }
+[data-orient="landscape-phone"] [data-region="seats"] .seat-pip { width: 7px !important; height: 11px !important; }
+[data-orient="landscape-phone"] [data-region="seats"] .seat-hand-count { font-size: 11px !important; }
+[data-orient="landscape-phone"] [data-region="seats"] .seat-hand-count b { font-size: 12px !important; }
+[data-orient="landscape-phone"] [data-region="seats"] .seat-topline { top: 2px !important; gap: 2px !important; }
+[data-orient="landscape-phone"] [data-region="seats"] .seat-kingdom { width: 18px !important; height: 18px !important; font-size: 12px !important; }
+[data-orient="landscape-phone"] [data-region="seats"] .seat-identity { min-width: 18px !important; height: 17px !important; font-size: 12px !important; }
+
+/* 目标条 / 阶段条从牌顶挪开：放到座位牌上方那 ~34px 的空隙里，
+   并缩小字号。牌 top 现在是 36，两条 bottom 必须 < 36。 */
+[data-orient="landscape-phone"] .objective-strip {
+  top: 0 !important;
+  left: 120px !important;
+  font-size: 10px !important;
+  transform: scale(0.9);
+  transform-origin: left top;
+}
+[data-orient="landscape-phone"] .mobile-phase-chip {
+  top: 0 !important;
+  left: 120px !important;
+  transform: scale(0.9);
+  transform-origin: left top;
+}
+/* 阶段条与目标条在同一左起点会叠 —— 把阶段条移到目标条右侧（目标条约 352*0.9=317px 宽） */
+[data-orient="landscape-phone"] .mobile-phase-chip {
+  left: auto !important;
+  right: 300px !important;
+}
+
+/* ── 横屏手机：自己的武将牌同样精简并归位 ─────────────────────────────
+   原本 .own-seat 是 position:absolute right:12px bottom:(手牌高+16)，
+   横屏矮屏下 --hand-min/--own-h 算错，它跑到右上压住对手牌，还留半截大立绘。
+   手机空间小：改成左下角小卡（100×112），只留姓名/势力/身份/体力/手牌，
+   与对手牌同一套精简规则。技能/装备/距离/判定一律收起（详情面板里有）。 */
+[data-orient="landscape-phone"] .own-seat {
+  position: absolute !important;
+  right: 8px !important;
+  left: auto !important;
+  bottom: calc(8px + var(--hand-min, 100px) + 8px) !important;
+  width: 100px !important;
+  height: 112px !important;
+  z-index: 25 !important;
+}
+[data-orient="landscape-phone"] .own-seat .seat-skill,
+[data-orient="landscape-phone"] .own-seat .seat-distance,
+[data-orient="landscape-phone"] .own-seat .seat-equip,
+[data-orient="landscape-phone"] .own-seat .seat-judge {
+  display: none !important;
+}
+[data-orient="landscape-phone"] .own-seat .seat-name { font-size: 15px !important; }
+[data-orient="landscape-phone"] .own-seat .seat-pip { width: 7px !important; height: 11px !important; }
+[data-orient="landscape-phone"] .own-seat .seat-pips { gap: 1px !important; max-width: 44px !important; }
