@@ -2,12 +2,13 @@
 
 > 本文件承接原 README 中的历次版本更新记录，按时间**倒序**排列（最新在上）。
 > 新增改动请追加到最上方；README 只保留最近若干条摘要，其余全部归档到这里。
-> 版本号常量见 `src/game/constants.ts` 的 `APP_VERSION`（当前 v3.75），发版时与 README 顶部摘要同步。
+> 版本号常量见 `src/game/constants.ts` 的 `APP_VERSION`（当前 v3.76），发版时与 README 顶部摘要同步。
 >
 > 注：逐版记录在 v3.31 之后中断——v3.32–v3.54 期间未留下版本文案，只在 `APP_VERSION`
 > 上有体现，属历史缺口，不回填臆造；v3.55 起恢复逐版记录（见上方各条）。
 
 ---
+**v3.76** 修手机横屏两处布局：APK 强制横屏常量纠正（LOCKED→LANDSCAPE，解决画面只占顶部一半）；首页有存档时底部按钮竖排溢出（改为横排紧凑，副标题隐藏）。
 **v3.75** 张楚「日彗」跨区域获得：从手牌扩展到装备区/判定区（此前只能拿手牌）；gainCard 增加可选 zone 参数。
 **v3.74** 距离判定抽成纯函数并补 9 条单测（此前只有 e2e 间接覆盖）；App.tsx 的 getDistance / getAttackRange / canReach 改为调用它，行为不变。
 **v3.73** 存档可靠性：首页支持导出/导入 JSON 备份；APK 里每次写档同步到原生 SharedPreferences，清了 WebView 数据也能恢复。

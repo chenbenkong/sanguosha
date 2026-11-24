@@ -63,10 +63,13 @@ public class MainActivity extends Activity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         // 强制横屏，且**不受用户锁定屏幕方向的影响**。
-        // manifest 的 screenOrientation="landscape" 已经是固定横屏，但部分机型/系统
-        // 会在用户锁定竖屏时把 Activity 旋回竖屏；这里再显式指定一次，
-        // 优先级高于系统锁定（SCREEN_ORIENTATION_LOCKED）。
-        setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_LOCKED);
+        // manifest 的 screenOrientation="landscape" 已是固定横屏，这里在代码里再显式锁一次。
+        // 必须用 SCREEN_ORIENTATION_LANDSCAPE（固定值=0），不能用 LOCKED。
+        // LOCKED 锁的是「调用那一刻的方向」——onCreate 时方向可能尚未定，某些机型上会锁成竖屏；
+        // 加上 configChanges 含 orientation（不重建 Activity），WebView 就停在竖屏画布里，
+        // 而网页按 innerWidth/innerHeight 排成横屏布局 —— 结果是画面只占顶部一条、下面全黑
+        // （用户真机截图确认）。SCREEN_ORIENTATION_LANDSCAPE 才是「无视传感器/系统锁定的固定横屏」。
+        setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE);
         applyImmersive();
 
         assetLoader = new WebViewAssetLoader.Builder()

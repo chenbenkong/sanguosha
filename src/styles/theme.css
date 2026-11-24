@@ -5308,3 +5308,49 @@ a:focus-visible {
   border-color: rgba(158, 43, 37, 0.65) !important;
   color: #8c2f22 !important;
 }
+
+/* ── 横屏手机首页：有存档时底部按钮溢出/重叠（用户真机截图确认）──────────────
+   现象（924×427，含「继续上一局」时实测）：
+     .start-actions top=355 bottom=511（视口仅 427，溢出 84px）
+     3 个按钮各宽 82~125px、高 156px ——「新手教学」的副标题
+     「9 步 · 可跳过 · 随时重看」在窄按钮里竖着折成 6 行，把整行撑到 156px。
+   修法：横屏手机下隐藏按钮里的说明小字（只留标题），并把 actions 宽度放宽到
+   占满面板；min-height 收紧。这样一行按钮 ~40px 高，稳稳落在 stats(396) 之上。
+   桌面与竖屏不命中，行为不变。 */
+[data-orient="landscape-phone"] .start-actions {
+  max-width: 100% !important;
+  flex-direction: row !important;
+  flex-wrap: nowrap !important;
+  align-items: center !important;
+  margin-top: 4px !important;
+  gap: 6px !important;
+}
+[data-orient="landscape-phone"] .start-actions > * {
+  flex: 1 1 0 !important;
+  min-width: 0 !important;
+  min-height: 34px !important;
+  height: 34px !important;
+  padding-top: 2px !important;
+  padding-bottom: 2px !important;
+}
+/* 按钮里的副标题 / 图标在矮屏隐藏，避免竖排折行撑高 */
+[data-orient="landscape-phone"] .start-actions button span.text-\[10px\],
+[data-orient="landscape-phone"] .start-actions button svg,
+[data-orient="landscape-phone"] .start-actions label svg {
+  display: none !important;
+}
+[data-orient="landscape-phone"] .start-actions button,
+[data-orient="landscape-phone"] .start-actions label {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  white-space: nowrap !important;
+  font-size: 13px !important;
+}
+/* 「继续上一局」也压扁，别把 actions 顶出屏幕 */
+[data-orient="landscape-phone"] .start-resume {
+  min-height: 34px !important;
+  padding-top: 2px !important;
+  padding-bottom: 2px !important;
+  margin-top: 4px !important;
+}
